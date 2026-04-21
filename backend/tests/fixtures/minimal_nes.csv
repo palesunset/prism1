@@ -1,0 +1,4 @@
+ne_id,loopback_ipv4,site,vendor,role
+A,10.0.0.1,lab,nokia,core
+B,10.0.0.2,lab,huawei,agg
+C,10.0.0.3,lab,cisco_xr,edge

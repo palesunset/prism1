@@ -1,0 +1,8 @@
+{# Juniper Junos - SRv6 (illustrative CLI) #}
+{% if role == "ingress" %}
+routing-instances {
+    /* SRv6 policy placeholders for {{ lsp_name }} */
+}
+{% else %}
+/* Juniper Junos {{ role }} node {{ ne_id }} for {{ lsp_name }} (SRv6) */
+{% endif %}

@@ -1,0 +1,32 @@
+{# Huawei VRP - RSVP-TE (illustrative CLI) #}
+{% if role == "ingress" %}
+system-view
+interface Tunnel10
+ description {{ lsp_name }}
+ ip address unnumbered interface LoopBack0
+ tunnel-protocol mpls te
+ destination {{ dest_ip }}
+ mpls te tunnel-id 10
+ mpls te path explicit-path PRIMARY_PATH
+{% if backup_hops %}
+ mpls te path explicit-path BACKUP_PATH secondary
+{% endif %}
+#
+quit
+explicit-path PRIMARY_PATH
+{% for hop in primary_hops %}
+ next hop {{ hop.next_hop_ip or "0.0.0.0" }} include strict
+{% endfor %}
+#
+{% if backup_hops %}
+explicit-path BACKUP_PATH
+{% for hop in backup_hops %}
+ next hop {{ hop.next_hop_ip or "0.0.0.0" }} include strict
+{% endfor %}
+#
+{% endif %}
+return
+{% else %}
+# Huawei VRP {{ role }} node {{ ne_id }} for {{ lsp_name }}
+{% endif %}
+# Remember: commit

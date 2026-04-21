@@ -1,0 +1,16 @@
+{# Nokia SR OS - MD-CLI - SRv6 (illustrative) #}
+{% if role == "ingress" %}
+/configure router "Base"
+    segment-routing
+        srv6
+            locators
+                locator "MAIN"
+                    prefix {{ dest_ipv6 or "::1/128" }}
+                !
+            !
+        !
+    !
+!
+{% else %}
+# Nokia MD-CLI — {{ ne_id }} SRv6 review for {{ lsp_name }}
+{% endif %}

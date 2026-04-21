@@ -1,0 +1,18 @@
+{# Nokia SR OS - SRv6 (illustrative CLI) #}
+{% if role == "ingress" %}
+configure
+    router "Base"
+        segment-routing
+            srv6
+                locators
+                    locator "MAIN"
+                        prefix {{ dest_ipv6 or "::1/128" }} name "egress-prefix"
+                    exit
+                exit
+            exit
+        exit
+    exit
+exit
+{% else %}
+# Nokia SR OS {{ role }} node {{ ne_id }} - SRv6 locator/policy verification for {{ lsp_name }}
+{% endif %}

@@ -1,0 +1,17 @@
+{# Cisco IOS XR - SRv6 (illustrative CLI) #}
+{% if role == "ingress" %}
+{% if flex_algo_id %}
+! Flex-Algo algorithm {{ flex_algo_id }}
+{% endif %}
+segment-routing
+ srv6
+  locators
+   locator MAIN
+    micro-segment behavior unode ipv4-prefix {{ dest_ip }}/32
+   !
+  !
+ !
+!
+{% else %}
+! Cisco IOS XR {{ role }} node {{ ne_id }} for {{ lsp_name }} (SRv6)
+{% endif %}

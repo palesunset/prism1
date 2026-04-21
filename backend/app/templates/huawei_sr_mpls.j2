@@ -1,0 +1,17 @@
+{# Huawei VRP - SR-MPLS (illustrative CLI) #}
+{% if role == "ingress" %}
+system-view
+segment-routing ipv6
+ locator MAIN ipv4-prefix {{ dest_ip }} args 0
+#
+interface Tunnel10
+ description {{ lsp_name }}
+ ip address unnumbered interface LoopBack0
+ tunnel-protocol mpls te
+ destination {{ dest_ip }}
+#
+return
+{% else %}
+# Huawei VRP {{ role }} node {{ ne_id }} for {{ lsp_name }}
+{% endif %}
+# Remember: commit

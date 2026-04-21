@@ -1,0 +1,4 @@
+source,target,latency_ms,bandwidth_mbps,reservable_bw_mbps,interface_src,interface_dst,next_hop_ipv4_src,next_hop_ipv4_dst
+A,B,5,10000,10000,A:xe-0/0/0,B:xe-0/0/0,169.254.1.2,169.254.1.1
+B,C,9,10000,10000,B:xe-0/0/1,C:xe-0/0/1,169.254.2.2,169.254.2.1
+A,C,50,10000,10000,A:xe-0/0/2,C:xe-0/0/2,169.254.3.2,169.254.3.1

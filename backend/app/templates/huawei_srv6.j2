@@ -1,0 +1,11 @@
+{# Huawei VRP - SRv6 (illustrative CLI) #}
+{% if role == "ingress" %}
+system-view
+segment-routing ipv6
+ best-effort
+#
+return
+{% else %}
+# Huawei VRP {{ role }} node {{ ne_id }} for {{ lsp_name }} (SRv6)
+{% endif %}
+# Remember: commit

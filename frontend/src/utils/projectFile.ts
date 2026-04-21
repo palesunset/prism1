@@ -1,0 +1,79 @@
+import type { SavedPositions } from "./layoutCache";
+import type { Mode, NokiaCliStyle, PathResult, TopologyPayload } from "../types";
+import type { FlexAlgoDefinition, SavedLsp } from "../store/useAppStore";
+
+export interface ProjectUiState {
+  source: string;
+  destination: string;
+  requiredBwMbps: number;
+  maxHops: number;
+  mode: Mode;
+  flexAlgoId?: number | null;
+  enforceSrlgDiversity?: boolean;
+  nokiaCliStyle: NokiaCliStyle;
+  lspName: string;
+}
+
+export interface ProjectFileV1 {
+  version: 1;
+  exportedAt: string;
+  topology: TopologyPayload;
+  layoutPositions: SavedPositions | null;
+  ui: ProjectUiState;
+  lsps: SavedLsp[];
+  flex_algos?: Record<number, FlexAlgoDefinition>;
+}
+
+export function downloadJson(filename: string, obj: unknown): void {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function readTextFile(file: File): Promise<string> {
+  return await file.text();
+}
+
+export function isProjectFileV1(x: unknown): x is ProjectFileV1 {
+  if (!x || typeof x !== "object") {
+    return false;
+  }
+  const o = x as Record<string, unknown>;
+  return o.version === 1 && typeof o.exportedAt === "string" && typeof o.topology === "object";
+}
+
+export function topologyToProjectPayload(topology: TopologyPayload): {
+  nes: Array<Record<string, unknown>>;
+  links: Array<Record<string, unknown>>;
+} {
+  const nes = topology.nodes.map((n) => {
+    const d = n.data;
+    return {
+      ne_id: String(d.id),
+      loopback_ipv4: String(d.loopback_ipv4 ?? ""),
+      site: String(d.site ?? "default"),
+      vendor: String(d.vendor ?? "nokia"),
+      loopback_ipv6: d.loopback_ipv6 ? String(d.loopback_ipv6) : null,
+      node_sid: d.node_sid ?? null,
+      role: String(d.role ?? "agg"),
+    };
+  });
+  const links = topology.edges.map((e) => {
+    const d = e.data;
+    return {
+      source: String(d.source),
+      target: String(d.target),
+      latency_ms: Number(d.latency_ms ?? 0),
+      bandwidth_mbps: Number(d.bandwidth_mbps ?? 0),
+      reservable_bw_mbps: Number(d.reservable_bw_mbps ?? d.bandwidth_mbps ?? 0),
+      interface_src: String(d.interface_src ?? "") || null,
+      interface_dst: String(d.interface_dst ?? "") || null,
+    };
+  });
+  return { nes, links };
+}
+

@@ -1,0 +1,30 @@
+{# Cisco IOS XR - RSVP-TE (illustrative CLI) #}
+{% if role == "ingress" %}
+mpls traffic-eng
+ interface Loopback0
+ !
+!
+explicit-path name PRIMARY_PATH
+{% for hop in primary_hops %}
+ index {{ loop.index0 }} next-label {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+!
+{% if backup_hops %}
+explicit-path name BACKUP_PATH
+{% for hop in backup_hops %}
+ index {{ loop.index0 }} next-label {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+!
+{% endif %}
+!
+interface tunnel-te10
+ ipv4 unnumbered Loopback0
+ destination {{ dest_ip }}
+ path-option 10 explicit name PRIMARY_PATH
+{% if backup_hops %}
+ path-option 20 explicit name BACKUP_PATH secondary
+{% endif %}
+!
+{% else %}
+! Cisco IOS XR {{ role }} node {{ ne_id }} for {{ lsp_name }}
+{% endif %}

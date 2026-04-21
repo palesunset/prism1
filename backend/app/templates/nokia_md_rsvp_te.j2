@@ -1,0 +1,45 @@
+{# Nokia SR OS - MD-CLI - RSVP-TE (illustrative) #}
+{% if role == "ingress" %}
+/configure router "Base"
+    rsvp
+        interface "system"
+            admin-state enable
+        !
+    !
+    mpls
+        paths
+            path "PRIMARY_LSP"
+{% for hop in primary_hops %}
+                hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+            !
+{% if backup_hops %}
+            path "BACKUP_LSP"
+{% for hop in backup_hops %}
+                hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+            !
+{% endif %}
+        !
+        lsp "{{ lsp_name }}"
+            to {{ dest_ip }}
+            primary "PRIMARY_LSP"
+{% if backup_hops %}
+            secondary "BACKUP_LSP"
+{% endif %}
+            admin-state enable
+        !
+    !
+!
+{% elif role == "egress" %}
+/configure router "Base"
+    rsvp
+        interface "system"
+            admin-state enable
+        !
+    !
+!
+{% else %}
+# Nokia MD-CLI transit notes for {{ ne_id }} — {{ lsp_name }}
+# Enable RSVP on interfaces toward next-hops.
+{% endif %}

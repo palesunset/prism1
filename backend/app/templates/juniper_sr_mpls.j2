@@ -1,0 +1,14 @@
+{# Juniper Junos - SR-MPLS (illustrative CLI) #}
+{% if role == "ingress" %}
+protocols {
+    source-packet-routing {
+        segment-list PRIMARY_SL {
+{% for hop in primary_hops %}
+            hop {{ loop.index }} ip-address {{ hop.next_hop_ip or "0.0.0.0" }};
+{% endfor %}
+        }
+    }
+}
+{% else %}
+/* Juniper Junos {{ role }} node {{ ne_id }} for {{ lsp_name }} */
+{% endif %}

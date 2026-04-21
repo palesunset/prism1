@@ -1,0 +1,21 @@
+{# Cisco IOS XR - SR-MPLS (illustrative CLI) #}
+{% if role == "ingress" %}
+{% if flex_algo_id %}
+! Flex-Algo algorithm {{ flex_algo_id }}
+{% endif %}
+segment-routing
+ global-block 16000 23999
+!
+mpls traffic-eng
+ on-demand color 100
+  dynamic pce
+  !
+ !
+!
+interface tunnel-te10
+ ipv4 unnumbered Loopback0
+ destination {{ dest_ip }}
+!
+{% else %}
+! Cisco IOS XR {{ role }} node {{ ne_id }} for {{ lsp_name }}
+{% endif %}

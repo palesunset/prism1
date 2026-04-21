@@ -1,0 +1,29 @@
+{# Nokia SR OS - MD-CLI - SR-MPLS (illustrative) #}
+{% if role == "ingress" %}
+/configure router "Base"
+    mpls
+        path "PRIMARY_LSP"
+{% for hop in primary_hops %}
+            hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+        !
+{% if backup_hops %}
+        path "BACKUP_LSP"
+{% for hop in backup_hops %}
+            hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+        !
+{% endif %}
+        lsp "{{ lsp_name }}"
+            to {{ dest_ip }}
+            primary "PRIMARY_LSP"
+{% if backup_hops %}
+            secondary "BACKUP_LSP"
+{% endif %}
+            admin-state enable
+        !
+    !
+!
+{% else %}
+# Nokia MD-CLI {{ role }} — {{ ne_id }} / {{ lsp_name }}
+{% endif %}

@@ -1,0 +1,49 @@
+{# Nokia SR OS - RSVP-TE (illustrative CLI) #}
+{% if role == "ingress" %}
+configure
+    router "Base"
+        rsvp
+            interface "system"
+                no shutdown
+            exit
+        exit
+        mpls
+            paths
+                path "PRIMARY_LSP"
+{% for hop in primary_hops %}
+                    hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+                exit
+{% if backup_hops %}
+                path "BACKUP_LSP"
+{% for hop in backup_hops %}
+                    hop {{ loop.index }} {{ hop.next_hop_ip or "0.0.0.0" }} strict
+{% endfor %}
+                exit
+{% endif %}
+            exit
+            lsp "{{ lsp_name }}"
+                to {{ dest_ip }}
+                primary "PRIMARY_LSP"
+{% if backup_hops %}
+                secondary "BACKUP_LSP"
+{% endif %}
+                no shutdown
+            exit
+        exit
+    exit
+exit
+{% elif role == "egress" %}
+configure
+    router "Base"
+        rsvp
+            interface "system"
+                no shutdown
+            exit
+        exit
+    exit
+exit
+{% else %}
+# Nokia SR OS transit notes for {{ ne_id }} on {{ lsp_name }}
+# Ensure RSVP interfaces toward primary/backup next-hops are enabled for TE.
+{% endif %}
