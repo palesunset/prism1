@@ -15,7 +15,7 @@ def test_import_csv_missing_required_column() -> None:
 
 
 def test_import_roundtrip_minimal() -> None:
-    nes_csv = "ne_id,loopback_ipv4,site,vendor,role\nA,10.0.0.1,lab,nokia,core\nB,10.0.0.2,lab,huawei,edge\n"
+    nes_csv = "ne_id,loopback_ipv4,site,vendor,role\nA,10.0.0.1,lab,nokia,P_RTR\nB,10.0.0.2,lab,huawei,PERTR\n"
     links_csv = "source,target,latency_ms,bandwidth_mbps\nA,B,1,1000\n"
     nes = parse_nes_csv(nes_csv)
     mg, links = parse_links_csv(nes, links_csv)

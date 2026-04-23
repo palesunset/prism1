@@ -4,7 +4,7 @@ import { ControlPanel } from "./components/ControlPanel";
 import { GraphView } from "./components/GraphView";
 import { JustificationPanel } from "./components/JustificationPanel";
 import { LspSidebar } from "./components/LspSidebar";
-import { computePaths, errorDetail, fetchTopology, importSampleTopology, importTopology, openProjectTopology } from "./services/apiClient";
+import { computePaths, errorDetail, fetchTopology, importTopology, openProjectTopology } from "./services/apiClient";
 import type { TopologyPayload } from "./types";
 import { useAppStore } from "./store/useAppStore";
 import { loadLayoutPositions, saveLayoutPositions } from "./utils/layoutCache";
@@ -28,6 +28,9 @@ export default function App() {
   const flexAlgoId = useAppStore((s) => s.flexAlgoId);
   const flexAlgos = useAppStore((s) => s.flexAlgos);
   const enforceSrlgDiversity = useAppStore((s) => s.enforceSrlgDiversity);
+  const enforceRoles = useAppStore((s) => s.enforceRoles);
+  const tradeoffMode = useAppStore((s) => s.tradeoffMode);
+  const tradeoffValue = useAppStore((s) => s.tradeoffValue);
   const timeHour = useAppStore((s) => s.timeHour);
   const failedNeIds = useAppStore((s) => s.failedNeIds);
   const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
@@ -48,6 +51,9 @@ export default function App() {
   const setFlexAlgoId = useAppStore((s) => s.setFlexAlgoId);
   const upsertFlexAlgo = useAppStore((s) => s.upsertFlexAlgo);
   const setEnforceSrlgDiversity = useAppStore((s) => s.setEnforceSrlgDiversity);
+  const setEnforceRoles = useAppStore((s) => s.setEnforceRoles);
+  const setTradeoffMode = useAppStore((s) => s.setTradeoffMode);
+  const setTradeoffValue = useAppStore((s) => s.setTradeoffValue);
 
   const reloadTopology = useCallback(async () => {
     const t = await fetchTopology();
@@ -98,9 +104,12 @@ export default function App() {
             max_hops: maxHops,
             mode,
             enforce_srlg_diversity: enforceSrlgDiversity,
+            enforce_roles: enforceRoles,
             time_hour: timeHour,
             failed_ne_ids: failedNeIds,
             failed_link_keys: failedLinkKeys,
+            tradeoff_mode: tradeoffMode,
+            tradeoff_value: tradeoffValue,
           });
           setLastCompute(res);
           const baseline = useAppStore.getState().baselinePrimary;
@@ -130,9 +139,14 @@ export default function App() {
     requiredBw,
     maxHops,
     mode,
+    flexAlgoId,
+    enforceSrlgDiversity,
+    enforceRoles,
     timeHour,
     failedNeIds,
     failedLinkKeys,
+    tradeoffMode,
+    tradeoffValue,
     setLastCompute,
     setImpact,
   ]);
@@ -169,9 +183,17 @@ export default function App() {
   const header = useMemo(
     () => (
       <div className="border-b border-slate-800 bg-[#0A0F1C] px-4 py-3">
-        <div className="text-lg font-semibold text-slate-100">LSP Simulator</div>
-        <div className="text-xs text-slate-400">
-          Offline topology import, CSPF, failure simulation, and multi-vendor config snippets.
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-lg font-semibold text-slate-100">LSP Simulator</div>
+            <div className="text-xs text-slate-400">
+              Offline topology import, CSPF, failure simulation, and multi-vendor config snippets.
+            </div>
+          </div>
+          <div className="pt-1 text-right text-[11px] text-slate-500">
+            Developed by: <span className="text-slate-300">RC Saria</span> &amp;{" "}
+            <span className="text-slate-300">JC Emberga</span>
+          </div>
         </div>
       </div>
     ),
@@ -202,6 +224,9 @@ export default function App() {
         mode,
         flexAlgoId,
         enforceSrlgDiversity,
+        enforceRoles,
+        tradeoffMode,
+        tradeoffValue,
         nokiaCliStyle,
         lspName,
       },
@@ -210,7 +235,22 @@ export default function App() {
     };
     downloadJson(`${lspName || "project"}.lsp.json`, file);
     toast.success("Project saved");
-  }, [topology, source, destination, requiredBw, maxHops, mode, nokiaCliStyle, lspName, lsps]);
+  }, [
+    topology,
+    source,
+    destination,
+    requiredBw,
+    maxHops,
+    mode,
+    nokiaCliStyle,
+    lspName,
+    lsps,
+    flexAlgoId,
+    enforceSrlgDiversity,
+    enforceRoles,
+    tradeoffMode,
+    tradeoffValue,
+  ]);
 
   const openProject = useCallback(
     async (file: File) => {
@@ -246,6 +286,15 @@ export default function App() {
         if (typeof project.ui.enforceSrlgDiversity === "boolean") {
           setEnforceSrlgDiversity(project.ui.enforceSrlgDiversity);
         }
+        if (typeof project.ui.enforceRoles === "boolean") {
+          setEnforceRoles(project.ui.enforceRoles);
+        }
+        if (project.ui.tradeoffMode === "percent" || project.ui.tradeoffMode === "absolute") {
+          setTradeoffMode(project.ui.tradeoffMode);
+        }
+        if (typeof project.ui.tradeoffValue === "number" && !Number.isNaN(project.ui.tradeoffValue)) {
+          setTradeoffValue(project.ui.tradeoffValue);
+        }
         setFlexAlgoId(project.ui.flexAlgoId ?? null);
         toast.success("Project opened");
       } catch (err) {
@@ -257,28 +306,20 @@ export default function App() {
     [
       reloadTopology,
       setDestination,
+      setEnforceRoles,
+      setEnforceSrlgDiversity,
       setLspName,
       setMaxHops,
       setMode,
       setNokiaCliStyle,
       setRequiredBw,
       setSource,
+      upsertFlexAlgo,
+      setFlexAlgoId,
+      setTradeoffMode,
+      setTradeoffValue,
     ],
   );
-
-  const loadSample = useCallback(async () => {
-    setGlobalBusy(true);
-    try {
-      const summary = await importSampleTopology();
-      setLastImportSummary(summary);
-      toast.success(`Imported sample: ${summary.ne_count} NEs, ${summary.link_count} links`);
-      await reloadTopology();
-    } catch (err) {
-      toast.error(errorDetail(err));
-    } finally {
-      setGlobalBusy(false);
-    }
-  }, [reloadTopology, setLastImportSummary]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -326,7 +367,6 @@ export default function App() {
           focusPaths={focusPaths}
           busy={globalBusy}
           onBrowseFiles={browseFiles}
-          onLoadSample={loadSample}
         />
         <ControlPanel
           fileInputId={FILE_INPUT_ID}
@@ -337,7 +377,6 @@ export default function App() {
           }}
           onSaveProject={saveProject}
           onOpenProject={(f) => void openProject(f)}
-          onLoadSample={() => void loadSample()}
         />
         <LspSidebar />
         <JustificationPanel />

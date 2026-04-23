@@ -33,6 +33,8 @@ export interface PrunedEdge {
   reason: string;
 }
 
+export type TradeoffMode = "percent" | "absolute";
+
 export interface ComputeResponse {
   primary: PathResult | null;
   backup: PathResult | null;
@@ -42,6 +44,10 @@ export interface ComputeResponse {
   warnings: string[];
   mode: Mode;
   time_hour?: number | null;
+  /** Best valid primary (K-shortest) latency in ms, before any trade-off. */
+  optimal_latency_ms?: number | null;
+  /** Extra primary latency vs `optimal_latency_ms` when a suboptimal primary was chosen. */
+  tradeoff_applied_ms?: number | null;
 }
 
 export interface CsvRowIssue {

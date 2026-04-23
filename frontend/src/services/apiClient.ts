@@ -47,11 +47,6 @@ export async function fetchTopology(): Promise<TopologyPayload> {
   return res.data;
 }
 
-export async function importSampleTopology(): Promise<ImportSummary> {
-  const res = await client.post<ImportSummary>("/import/sample");
-  return res.data;
-}
-
 export async function computePaths(body: {
   source_ne_id: string;
   destination_ne_id: string;
@@ -60,9 +55,12 @@ export async function computePaths(body: {
   max_hops: number;
   mode: Mode;
   enforce_srlg_diversity?: boolean;
+  enforce_roles?: boolean;
   time_hour?: number | null;
   failed_ne_ids: string[];
   failed_link_keys: string[];
+  tradeoff_mode?: "percent" | "absolute";
+  tradeoff_value?: number;
 }): Promise<ComputeResponse> {
   const res = await client.post<ComputeResponse>("/compute", body);
   return res.data;

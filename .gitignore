@@ -1,3 +1,26 @@
+.cursor/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# OS/editor
+.DS_Store
+Thumbs.db
 .venv/
 __pycache__/
 *.py[cod]

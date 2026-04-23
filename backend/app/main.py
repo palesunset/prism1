@@ -16,7 +16,6 @@ from app.api.compute import router as compute_router
 from app.api.export_cfg import router as export_router
 from app.api.import_csv import router as import_router
 from app.api.project import router as project_router
-from app.api.sample import router as sample_router
 from app.api.topology import router as topology_router
 from app.core.config import get_settings
 from app.core.exceptions import LspSimulatorError
@@ -79,7 +78,6 @@ def create_app() -> FastAPI:
     app.include_router(project_router)
     app.include_router(compute_router)
     app.include_router(export_router)
-    app.include_router(sample_router)
     app.include_router(topology_router)
 
     @app.get("/api/health")

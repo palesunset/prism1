@@ -64,6 +64,7 @@ export function LspSidebar() {
   const timeHour = useAppStore((s) => s.timeHour);
   const flexAlgoId = useAppStore((s) => s.flexAlgoId);
   const enforceSrlgDiversity = useAppStore((s) => s.enforceSrlgDiversity);
+  const enforceRoles = useAppStore((s) => s.enforceRoles);
 
   const list = useMemo(() => Object.values(lsps).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [lsps]);
   const active = list.find((l) => l.name === selected) ?? null;
@@ -110,6 +111,7 @@ export function LspSidebar() {
         max_hops: active.maxHops,
         mode: active.mode,
         enforce_srlg_diversity: enforceSrlgDiversity,
+        enforce_roles: enforceRoles,
         failed_ne_ids: [],
         failed_link_keys: [],
       });
@@ -151,6 +153,7 @@ export function LspSidebar() {
             mode: currentMode,
             time_hour: timeHour,
             enforce_srlg_diversity: enforceSrlgDiversity,
+            enforce_roles: enforceRoles,
             failed_ne_ids: [],
             failed_link_keys: [],
           });

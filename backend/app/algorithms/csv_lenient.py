@@ -9,7 +9,7 @@ from typing import Any
 
 import networkx as nx
 
-from app.core.models import CsvRowIssue, LinkRecord, NERecord, Role, Vendor
+from app.core.models import CsvRowIssue, LinkRecord, NERecord, Vendor
 
 
 def _parse_srlg(raw: str | None) -> list[str]:
@@ -36,15 +36,6 @@ def _parse_vendor_soft(raw: str | None) -> Vendor | None:
         return None
 
 
-def _parse_role_soft(raw: str | None) -> Role | None:
-    if raw is None or str(raw).strip() == "":
-        return Role.agg
-    try:
-        return Role(str(raw).strip().lower())
-    except ValueError:
-        return None
-
-
 def parse_nes_csv_lenient(content: str) -> tuple[dict[str, NERecord], list[CsvRowIssue]]:
     """Parse nes.csv, skip invalid rows, return issues with spreadsheet row numbers (header = row 1)."""
 
@@ -54,6 +45,7 @@ def parse_nes_csv_lenient(content: str) -> tuple[dict[str, NERecord], list[CsvRo
         issues.append(CsvRowIssue(file="nes.csv", row=1, field="", message="Missing header row"))
         return {}, issues
     fields = {h.strip().lower(): h for h in reader.fieldnames if h}
+    has_role_column = "role" in fields
     required = {"ne_id", "loopback_ipv4"}
     missing = required - set(fields.keys())
     if missing:
@@ -108,17 +100,11 @@ def parse_nes_csv_lenient(content: str) -> tuple[dict[str, NERecord], list[CsvRo
                 )
             )
             vendor = Vendor.nokia
-        role = _parse_role_soft(row.get(fields.get("role", ""), "") if "role" in fields else None)
-        if role is None:
-            issues.append(
-                CsvRowIssue(
-                    file="nes.csv",
-                    row=row_index,
-                    field="role",
-                    message="Invalid role. Expected core|agg|edge. Using agg.",
-                )
-            )
-            role = Role.agg
+        if has_role_column:
+            raw_role = row.get(fields["role"], "")
+            role = str(raw_role).strip()
+        else:
+            role = "P_RTR"
         lb6_raw = row.get(fields["loopback_ipv6"], "") if "loopback_ipv6" in fields else ""
         lb6 = str(lb6_raw).strip() or None
         node_sid_raw = row.get(fields["node_sid"], "") if "node_sid" in fields else ""

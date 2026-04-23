@@ -39,7 +39,7 @@ async def compute(req: ComputeRequest) -> ComputeResponse:
 
     failed_ne = set(req.failed_ne_ids)
     failed_links = _parse_failed_links(req.failed_link_keys)
-    primary, backup, ecmp_paths, rejected, pruned, warnings = compute_paths(
+    primary, backup, ecmp_paths, rejected, pruned, warnings, opt_lat, trade_applied = compute_paths(
         topology.multigraph,
         topology.nes,
         source=req.source_ne_id,
@@ -51,6 +51,9 @@ async def compute(req: ComputeRequest) -> ComputeResponse:
         time_hour=req.time_hour,
         failed_ne_ids=failed_ne,
         failed_link_keys=failed_links,
+        enforce_roles=req.enforce_roles,
+        tradeoff_mode=req.tradeoff_mode,
+        tradeoff_value=req.tradeoff_value,
     )
     log.info(
         "Computed paths %s -> %s (primary=%s, backup=%s)",
@@ -67,4 +70,6 @@ async def compute(req: ComputeRequest) -> ComputeResponse:
         pruned_edges=pruned,
         warnings=warnings,
         mode=req.mode,
+        optimal_latency_ms=opt_lat,
+        tradeoff_applied_ms=trade_applied,
     )

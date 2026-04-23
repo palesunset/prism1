@@ -34,7 +34,7 @@ async def get_topology() -> dict[str, list[dict[str, object]]]:
                     "label": ne_id,
                     "site": rec.site,
                     "vendor": rec.vendor.value,
-                    "role": rec.role.value,
+                    "role": rec.role,
                     "loopback_ipv4": str(rec.loopback_ipv4),
                     "loopback_ipv6": str(rec.loopback_ipv6) if rec.loopback_ipv6 else "",
                     "node_sid": rec.node_sid,

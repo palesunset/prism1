@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { computePaths, errorDetail, exportClipboard, exportZip, importTopology } from "../services/apiClient";
 import type { Mode, NokiaCliStyle } from "../types";
@@ -11,7 +11,6 @@ export function ControlPanel(props: {
   fileInputId?: string;
   onSaveProject: () => void;
   onOpenProject: (file: File) => void;
-  onLoadSample: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -26,6 +25,9 @@ export function ControlPanel(props: {
   const flexAlgoId = useAppStore((s) => s.flexAlgoId);
   const flexAlgos = useAppStore((s) => s.flexAlgos);
   const enforceSrlgDiversity = useAppStore((s) => s.enforceSrlgDiversity);
+  const enforceRoles = useAppStore((s) => s.enforceRoles);
+  const tradeoffMode = useAppStore((s) => s.tradeoffMode);
+  const tradeoffValue = useAppStore((s) => s.tradeoffValue);
   const lastCompute = useAppStore((s) => s.lastCompute);
   const failedNeIds = useAppStore((s) => s.failedNeIds);
   const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
@@ -40,6 +42,9 @@ export function ControlPanel(props: {
   const setMode = useAppStore((s) => s.setMode);
   const setFlexAlgoId = useAppStore((s) => s.setFlexAlgoId);
   const setEnforceSrlgDiversity = useAppStore((s) => s.setEnforceSrlgDiversity);
+  const setEnforceRoles = useAppStore((s) => s.setEnforceRoles);
+  const setTradeoffMode = useAppStore((s) => s.setTradeoffMode);
+  const setTradeoffValue = useAppStore((s) => s.setTradeoffValue);
   const setLastCompute = useAppStore((s) => s.setLastCompute);
   const setBaselinePrimary = useAppStore((s) => s.setBaselinePrimary);
   const setImpact = useAppStore((s) => s.setImpact);
@@ -53,13 +58,49 @@ export function ControlPanel(props: {
 
   const modeButtons: Mode[] = useMemo(() => ["rsvp_te", "sr_mpls", "srv6"], []);
   const [filter, setFilter] = useState("");
+  const tradeoffBootRef = useRef(false);
 
   useEffect(() => {
     const onCompute = () => void onCompute();
     window.addEventListener("lsp:compute", onCompute);
     return () => window.removeEventListener("lsp:compute", onCompute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, destination, requiredBw, maxHops, mode, failedNeIds, failedLinkKeys, lspName, nokiaCliStyle]);
+  }, [
+    source,
+    destination,
+    requiredBw,
+    maxHops,
+    mode,
+    failedNeIds,
+    failedLinkKeys,
+    lspName,
+    nokiaCliStyle,
+    enforceSrlgDiversity,
+    enforceRoles,
+    flexAlgoId,
+    timeHour,
+    tradeoffMode,
+    tradeoffValue,
+  ]);
+
+  useEffect(() => {
+    // Auto recompute ONLY on trade-off changes (debounced), and skip initial mount.
+    if (!tradeoffBootRef.current) {
+      tradeoffBootRef.current = true;
+      return;
+    }
+    if (!source || !destination) {
+      return;
+    }
+    if (busy) {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void onCompute();
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeoffMode, tradeoffValue]);
 
   async function onPickCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -100,9 +141,12 @@ export function ControlPanel(props: {
         max_hops: maxHops,
         mode,
         enforce_srlg_diversity: enforceSrlgDiversity,
+        enforce_roles: enforceRoles,
         time_hour: timeHour,
         failed_ne_ids: failedNeIds,
         failed_link_keys: failedLinkKeys,
+        tradeoff_mode: tradeoffMode,
+        tradeoff_value: tradeoffValue,
       });
       setLastCompute(res);
       if (failedNeIds.length === 0 && failedLinkKeys.length === 0) {
@@ -241,13 +285,6 @@ export function ControlPanel(props: {
                 className="mt-2 w-full rounded border border-slate-600 px-2 py-2 text-xs text-slate-200 hover:bg-slate-800"
               >
                 Browse…
-              </button>
-              <button
-                type="button"
-                onClick={() => props.onLoadSample()}
-                className="mt-2 w-full rounded border border-slate-600 px-2 py-2 text-xs text-slate-200 hover:bg-slate-800"
-              >
-                Load sample topology
               </button>
             </div>
 
@@ -402,6 +439,56 @@ export function ControlPanel(props: {
                 type="checkbox"
                 checked={enforceSrlgDiversity}
                 onChange={(e) => setEnforceSrlgDiversity(e.target.checked)}
+              />
+            </label>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-200" htmlFor="backup-tradeoff-mode">
+                  Backup Availability Trade-Off
+                </label>
+                <select
+                  id="backup-tradeoff-mode"
+                  value={tradeoffMode}
+                  onChange={(e) => {
+                    const m = e.target.value as "percent" | "absolute";
+                    setTradeoffMode(m);
+                    setTradeoffValue(m === "percent" ? Math.min(100, tradeoffValue) : Math.min(500, tradeoffValue));
+                  }}
+                  className="text-xs bg-slate-800 rounded px-2 py-1"
+                >
+                  <option value="percent">% of optimal</option>
+                  <option value="absolute">ms absolute</option>
+                </select>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={tradeoffMode === "percent" ? 100 : 500}
+                step={tradeoffMode === "percent" ? 5 : 10}
+                value={tradeoffValue}
+                onChange={(e) => setTradeoffValue(Number(e.target.value))}
+                className="w-full"
+                aria-label="Backup availability trade-off"
+              />
+              <div className="text-xs text-slate-400">
+                {tradeoffMode === "percent"
+                  ? `Allow primary latency up to ${tradeoffValue}% higher`
+                  : `Allow up to ${tradeoffValue} ms extra latency on the primary`}
+              </div>
+            </div>
+
+            <label className="flex items-center justify-between gap-2 rounded border border-slate-700 bg-slate-900 px-2 py-2 text-xs">
+              <div>
+                <div className="font-semibold text-slate-200">Enforce Role‑Based Path Finding</div>
+                <div className="text-[11px] text-slate-400">
+                  Only allow CSPF paths that follow defined NE role transition rules (DRRTR / P_RTR / PERTR / PECRT).
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={enforceRoles}
+                onChange={(e) => setEnforceRoles(e.target.checked)}
               />
             </label>
 

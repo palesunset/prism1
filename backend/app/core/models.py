@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, IPvAnyAddress, field_validator
+from pydantic import BaseModel, Field, IPvAnyAddress, field_validator, model_validator
 
 
 class Vendor(str, Enum):
@@ -42,7 +42,10 @@ class NERecord(BaseModel):
     vendor: Vendor = Vendor.nokia
     loopback_ipv6: IPvAnyAddress | None = None
     node_sid: int | None = None
-    role: Role = Role.agg
+    role: str = Field(
+        default="P_RTR",
+        description="Network hierarchy role code (e.g. DRRTR, P_RTR, PERTR, PECRT); preserved as imported.",
+    )
 
     @field_validator("ne_id")
     @classmethod
@@ -137,6 +140,10 @@ class ComputeRequest(BaseModel):
         default=True,
         description="When true, attempt SRLG-diverse backup by excluding SRLGs used by the primary (when SRLG data is present).",
     )
+    enforce_roles: bool = Field(
+        default=True,
+        description="When true, reject CSPF candidates that violate NE role transition rules.",
+    )
     time_hour: int | None = Field(
         default=None,
         ge=0,
@@ -148,6 +155,26 @@ class ComputeRequest(BaseModel):
         default_factory=list,
         description='Parallel link ids formatted as "source|target|key".',
     )
+    tradeoff_mode: Literal["percent", "absolute"] = Field(
+        default="percent",
+        description="Primary latency trade-off: percent of optimal, or extra milliseconds.",
+    )
+    tradeoff_value: float = Field(
+        default=0.0,
+        description="0 = strict primary only; percent 0-100; absolute 0-500 ms.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_tradeoff(self) -> "ComputeRequest":
+        v = float(self.tradeoff_value)
+        if self.tradeoff_mode == "percent":
+            if v < 0.0 or v > 100.0:
+                msg = "tradeoff_value for percent mode must be between 0 and 100"
+                raise ValueError(msg)
+        elif v < 0.0 or v > 500.0:
+            msg = "tradeoff_value for absolute mode must be between 0 and 500 (ms)"
+            raise ValueError(msg)
+        return self
 
 
 class ComputeResponse(BaseModel):
@@ -163,6 +190,14 @@ class ComputeResponse(BaseModel):
     pruned_edges: list[PrunedEdge] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     mode: Mode
+    optimal_latency_ms: float | None = Field(
+        default=None,
+        description="Latency of the best valid primary (K-shortest) before any trade-off.",
+    )
+    tradeoff_applied_ms: float | None = Field(
+        default=None,
+        description="Extra primary latency vs optimal when a suboptimal primary was chosen to obtain a backup.",
+    )
 
 
 class CsvRowIssue(BaseModel):
@@ -238,7 +273,7 @@ class ProjectNE(BaseModel):
     vendor: Vendor = Vendor.nokia
     loopback_ipv6: IPvAnyAddress | None = None
     node_sid: int | None = None
-    role: Role = Role.agg
+    role: str = Field(default="P_RTR", description="Hierarchy role code for CSPF role constraints.")
 
 
 class ProjectLink(BaseModel):

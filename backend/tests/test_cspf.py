@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import networkx as nx
 
-from app.algorithms.cspf import compute_paths
-from app.core.models import NERecord, Role, Vendor
+from app.algorithms.cspf import compute_paths, tradeoff_max_latency_ms
+from app.core.models import NERecord, Vendor
 
 from conftest import build_triangle_topology
 
 
 def test_cspf_primary_lowest_latency() -> None:
     g, nes = build_triangle_topology()
-    primary, backup, ecmp_paths, rejected, _pruned, warnings = compute_paths(
+    primary, backup, ecmp_paths, rejected, _pruned, warnings, _opt, _ta = compute_paths(
         g,
         nes,
         source="A",
@@ -35,7 +35,7 @@ def test_cspf_primary_lowest_latency() -> None:
 
 def test_cspf_bandwidth_pruning() -> None:
     g, nes = build_triangle_topology()
-    primary, _b, _ecmp, _r, pruned, _w = compute_paths(
+    primary, _b, _ecmp, _r, pruned, _w, _o, _t = compute_paths(
         g,
         nes,
         source="A",
@@ -54,7 +54,7 @@ def test_cspf_bandwidth_pruning() -> None:
 
 def test_cspf_node_disjoint_backup() -> None:
     g, nes = build_triangle_topology()
-    primary, backup, _ecmp, _r, _p, _w = compute_paths(
+    primary, backup, _ecmp, _r, _p, _w, _o, _t = compute_paths(
         g,
         nes,
         source="A",
@@ -72,11 +72,17 @@ def test_cspf_node_disjoint_backup() -> None:
     assert set(primary.nodes[1:-1]).isdisjoint(set(backup.nodes[1:-1]))
 
 
+def test_tradeoff_max_latency() -> None:
+    assert abs(tradeoff_max_latency_ms(10.0, "percent", 0) - 10.0) < 1e-9
+    assert abs(tradeoff_max_latency_ms(10.0, "percent", 50) - 15.0) < 1e-9
+    assert abs(tradeoff_max_latency_ms(10.0, "absolute", 5) - 15.0) < 1e-9
+
+
 def test_cspf_max_hops_rejects() -> None:
     g, nes = build_triangle_topology()
     if g.has_edge("A", "C", 0):
         g.remove_edge("A", "C", 0)
-    primary, _b, _ecmp, rejected, _p, _w = compute_paths(
+    primary, _b, _ecmp, rejected, _p, _w, _o, _t = compute_paths(
         g,
         nes,
         source="A",

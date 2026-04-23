@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import networkx as nx
 
-from app.core.models import NERecord, Role, Vendor
+from app.core.models import NERecord, Vendor
 
 
 def build_triangle_topology() -> tuple[nx.MultiGraph, dict[str, NERecord]]:
@@ -22,7 +22,7 @@ def build_triangle_topology() -> tuple[nx.MultiGraph, dict[str, NERecord]]:
             loopback_ipv4="10.0.0." + str(ord(ne_id) - ord("A") + 1),
             site="lab",
             vendor=vendor,
-            role=Role.core,
+            role="P_RTR",
         )
         g.add_node(ne_id)
     g.add_edge(

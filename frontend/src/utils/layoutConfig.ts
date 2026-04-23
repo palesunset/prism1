@@ -48,6 +48,38 @@ export const baseStylesheet: Stylesheet[] = [
     },
   },
   {
+    selector: "node.ne[role = 'P_RTR']",
+    style: {
+      "background-color": "#64748b",
+      width: 24,
+      height: 24,
+    },
+  },
+  {
+    selector: "node.ne[role = 'DRRTR']",
+    style: {
+      "background-color": "#0ea5e9",
+      width: 28,
+      height: 28,
+    },
+  },
+  {
+    selector: "node.ne[role = 'PERTR']",
+    style: {
+      "background-color": "#22c55e",
+      width: 24,
+      height: 24,
+    },
+  },
+  {
+    selector: "node.ne[role = 'PECRT']",
+    style: {
+      "background-color": "#a3e635",
+      width: 22,
+      height: 22,
+    },
+  },
+  {
     selector: "node.ne[vendor = 'nokia']",
     style: {
       "background-color": "#2563eb",

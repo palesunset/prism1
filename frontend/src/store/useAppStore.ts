@@ -43,6 +43,11 @@ interface AppState {
   flexAlgoId: number | null;
   flexAlgos: Record<number, FlexAlgoDefinition>;
   enforceSrlgDiversity: boolean;
+  /** When true, backend CSPF rejects paths that violate NE role hierarchy rules. */
+  enforceRoles: boolean;
+  /** Allow a higher-latency primary to obtain a node-disjoint backup. */
+  tradeoffMode: "percent" | "absolute";
+  tradeoffValue: number;
   failedNeIds: string[];
   failedLinkKeys: string[];
   lastCompute: ComputeResponse | null;
@@ -65,6 +70,9 @@ interface AppState {
   upsertFlexAlgo: (d: FlexAlgoDefinition) => void;
   deleteFlexAlgo: (id: number) => void;
   setEnforceSrlgDiversity: (v: boolean) => void;
+  setEnforceRoles: (v: boolean) => void;
+  setTradeoffMode: (m: "percent" | "absolute") => void;
+  setTradeoffValue: (v: number) => void;
   toggleHeatmap: () => void;
   setReservations: (r: LspReservation[]) => void;
   setLastCompute: (c: ComputeResponse | null) => void;
@@ -94,6 +102,9 @@ export const useAppStore = create<AppState>()(
       flexAlgoId: null,
       flexAlgos: STARTER_FLEX_ALGOS,
       enforceSrlgDiversity: true,
+      enforceRoles: true,
+      tradeoffMode: "percent" as const,
+      tradeoffValue: 50,
       failedNeIds: [],
       failedLinkKeys: [],
       lastCompute: null,
@@ -137,6 +148,9 @@ export const useAppStore = create<AppState>()(
           return { flexAlgos: next, flexAlgoId };
         }),
       setEnforceSrlgDiversity: (v) => set({ enforceSrlgDiversity: v }),
+      setEnforceRoles: (v) => set({ enforceRoles: v }),
+      setTradeoffMode: (m) => set({ tradeoffMode: m }),
+      setTradeoffValue: (v) => set({ tradeoffValue: v }),
       toggleHeatmap: () => set((s) => ({ heatmapEnabled: !s.heatmapEnabled })),
       setReservations: (r) => set({ reservations: r }),
       setLastCompute: (c) => set({ lastCompute: c }),
@@ -178,6 +192,9 @@ export const useAppStore = create<AppState>()(
         flexAlgoId: s.flexAlgoId,
         flexAlgos: s.flexAlgos,
         enforceSrlgDiversity: s.enforceSrlgDiversity,
+        enforceRoles: s.enforceRoles,
+        tradeoffMode: s.tradeoffMode,
+        tradeoffValue: s.tradeoffValue,
         nokiaCliStyle: s.nokiaCliStyle,
         lspName: s.lspName,
         timeHour: s.timeHour,

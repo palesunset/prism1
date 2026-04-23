@@ -10,7 +10,7 @@ from typing import Any
 import networkx as nx
 
 from app.core.exceptions import ImportValidationError
-from app.core.models import LinkRecord, NERecord, Role, Vendor
+from app.core.models import LinkRecord, NERecord, Vendor
 
 
 def _parse_srlg(raw: str | None) -> list[str]:
@@ -37,17 +37,6 @@ def _parse_vendor(raw: str | None) -> Vendor:
         raise ImportValidationError(msg) from exc
 
 
-def _parse_role(raw: str | None) -> Role:
-    if raw is None or str(raw).strip() == "":
-        return Role.agg
-    key = str(raw).strip().lower()
-    try:
-        return Role(key)
-    except ValueError as exc:
-        msg = f"Invalid role '{raw}'. Expected one of: core, agg, edge"
-        raise ImportValidationError(msg) from exc
-
-
 def parse_nes_csv(content: str) -> dict[str, NERecord]:
     """Parse nes.csv text into a mapping of ne_id -> NERecord."""
 
@@ -56,6 +45,7 @@ def parse_nes_csv(content: str) -> dict[str, NERecord]:
         msg = "nes.csv is empty or missing a header row"
         raise ImportValidationError(msg)
     fields = {h.strip().lower(): h for h in reader.fieldnames if h}
+    has_role_column = "role" in fields
     required = {"ne_id", "loopback_ipv4"}
     missing = required - set(fields.keys())
     if missing:
@@ -72,7 +62,11 @@ def parse_nes_csv(content: str) -> dict[str, NERecord]:
             raise ImportValidationError(msg)
         site = str(row.get(fields.get("site", ""), "") or "default").strip() or "default"
         vendor = _parse_vendor(row.get(fields.get("vendor", ""), "") if "vendor" in fields else None)
-        role = _parse_role(row.get(fields.get("role", ""), "") if "role" in fields else None)
+        if has_role_column:
+            raw_role = row.get(fields["role"], "")
+            role = str(raw_role).strip()
+        else:
+            role = "P_RTR"
         lb6_raw = row.get(fields["loopback_ipv6"], "") if "loopback_ipv6" in fields else ""
         lb6 = str(lb6_raw).strip() or None
         node_sid_raw = row.get(fields["node_sid"], "") if "node_sid" in fields else ""

@@ -10,6 +10,11 @@ export interface ProjectUiState {
   mode: Mode;
   flexAlgoId?: number | null;
   enforceSrlgDiversity?: boolean;
+  /** When true, CSPF rejects paths that violate NE role hierarchy rules. */
+  enforceRoles?: boolean;
+  /** Backup trade-off: percent of optimal or absolute ms. */
+  tradeoffMode?: "percent" | "absolute";
+  tradeoffValue?: number;
   nokiaCliStyle: NokiaCliStyle;
   lspName: string;
 }
@@ -59,7 +64,7 @@ export function topologyToProjectPayload(topology: TopologyPayload): {
       vendor: String(d.vendor ?? "nokia"),
       loopback_ipv6: d.loopback_ipv6 ? String(d.loopback_ipv6) : null,
       node_sid: d.node_sid ?? null,
-      role: String(d.role ?? "agg"),
+      role: String(d.role ?? "P_RTR"),
     };
   });
   const links = topology.edges.map((e) => {

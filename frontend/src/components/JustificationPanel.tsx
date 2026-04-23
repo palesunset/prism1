@@ -77,6 +77,22 @@ export function JustificationPanel() {
             ) : null}
 
             <div className="text-xs text-slate-300">{title}</div>
+            {last?.primary != null &&
+            last.backup != null &&
+            last.optimal_latency_ms != null &&
+            last.tradeoff_applied_ms != null &&
+            last.tradeoff_applied_ms > 0.01 ? (
+              <div className="rounded border border-cyan-800/40 bg-cyan-950/30 px-2 py-2 text-xs text-cyan-50">
+                <div className="font-semibold text-cyan-100">Primary path selected (with trade-off)</div>
+                <div className="mt-1 text-slate-200">
+                  Latency: {last.primary.total_latency_ms.toFixed(2)} ms (optimal was{" "}
+                  {last.optimal_latency_ms.toFixed(2)} ms, +{last.tradeoff_applied_ms.toFixed(2)} ms)
+                </div>
+                <div className="mt-1 text-slate-300">
+                  Trade-off enabled backup path ({last.backup.total_latency_ms.toFixed(2)} ms)
+                </div>
+              </div>
+            ) : null}
             {last?.ecmp_paths?.length && last.ecmp_paths.length > 1 ? (
               <div className="rounded border border-violet-700/40 bg-violet-950/30 px-2 py-2 text-[11px] text-violet-100">
                 ECMP detected: {last.ecmp_paths.length} equal-cost path(s). Purple dotted lines show alternates.
@@ -147,9 +163,14 @@ export function JustificationPanel() {
                 </summary>
                 <div className="space-y-2 px-2 pb-2 text-xs text-slate-300">
                   {last.rejected_paths.map((r, idx) => (
-                    <div key={`${idx}-${r.reason}`}>
-                      <div className="font-mono text-[11px] text-slate-400">{r.nodes.join(" → ")}</div>
-                      <div>{r.reason}</div>
+                    <div key={`${idx}-${r.reason}-${r.nodes.join("|")}`} className="border-b border-slate-800 pb-2 last:border-0">
+                      <div className="text-[11px] text-rose-200/90">
+                        <span aria-hidden="true">❌ </span>
+                        Path rejected: <span className="font-mono text-slate-300">{r.nodes.join(" → ")}</span>
+                      </div>
+                      <div className="mt-0.5 pl-0 text-[11px] text-slate-400">
+                        Reason: <span className="text-slate-200">{r.reason}</span>
+                      </div>
                     </div>
                   ))}
                 </div>

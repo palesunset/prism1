@@ -38,7 +38,7 @@ function buildElements(topology: TopologyPayload): ElementDefinition[] {
   for (const n of topology.nodes) {
     const id = String(n.data.id);
     const site = String(n.data.site ?? "default");
-    const role = String(n.data.role ?? "agg");
+    const role = String(n.data.role ?? "P_RTR");
     elements.push({
       data: {
         id,
@@ -86,7 +86,6 @@ export function GraphView(props: {
   focusPaths: boolean;
   busy?: boolean;
   onBrowseFiles?: () => void;
-  onLoadSample?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
@@ -376,15 +375,6 @@ export function GraphView(props: {
                 className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-500"
               >
                 Browse for CSV files…
-              </button>
-            ) : null}
-            {props.onLoadSample ? (
-              <button
-                type="button"
-                onClick={props.onLoadSample}
-                className="rounded-lg border border-slate-600 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-800"
-              >
-                Load sample topology
               </button>
             ) : null}
           </div>
