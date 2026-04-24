@@ -59,6 +59,8 @@ interface AppState {
   nokiaCliStyle: NokiaCliStyle;
   lspName: string;
   timeHour: number;
+  /** Monolithic legacy config (forward+reverse) for viewer/copy. */
+  monolithicConfig: string | null;
   lsps: Record<string, SavedLsp>;
   setNeIds: (ids: string[]) => void;
   setSource: (v: string) => void;
@@ -85,6 +87,7 @@ interface AppState {
   setNokiaCliStyle: (s: NokiaCliStyle) => void;
   setLspName: (s: string) => void;
   setTimeHour: (h: number) => void;
+  setMonolithicConfig: (s: string | null) => void;
   upsertLsp: (lsp: SavedLsp) => void;
   deleteLsp: (name: string) => void;
   clearLsps: () => void;
@@ -116,6 +119,7 @@ export const useAppStore = create<AppState>()(
       nokiaCliStyle: "classic",
       lspName: "LSP-1",
       timeHour: 0,
+      monolithicConfig: null,
       lsps: {},
       setNeIds: (ids) => set({ neIds: ids }),
       setSource: (v) => set({ source: v }),
@@ -169,6 +173,7 @@ export const useAppStore = create<AppState>()(
       setNokiaCliStyle: (s) => set({ nokiaCliStyle: s }),
       setLspName: (s) => set({ lspName: s }),
       setTimeHour: (h) => set({ timeHour: h }),
+      setMonolithicConfig: (s) => set({ monolithicConfig: s }),
       upsertLsp: (lsp) =>
         set((s) => ({
           lsps: { ...s.lsps, [lsp.name]: lsp },
@@ -199,6 +204,7 @@ export const useAppStore = create<AppState>()(
         lspName: s.lspName,
         timeHour: s.timeHour,
         heatmapEnabled: s.heatmapEnabled,
+        monolithicConfig: s.monolithicConfig,
         lsps: s.lsps,
       }),
     },

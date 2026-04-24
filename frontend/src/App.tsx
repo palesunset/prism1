@@ -210,6 +210,12 @@ export default function App() {
       toast.error("No topology loaded");
       return;
     }
+    const defaultName = (lspName || "project").trim();
+    const picked = window.prompt("Save project as…", defaultName);
+    if (picked === null) {
+      return; // cancelled
+    }
+    const name = picked.trim() || defaultName;
     const positions = loadLayoutPositions(topology);
     const file: ProjectFileV1 = {
       version: 1,
@@ -233,8 +239,8 @@ export default function App() {
       lsps: Object.values(lsps),
       flex_algos: flexAlgos,
     };
-    downloadJson(`${lspName || "project"}.lsp.json`, file);
-    toast.success("Project saved");
+    downloadJson(`${name}.lsp.json`, file);
+    toast.success(`Project saved: ${name}.lsp.json`);
   }, [
     topology,
     source,

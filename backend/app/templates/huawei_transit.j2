@@ -1,0 +1,10 @@
+{# Huawei VRP — minimal transit MPLS/TE toward next hop (all modes) #}
+# LSP mode: {{ lsp_mode }} — transit on {{ ne_id }}
+system-view
+# Enable MPLS on forward interface toward {{ next_hop_ip }}
+interface {{ outgoing_interface }}
+ mpls
+ mpls te
+ mpls ldp
+#
+return

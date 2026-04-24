@@ -1,0 +1,15 @@
+{# Nokia SR OS — minimal transit: RSVP-TE on outward interface (all modes) #}
+# LSP mode: {{ lsp_mode }} — transit on {{ ne_id }}
+configure
+    router "Base"
+        rsvp
+            interface "{{ outgoing_interface }}"
+                no shutdown
+            exit
+        exit
+    exit
+exit
+# Next hop: {{ next_hop_ip }}
+{% if rsvp_enabled %}
+# RSVP-TE enabled on {{ outgoing_interface }}
+{% endif %}

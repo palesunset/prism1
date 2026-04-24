@@ -90,7 +90,7 @@ export async function exportClipboard(payload: {
   return typeof res.data === "string" ? res.data : String(res.data);
 }
 
-export async function exportZip(payload: {
+export async function exportMonolithic(payload: {
   lsp_name: string;
   mode: Mode;
   flex_algo_id?: number | null;
@@ -98,7 +98,10 @@ export async function exportZip(payload: {
   backup: PathResult | null;
   reservations: LspReservation[];
   nokia_cli_style: NokiaCliStyle;
-}): Promise<Blob> {
-  const res = await client.post("/export", payload, { responseType: "blob" });
-  return res.data as Blob;
+}): Promise<string> {
+  const res = await client.post<string>("/export/monolithic", payload, {
+    responseType: "text",
+    transformResponse: (r) => r,
+  });
+  return typeof res.data === "string" ? res.data : String(res.data);
 }

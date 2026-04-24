@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { computePaths, errorDetail, exportClipboard } from "../services/apiClient";
+import { computePaths, errorDetail, exportMonolithic } from "../services/apiClient";
 import { useAppStore } from "../store/useAppStore";
 import type { SavedLsp } from "../store/useAppStore";
 import type { Mode } from "../types";
-import { DiffViewer } from "./diff/DiffViewer";
+import { useEffect, useState } from "react";
 
 type DemandRow = { source: string; destination: string; bandwidth_mbps: number; name?: string };
 
@@ -65,6 +65,16 @@ export function LspSidebar() {
   const flexAlgoId = useAppStore((s) => s.flexAlgoId);
   const enforceSrlgDiversity = useAppStore((s) => s.enforceSrlgDiversity);
   const enforceRoles = useAppStore((s) => s.enforceRoles);
+  const [activeConfig, setActiveConfig] = useState<string | null>(null);
+  const [activeConfigBusy, setActiveConfigBusy] = useState(false);
+  const [activeConfigErr, setActiveConfigErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Clear cached config when selection changes
+    setActiveConfig(null);
+    setActiveConfigErr(null);
+    setActiveConfigBusy(false);
+  }, [selected]);
 
   const list = useMemo(() => Object.values(lsps).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [lsps]);
   const active = list.find((l) => l.name === selected) ?? null;
@@ -272,11 +282,13 @@ export function LspSidebar() {
               </button>
               <button
                 type="button"
-                disabled={!active.primary}
+                disabled={!active.primary || activeConfigBusy}
                 onClick={async () => {
                   if (!active.primary) return;
+                  setActiveConfigBusy(true);
+                  setActiveConfigErr(null);
                   try {
-                    const text = await exportClipboard({
+                    const text = await exportMonolithic({
                       lsp_name: active.name,
                       mode: active.mode,
                       flex_algo_id: flexAlgoId,
@@ -285,17 +297,61 @@ export function LspSidebar() {
                       reservations,
                       nokia_cli_style: nokiaCliStyle,
                     });
-                    await navigator.clipboard.writeText(text);
-                    toast.success("Ingress config copied");
+                    setActiveConfig(text);
                   } catch (err) {
-                    toast.error(errorDetail(err));
+                    setActiveConfig(null);
+                    setActiveConfigErr(errorDetail(err));
+                  } finally {
+                    setActiveConfigBusy(false);
                   }
                 }}
                 className="flex-1 rounded border border-slate-600 px-2 py-2 text-xs hover:bg-slate-800 disabled:opacity-40"
               >
-                Copy ingress cfg
+                {activeConfigBusy ? "Loading…" : "Show config output"}
               </button>
             </div>
+          ) : null}
+
+          {active ? (
+            <details className="mt-3 rounded border border-slate-700 bg-slate-900" open={Boolean(activeConfig)}>
+              <summary className="cursor-pointer px-2 py-2 text-xs text-slate-200">Config output (monolithic)</summary>
+              <div className="space-y-2 px-2 pb-2">
+                {!active.primary ? (
+                  <div className="text-[11px] text-slate-400">Compute or select an LSP with a primary path.</div>
+                ) : null}
+                {activeConfigErr ? <div className="text-[11px] text-rose-300">{activeConfigErr}</div> : null}
+                {activeConfig ? (
+                  <>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="flex-1 rounded bg-cyan-700 px-2 py-2 text-xs font-semibold text-white hover:bg-cyan-600"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(activeConfig);
+                          toast.success("Config copied");
+                        }}
+                      >
+                        Copy config
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-slate-700 bg-slate-800 px-2 py-2 text-xs text-slate-100 hover:bg-slate-700"
+                        onClick={() => setActiveConfig(null)}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950 p-3 text-[11px] text-green-300">
+                      {activeConfig}
+                    </pre>
+                  </>
+                ) : (
+                  <div className="text-[11px] text-slate-400">
+                    Click <span className="text-slate-200 font-semibold">Show config output</span> to load the legacy monolithic config for the selected LSP.
+                  </div>
+                )}
+              </div>
+            </details>
           ) : null}
 
           {list.length ? (
@@ -361,7 +417,6 @@ export function LspSidebar() {
             </div>
           </details>
 
-          <DiffViewer />
         </div>
       </aside>
     </div>

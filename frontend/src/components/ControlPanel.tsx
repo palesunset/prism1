@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { computePaths, errorDetail, exportClipboard, exportZip, importTopology } from "../services/apiClient";
+import { computePaths, errorDetail, exportClipboard, exportMonolithic, importTopology } from "../services/apiClient";
 import type { Mode, NokiaCliStyle } from "../types";
 import { useAppStore } from "../store/useAppStore";
 
@@ -35,6 +35,7 @@ export function ControlPanel(props: {
   const reservations = useAppStore((s) => s.reservations);
   const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
   const timeHour = useAppStore((s) => s.timeHour);
+  const setMonolithicConfig = useAppStore((s) => s.setMonolithicConfig);
   const setSource = useAppStore((s) => s.setSource);
   const setDestination = useAppStore((s) => s.setDestination);
   const setRequiredBw = useAppStore((s) => s.setRequiredBw);
@@ -149,6 +150,24 @@ export function ControlPanel(props: {
         tradeoff_value: tradeoffValue,
       });
       setLastCompute(res);
+      if (res.primary) {
+        try {
+          const txt = await exportMonolithic({
+            lsp_name: lspName,
+            mode,
+            flex_algo_id: flexAlgoId,
+            primary: res.primary,
+            backup: res.backup,
+            reservations,
+            nokia_cli_style: nokiaCliStyle,
+          });
+          setMonolithicConfig(txt);
+        } catch {
+          setMonolithicConfig(null);
+        }
+      } else {
+        setMonolithicConfig(null);
+      }
       if (failedNeIds.length === 0 && failedLinkKeys.length === 0) {
         setBaselinePrimary(res.primary);
         setImpact(null);
@@ -200,32 +219,6 @@ export function ControlPanel(props: {
       });
       await navigator.clipboard.writeText(text);
       toast.success("Ingress configuration copied");
-    } catch (err) {
-      toast.error(errorDetail(err));
-    }
-  }
-
-  async function onDownloadZip() {
-    if (!lastCompute?.primary) {
-      return;
-    }
-    try {
-      const blob = await exportZip({
-        lsp_name: lspName,
-        mode,
-        flex_algo_id: flexAlgoId,
-        primary: lastCompute.primary,
-        backup: lastCompute.backup,
-        reservations,
-        nokia_cli_style: nokiaCliStyle,
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${lspName}_configs.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("ZIP download started");
     } catch (err) {
       toast.error(errorDetail(err));
     }
@@ -492,15 +485,6 @@ export function ControlPanel(props: {
               />
             </label>
 
-            <label className="block">
-              <div className="mb-1 text-xs text-slate-400">LSP Name</div>
-              <input
-                className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1"
-                value={lspName}
-                onChange={(e) => setLspName(e.target.value)}
-              />
-            </label>
-
             <div className="flex gap-2">
               <button
                 type="button"
@@ -569,14 +553,6 @@ export function ControlPanel(props: {
                 className="flex-1 rounded border border-slate-600 px-2 py-2 text-xs hover:bg-slate-800 disabled:opacity-40"
               >
                 Copy ingress cfg
-              </button>
-              <button
-                type="button"
-                disabled={!lastCompute?.primary}
-                onClick={() => void onDownloadZip()}
-                className="flex-1 rounded border border-slate-600 px-2 py-2 text-xs hover:bg-slate-800 disabled:opacity-40"
-              >
-                Download ZIP
               </button>
             </div>
           </div>

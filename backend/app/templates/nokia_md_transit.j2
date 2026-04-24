@@ -1,0 +1,13 @@
+{# Nokia SR OS — MD-CLI — minimal transit (any tunnel mode) #}
+# LSP mode: {{ lsp_mode }} — transit on {{ ne_id }}
+/configure router "Base"
+    rsvp
+        interface "{{ outgoing_interface }}"
+            admin-state enable
+        !
+    !
+!
+# Next hop toward downstream: {{ next_hop_ip }}
+{% if rsvp_enabled %}
+# Enable MPLS-TE/RSVP on the outward interface as required for your network design.
+{% endif %}

@@ -1,0 +1,48 @@
+{# Nokia SR OS — MD-CLI — forward (ingress) — names use source NE id (legacy) #}
+admin display-config | match {{ source_ne_id }} context all
+show router mpls path {{ source_ne_id }}-SP:01 lsp-binding
+show router mpls path {{ source_ne_id }}-SP:02 lsp-binding
+show router mpls lsp {{ source_ne_id }}-SP:01
+show router mpls lsp {{ source_ne_id }}-SP:02
+
+/configure router mpls path {{ source_ne_id }}-SP:01
+{% for hop in primary_hops %}
+    hop {{ loop.index }} {{ hop.ip }} strict
+{% endfor %}
+    admin-state enable
+!
+{% if backup_hops %}
+/configure router mpls path {{ source_ne_id }}-SP:02
+{% for hop in backup_hops %}
+    hop {{ loop.index }} {{ hop.ip }} strict
+{% endfor %}
+    admin-state enable
+!
+
+{% endif %}
+/configure router mpls lsp {{ source_ne_id }}-SP:01
+    to {{ dest_ip }}
+    path-computation-method local-cspf
+    fast-reroute facility
+    egress-statistics
+    collect-stats
+    admin-state enable
+    primary "{{ source_ne_id }}-SP:01"
+{% if backup_hops %}
+    secondary "{{ source_ne_id }}-SP:02"
+{% endif %}
+!
+/configure service sdp {{ sdp_number }} mpls
+    far-end {{ dest_ip }}
+    lsp "{{ source_ne_id }}-SP:01"
+{% if backup_hops %}
+    lsp "{{ source_ne_id }}-SP:02"
+{% endif %}
+    admin-state enable
+!
+{% if is_drrtr_pecrt %}
+/configure service vprn 5000
+    spoke-sdp {{ sdp_number }}:5000
+    admin-state enable
+!
+{% endif %}

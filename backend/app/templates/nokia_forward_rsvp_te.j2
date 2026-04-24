@@ -1,0 +1,71 @@
+{# Nokia SR OS — forward (ingress) RSVP-TE — path/LSP names use source NE id (legacy) #}
+admin display-config | match {{ source_ne_id }} context all
+show router mpls path {{ source_ne_id }}-SP:01 lsp-binding
+show router mpls path {{ source_ne_id }}-SP:02 lsp-binding
+show router mpls lsp {{ source_ne_id }}-SP:01
+show router mpls lsp {{ source_ne_id }}-SP:02
+
+/configure router mpls path {{ source_ne_id }}-SP:01
+{% for hop in primary_hops %}
+hop {{ loop.index }} {{ hop.ip }} strict
+{% endfor %}
+no shutdown
+exit
+
+{% if backup_hops %}
+/configure router mpls path {{ source_ne_id }}-SP:02
+{% for hop in backup_hops %}
+hop {{ loop.index }} {{ hop.ip }} strict
+{% endfor %}
+no shutdown
+exit
+
+{% endif %}
+/configure router mpls lsp {{ source_ne_id }}-SP:01
+to {{ dest_ip }}
+path-computation-method local-cspf
+fast-reroute facility
+exit
+egress-statistics
+collect-stats
+no shutdown
+exit
+primary {{ source_ne_id }}-SP:01 no shutdown
+{% if backup_hops %}
+secondary {{ source_ne_id }}-SP:02 no shutdown
+secondary {{ source_ne_id }}-SP:02 standby
+{% endif %}
+no shutdown
+exit
+
+{% if backup_hops %}
+/configure router mpls lsp {{ source_ne_id }}-SP:02
+to {{ dest_ip }}
+cspf
+fast-reroute facility
+exit
+egress-statistics
+collect-stats
+no shutdown
+exit
+primary {{ source_ne_id }}-SP:02 no shutdown
+secondary {{ source_ne_id }}-SP:01 no shutdown
+secondary {{ source_ne_id }}-SP:01 standby
+no shutdown
+exit
+
+{% endif %}
+/configure service sdp {{ sdp_number }} mpls create
+far-end {{ dest_ip }}
+lsp {{ source_ne_id }}-SP:01
+{% if backup_hops %}
+lsp {{ source_ne_id }}-SP:02
+{% endif %}
+no shutdown
+exit
+
+{% if is_drrtr_pecrt %}
+/configure service vprn 5000
+spoke-sdp {{ sdp_number }}:5000 create
+/admin save
+{% endif %}
