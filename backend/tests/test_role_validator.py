@@ -13,12 +13,11 @@ def test_valid_drrtr_prtr_chain_to_drrtr_dest() -> None:
 
 
 def test_invalid_intermediate_drrtr_to_prtr_not_dest() -> None:
-    # Intermediate access-role -> P_RTR is NOT allowed unless P_RTR is the destination.
+    # Access layer may traverse within access role, then enter core later.
     nodes = ["N1", "N2", "N3", "N4"]
     roles = {"N1": "DRRTR", "N2": "DRRTR", "N3": "P_RTR", "N4": "DRRTR"}
     r = validate_path_roles(nodes, roles, "N4")
-    assert not r.is_valid
-    assert "P_RTR must be destination" in r.reason
+    assert r.is_valid
 
 
 def test_unknown_role_agg() -> None:
@@ -39,7 +38,7 @@ def test_missing_role() -> None:
 
 
 def test_prtr_to_pecrt_then_pecrt_destination() -> None:
-    """P_RTR may attach to a non-dest PECRT if the tail to dest is all PECRT (e.g. PE-agg chain)."""
+    """Core may exit into destination access layer, then stay there to destination."""
 
     nodes = ["PR1", "C1", "C2"]
     roles = {"PR1": "P_RTR", "C1": "PECRT", "C2": "PECRT"}
