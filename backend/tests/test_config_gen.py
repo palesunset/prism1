@@ -10,7 +10,7 @@ from conftest import build_triangle_topology
 
 
 def test_rsvp_forward_uses_source_ne_id_not_lsp_name() -> None:
-    """Legacy Nokia/Huawei forward templates key paths off ingress ne_id."""
+    """Nokia defaults are placeholders; lsp_name is not used in RSVP templates."""
     gen = ConfigGenerator()
     nes = {
         "SRC": NERecord(ne_id="SRC", loopback_ipv4="10.1.1.1", vendor=Vendor.nokia, role="P_RTR"),
@@ -55,7 +55,7 @@ def test_rsvp_forward_uses_source_ne_id_not_lsp_name() -> None:
         nokia_cli_style=NokiaCliStyle.classic,
     )
     text = gen.generate_node_config("SRC", links, nes, req)
-    assert "SRC-SP:01" in text
+    assert "XXXXX-SP:01" in text
     assert "MY-LSP-LABEL" not in text
 
 

@@ -1,24 +1,20 @@
 {# Huawei VRP — forward (ingress) RSVP-TE — explicit-path names use destination NE id #}
-sys
+system-view
 #
-explicit-path {{ dest_label }}-LP:01
+explicit-path {{ dest_label }}-SP:01
 {% for hop in primary_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
-commit
-quit
 #
 {% if backup_hops %}
-explicit-path {{ dest_label }}-LP:02
+explicit-path {{ dest_label }}-SP:02
 {% for hop in backup_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
-commit
-quit
 #
 {% endif %}
 interface Tunnel0/0/{{ dest_tunnel_id }}
- description {{ dest_label }}
+ description TO: {{ dest_label }}
  ip address unnumbered interface LoopBack0
  tunnel-protocol mpls te
  destination {{ dest_ip }}
@@ -27,16 +23,15 @@ interface Tunnel0/0/{{ dest_tunnel_id }}
  mpls te metric inherit-igp
  mpls te fast-reroute
  mpls te tunnel-id {{ dest_tunnel_id }}
- mpls te path explicit-path {{ dest_label }}-LP:01
+ mpls te path explicit-path {{ dest_label }}-SP:01
 {% if backup_hops %}
- mpls te path explicit-path {{ dest_label }}-LP:02 secondary
+ mpls te path explicit-path {{ dest_label }}-SP:02 secondary
 {% endif %}
 #
-{% if dest_vendor == "nokia" %}
 mpls ldp remote-peer {{ dest_label }}
  remote-ip {{ dest_ip }}
-{% endif %}
 #
 commit
-quit
+#
+return
 save

@@ -1,26 +1,20 @@
-{# reverse on egress: explicit-path uses this NE = dest/egress ({{ dest_label }}) | tunnel "description" names the remote peer = ingress ({{ source_label }}) #}
-sys
+{# reverse on egress: explicit-path names follow the tunnel destination ({{ source_label }}) for consistency #}
+system-view
 #
-# this NE (egress) id: {{ dest_label }} | far-end peer (ingress) id: {{ source_label }} | explicit-path: {{ dest_label }}-LP:01/02
-#
-explicit-path {{ dest_label }}-LP:01
+explicit-path {{ source_label }}-SP:01
 {% for hop in reverse_primary_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
-commit
-quit
 #
 {% if reverse_backup_hops %}
-explicit-path {{ dest_label }}-LP:02
+explicit-path {{ source_label }}-SP:02
 {% for hop in reverse_backup_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
-commit
-quit
 #
 {% endif %}
 interface Tunnel0/0/{{ source_tunnel_id }}
- description {{ source_label }}
+ description TO: {{ source_label }}
  ip address unnumbered interface LoopBack0
  tunnel-protocol mpls te
  destination {{ source_ip }}
@@ -29,16 +23,15 @@ interface Tunnel0/0/{{ source_tunnel_id }}
  mpls te metric inherit-igp
  mpls te fast-reroute
  mpls te tunnel-id {{ source_tunnel_id }}
- mpls te path explicit-path {{ dest_label }}-LP:01
+ mpls te path explicit-path {{ source_label }}-SP:01
 {% if reverse_backup_hops %}
- mpls te path explicit-path {{ dest_label }}-LP:02 secondary
+ mpls te path explicit-path {{ source_label }}-SP:02 secondary
 {% endif %}
 #
-{% if source_vendor == "nokia" %}
 mpls ldp remote-peer {{ source_label }}
  remote-ip {{ source_ip }}
-{% endif %}
 #
 commit
-quit
+#
+return
 save

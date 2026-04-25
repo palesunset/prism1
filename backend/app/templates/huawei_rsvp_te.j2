@@ -1,32 +1,37 @@
 {# Huawei VRP - RSVP-TE (illustrative CLI) #}
 {% if role == "ingress" %}
 system-view
-interface Tunnel10
- description {{ lsp_name }}
+#
+explicit-path {{ egress_ne }}-SP:01
+{% for hop in primary_hops %}
+next hop {{ hop.next_hop_ip or "0.0.0.0" }}
+{% endfor %}
+#
+{% if backup_hops %}
+explicit-path {{ egress_ne }}-SP:02
+{% for hop in backup_hops %}
+next hop {{ hop.next_hop_ip or "0.0.0.0" }}
+{% endfor %}
+#
+{% endif %}
+interface Tunnel0/0/{{ dest_ip.split(".")[-1] }}
+ description TO: {{ egress_ne }}
  ip address unnumbered interface LoopBack0
  tunnel-protocol mpls te
  destination {{ dest_ip }}
- mpls te tunnel-id 10
- mpls te path explicit-path PRIMARY_PATH
+ mpls te tunnel-id {{ dest_ip.split(".")[-1] }}
+ mpls te path explicit-path {{ egress_ne }}-SP:01
 {% if backup_hops %}
- mpls te path explicit-path BACKUP_PATH secondary
+ mpls te path explicit-path {{ egress_ne }}-SP:02 secondary
 {% endif %}
 #
-quit
-explicit-path PRIMARY_PATH
-{% for hop in primary_hops %}
- next hop {{ hop.next_hop_ip or "0.0.0.0" }} include strict
-{% endfor %}
+mpls ldp remote-peer {{ egress_ne }}
+ remote-ip {{ dest_ip }}
 #
-{% if backup_hops %}
-explicit-path BACKUP_PATH
-{% for hop in backup_hops %}
- next hop {{ hop.next_hop_ip or "0.0.0.0" }} include strict
-{% endfor %}
+commit
 #
-{% endif %}
 return
+save
 {% else %}
 # Huawei VRP {{ role }} node {{ ne_id }} for {{ lsp_name }}
 {% endif %}
-# Remember: commit

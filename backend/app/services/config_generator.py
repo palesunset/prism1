@@ -135,8 +135,10 @@ def _nokia_rsvp_label_ctx(
         z_in = req.nokia_lsp_name_z_reverse or req.nokia_lsp_name_z
 
     x = (x_in or s).strip()
-    y = (y_in or f"{s}-SP:01").strip()
-    z = (z_in or f"{s}-SP:02").strip()
+    # Defaults are placeholders; user is expected to override in UI.
+    x = (x_in or "XXXXX").strip()
+    y = (y_in or "YYYYY-SP:01").strip()
+    z = (z_in or "ZZZZZ-SP:02").strip()
     return {"nokia_path_name_prefix": x, "nokia_lsp_name_y": y, "nokia_lsp_name_z": z}
 
 
@@ -248,7 +250,11 @@ class ConfigGenerator:
         req: ExportRequest,
     ) -> dict[str, object]:
         dest_ip = str(dest_ne.loopback_ipv4)
-        # Legacy: hop list uses node loopbacks excluding the source.
+        # Per-direction threshold: decide SP:03 based on this block's latency only.
+        path_latency_ms = float(primary.total_latency_ms)
+        use_sp03 = path_latency_ms > 5.0
+        # Explicit-path hops must use node loopback IPs (not interface next-hops).
+        # Primary/secondary hop list excludes the source node and includes the destination node.
         primary_hops = get_hops_without_source(list(primary.nodes), nes)
         backup_hops = get_hops_without_source(list(backup.nodes), nes) if backup and backup.nodes else []
         out: dict[str, object] = {
@@ -262,6 +268,8 @@ class ConfigGenerator:
             "dest_tunnel_id": tunnel_id_from_loopback_last_octet(dest_ip),
             "sdp_number": calculate_sdp_number(dest_ip),
             "is_drrtr_pecrt": is_drrtr_pecrt(source_ne.role, dest_ne.role),
+            "use_sp03": use_sp03,
+            "path_latency_ms": path_latency_ms,
         }
         out.update(_nokia_rsvp_label_ctx(source_ne, req, "forward"))
         return out
@@ -279,6 +287,11 @@ class ConfigGenerator:
         """Reverse block is authored on the egress NE; Nokia names use the same X/Y/Z as the forward block."""
         source_ip = str(source_ne.loopback_ipv4)
         dest_ip_local = str(dest_ne.loopback_ipv4)
+        # Per-direction threshold: decide SP:03 based on this reverse block's latency only.
+        path_latency_ms = float(primary.total_latency_ms)
+        use_sp03 = path_latency_ms > 5.0
+        # Reverse explicit-path hop lists must use node loopbacks (not interface next-hops).
+        # Reverse hop list excludes the local (egress) node and includes the far-end node.
         rev_p = reverse_hops_without_first(list(primary.nodes), nes)
         rev_b = reverse_hops_without_first(list(backup.nodes), nes) if backup and backup.nodes else []
         out: dict[str, object] = {
@@ -294,6 +307,8 @@ class ConfigGenerator:
             "reverse_backup_hops": rev_b,
             "reverse_sdp_number": calculate_sdp_number(source_ip),
             "is_drrtr_pecrt_reverse": is_drrtr_pecrt(dest_ne.role, source_ne.role),
+            "use_sp03": use_sp03,
+            "path_latency_ms": path_latency_ms,
         }
         out.update(_nokia_rsvp_label_ctx(source_ne, req, "reverse"))
         return out

@@ -166,6 +166,7 @@ def _node_disjoint_backup(
     ne_primary: list[str],
     edge_primary: list[tuple[str, str, int]],
     required_bw_mbps: int | None,
+    max_hops: int,
     failed_ne_ids: set[str],
     failed_link_keys: set[tuple[str, str, int]],
     time_hour: int | None,
@@ -198,35 +199,54 @@ def _node_disjoint_backup(
         excluded_srlgs=primary_srlgs if primary_srlgs else None,
         time_hour=time_hour,
     )
-    backup_exp_result = dijkstra_shortest_path(h2, source, destination, weight="weight")
-    if backup_exp_result is None:
+    # Important: the single shortest node-disjoint backup can violate role rules even though
+    # a slightly longer valid backup exists. Scan multiple backup candidates.
+    k_backups = yen_k_shortest_paths_simple(
+        h2, source, destination, weight="weight", max_paths=K_SHORTEST_MAX_PATHS
+    )
+    if not k_backups:
         if not quiet:
             if primary_srlgs and enforce_srlg_diversity:
                 messages.append("No SRLG-diverse backup path exists for the chosen primary.")
             messages.append("No strict node-disjoint backup path exists for the chosen primary.")
         return None, messages, rejected, extra_div
 
-    backup_exp, backup_cost = backup_exp_result
-    ne_backup = expanded_path_to_ne_path(backup_exp)
-    edge_backup = expanded_path_to_edge_sequence(backup_exp, ln_map2)
-    backup = PathResult(
-        nodes=ne_backup,
-        edges=edge_backup,
-        hops=_build_hops(edge_backup, edge_lookup, nes, mode),
-        total_latency_ms=float(backup_cost),
-        hop_count=len(ne_backup) - 1,
-    )
-
-    br = validate_path_roles(backup.nodes, role_map, destination)
-    if not br.is_valid:
-        rejected.append(
-            RejectedPath(
-                nodes=list(backup.nodes),
-                reason=br.reason,
-                total_latency_ms=backup.total_latency_ms,
-                hop_count=backup.hop_count,
+    backup: PathResult | None = None
+    for backup_exp, backup_cost in k_backups:
+        ne_backup = expanded_path_to_ne_path(backup_exp)
+        hops_count = len(ne_backup) - 1
+        if hops_count > max_hops:
+            rejected.append(
+                RejectedPath(
+                    nodes=list(ne_backup),
+                    reason=f"Exceeds max hops: {hops_count} > {max_hops}",
+                    total_latency_ms=float(backup_cost),
+                    hop_count=hops_count,
+                )
             )
+            continue
+        br = validate_path_roles(ne_backup, role_map, destination)
+        if not br.is_valid:
+            rejected.append(
+                RejectedPath(
+                    nodes=list(ne_backup),
+                    reason=br.reason,
+                    total_latency_ms=float(backup_cost),
+                    hop_count=hops_count,
+                )
+            )
+            continue
+        edge_backup = expanded_path_to_edge_sequence(backup_exp, ln_map2)
+        backup = PathResult(
+            nodes=ne_backup,
+            edges=edge_backup,
+            hops=_build_hops(edge_backup, edge_lookup, nes, mode),
+            total_latency_ms=float(backup_cost),
+            hop_count=hops_count,
         )
+        break
+
+    if backup is None:
         reas = ["Backup path rejected by role-based constraints." if not quiet else "role"]
         if quiet:
             return None, [], rejected, extra_div
@@ -424,6 +444,7 @@ def compute_paths(
             ne_primary=p_res.nodes,
             edge_primary=p_res.edges,
             required_bw_mbps=required_bw_mbps,
+            max_hops=max_hops,
             failed_ne_ids=failed_ne_ids,
             failed_link_keys=failed_link_keys,
             time_hour=time_hour,
@@ -448,6 +469,7 @@ def compute_paths(
         ne_primary=first_primary.nodes,
         edge_primary=first_primary.edges,
         required_bw_mbps=required_bw_mbps,
+        max_hops=max_hops,
         failed_ne_ids=failed_ne_ids,
         failed_link_keys=failed_link_keys,
         time_hour=time_hour,

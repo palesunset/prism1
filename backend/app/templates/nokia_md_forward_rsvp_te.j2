@@ -1,14 +1,4 @@
 {# Nokia SR OS — MD-CLI — forward (ingress) — X=path prefix, Y/Z=LSP names #}
-admin display-config | match {{ nokia_path_name_prefix }} context all
-show router mpls path {{ nokia_path_name_prefix }}-SP:01 lsp-binding
-{% if backup_hops %}
-show router mpls path {{ nokia_path_name_prefix }}-SP:02 lsp-binding
-{% endif %}
-show router mpls lsp {{ nokia_lsp_name_y }}
-{% if backup_hops %}
-show router mpls lsp {{ nokia_lsp_name_z }}
-{% endif %}
-
 /configure router mpls path {{ nokia_path_name_prefix }}-SP:01
 {% for hop in primary_hops %}
     hop {{ loop.index }} {{ hop.ip }} strict
@@ -23,6 +13,14 @@ show router mpls lsp {{ nokia_lsp_name_z }}
     admin-state enable
 !
 
+{% if use_sp03 %}
+/configure router mpls path {{ nokia_path_name_prefix }}-SP:03
+{% for hop in primary_hops %}
+    hop {{ loop.index }} {{ hop.ip }} strict
+{% endfor %}
+    admin-state enable
+!
+{% endif %}
 {% endif %}
 /configure router mpls lsp {{ nokia_lsp_name_y }}
     to {{ dest_ip }}
@@ -34,6 +32,7 @@ show router mpls lsp {{ nokia_lsp_name_z }}
     primary "{{ nokia_path_name_prefix }}-SP:01"
 {% if backup_hops %}
     secondary "{{ nokia_path_name_prefix }}-SP:02"
+    secondary dynamic
 {% endif %}
 !
 {% if backup_hops %}
@@ -44,8 +43,17 @@ show router mpls lsp {{ nokia_lsp_name_z }}
     egress-statistics
     collect-stats
     admin-state enable
+{% if use_sp03 %}
+    primary "{{ nokia_path_name_prefix }}-SP:03"
+{% else %}
     primary "{{ nokia_path_name_prefix }}-SP:02"
+{% endif %}
+{% if use_sp03 %}
+    secondary "{{ nokia_path_name_prefix }}-SP:02"
+{% else %}
     secondary "{{ nokia_path_name_prefix }}-SP:01"
+{% endif %}
+    secondary dynamic
 !
 {% endif %}
 /configure service sdp {{ sdp_number }} mpls
@@ -61,4 +69,15 @@ show router mpls lsp {{ nokia_lsp_name_z }}
     spoke-sdp {{ sdp_number }}:5000
     admin-state enable
 !
+{% endif %}
+
+NOTE: Check the status of the new path. Expected status should be UP.
+admin display-config | match {{ nokia_path_name_prefix }} context all
+show router mpls path {{ nokia_path_name_prefix }}-SP:01 lsp-binding
+{% if backup_hops %}
+show router mpls path {{ nokia_path_name_prefix }}-SP:02 lsp-binding
+{% endif %}
+show router mpls lsp {{ nokia_lsp_name_y }}
+{% if backup_hops %}
+show router mpls lsp {{ nokia_lsp_name_z }}
 {% endif %}
