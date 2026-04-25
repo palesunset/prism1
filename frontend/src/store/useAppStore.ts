@@ -28,9 +28,9 @@ export interface FlexAlgoDefinition {
 }
 
 const STARTER_FLEX_ALGOS: Record<number, FlexAlgoDefinition> = {
-  128: { id: 128, name: "Low-Latency", minBwMbps: 0, maxHops: 32, excludeSrlg: false },
-  129: { id: 129, name: "High-Bandwidth", minBwMbps: 10_000, maxHops: 32, excludeSrlg: false },
-  130: { id: 130, name: "Diverse-Path", minBwMbps: 0, maxHops: 32, excludeSrlg: true },
+  128: { id: 128, name: "Low-Latency", minBwMbps: 0, maxHops: 50, excludeSrlg: false },
+  129: { id: 129, name: "High-Bandwidth", minBwMbps: 10_000, maxHops: 50, excludeSrlg: false },
+  130: { id: 130, name: "Diverse-Path", minBwMbps: 0, maxHops: 50, excludeSrlg: true },
 };
 
 interface AppState {
@@ -54,13 +54,29 @@ interface AppState {
   baselinePrimary: PathResult | null;
   impact: ImpactDiff | null;
   heatmapEnabled: boolean;
+  /** When false, map does not show NE labels (overrides zoom-based label logic). */
+  mapLabelsEnabled: boolean;
   reservations: LspReservation[];
   lastImportSummary: ImportSummary | null;
   nokiaCliStyle: NokiaCliStyle;
   lspName: string;
+  /** Nokia RSVP-TE (Forward tab): optional path name prefix (X) and LSP names (Y/Z); empty = server default. */
+  nokiaRsvpLabelXForward: string;
+  nokiaRsvpLabelYForward: string;
+  nokiaRsvpLabelZForward: string;
+  /** Nokia RSVP-TE (Reverse tab): optional path name prefix (X) and LSP names (Y/Z); empty = server default. */
+  nokiaRsvpLabelXReverse: string;
+  nokiaRsvpLabelYReverse: string;
+  nokiaRsvpLabelZReverse: string;
   timeHour: number;
+  /** When false, backup trade-off slider is ignored and 0% extra primary latency is used. */
+  backupTradeoffEnabled: boolean;
   /** Monolithic legacy config (forward+reverse) for viewer/copy. */
   monolithicConfig: string | null;
+  /** Left floating panel expanded (project file + localStorage). */
+  floatingPanelOpen: boolean;
+  activePanelTab: "constraints" | "lspDetails";
+  configOverlayOpen: boolean;
   lsps: Record<string, SavedLsp>;
   setNeIds: (ids: string[]) => void;
   setSource: (v: string) => void;
@@ -76,6 +92,7 @@ interface AppState {
   setTradeoffMode: (m: "percent" | "absolute") => void;
   setTradeoffValue: (v: number) => void;
   toggleHeatmap: () => void;
+  setMapLabelsEnabled: (v: boolean) => void;
   setReservations: (r: LspReservation[]) => void;
   setLastCompute: (c: ComputeResponse | null) => void;
   setBaselinePrimary: (p: PathResult | null) => void;
@@ -86,8 +103,18 @@ interface AppState {
   setLastImportSummary: (s: ImportSummary | null) => void;
   setNokiaCliStyle: (s: NokiaCliStyle) => void;
   setLspName: (s: string) => void;
+  setNokiaRsvpLabelXForward: (s: string) => void;
+  setNokiaRsvpLabelYForward: (s: string) => void;
+  setNokiaRsvpLabelZForward: (s: string) => void;
+  setNokiaRsvpLabelXReverse: (s: string) => void;
+  setNokiaRsvpLabelYReverse: (s: string) => void;
+  setNokiaRsvpLabelZReverse: (s: string) => void;
   setTimeHour: (h: number) => void;
+  setBackupTradeoffEnabled: (v: boolean) => void;
   setMonolithicConfig: (s: string | null) => void;
+  setFloatingPanelOpen: (v: boolean) => void;
+  setActivePanelTab: (t: "constraints" | "lspDetails") => void;
+  setConfigOverlayOpen: (v: boolean) => void;
   upsertLsp: (lsp: SavedLsp) => void;
   deleteLsp: (name: string) => void;
   clearLsps: () => void;
@@ -100,24 +127,35 @@ export const useAppStore = create<AppState>()(
       source: "",
       destination: "",
       requiredBwMbps: 0,
-      maxHops: 32,
+      maxHops: 25,
+      mapLabelsEnabled: true,
       mode: "rsvp_te",
       flexAlgoId: null,
       flexAlgos: STARTER_FLEX_ALGOS,
       enforceSrlgDiversity: true,
       enforceRoles: true,
       tradeoffMode: "percent" as const,
-      tradeoffValue: 50,
+      tradeoffValue: 0,
       failedNeIds: [],
       failedLinkKeys: [],
       lastCompute: null,
       baselinePrimary: null,
       impact: null,
       heatmapEnabled: false,
+      backupTradeoffEnabled: true,
+      floatingPanelOpen: true,
+      activePanelTab: "constraints" as const,
+      configOverlayOpen: false,
       reservations: [],
       lastImportSummary: null,
       nokiaCliStyle: "classic",
       lspName: "LSP-1",
+      nokiaRsvpLabelXForward: "",
+      nokiaRsvpLabelYForward: "",
+      nokiaRsvpLabelZForward: "",
+      nokiaRsvpLabelXReverse: "",
+      nokiaRsvpLabelYReverse: "",
+      nokiaRsvpLabelZReverse: "",
       timeHour: 0,
       monolithicConfig: null,
       lsps: {},
@@ -156,6 +194,7 @@ export const useAppStore = create<AppState>()(
       setTradeoffMode: (m) => set({ tradeoffMode: m }),
       setTradeoffValue: (v) => set({ tradeoffValue: v }),
       toggleHeatmap: () => set((s) => ({ heatmapEnabled: !s.heatmapEnabled })),
+      setMapLabelsEnabled: (v) => set({ mapLabelsEnabled: v }),
       setReservations: (r) => set({ reservations: r }),
       setLastCompute: (c) => set({ lastCompute: c }),
       setBaselinePrimary: (p) => set({ baselinePrimary: p }),
@@ -172,8 +211,18 @@ export const useAppStore = create<AppState>()(
       setLastImportSummary: (s) => set({ lastImportSummary: s }),
       setNokiaCliStyle: (s) => set({ nokiaCliStyle: s }),
       setLspName: (s) => set({ lspName: s }),
+      setNokiaRsvpLabelXForward: (s) => set({ nokiaRsvpLabelXForward: s }),
+      setNokiaRsvpLabelYForward: (s) => set({ nokiaRsvpLabelYForward: s }),
+      setNokiaRsvpLabelZForward: (s) => set({ nokiaRsvpLabelZForward: s }),
+      setNokiaRsvpLabelXReverse: (s) => set({ nokiaRsvpLabelXReverse: s }),
+      setNokiaRsvpLabelYReverse: (s) => set({ nokiaRsvpLabelYReverse: s }),
+      setNokiaRsvpLabelZReverse: (s) => set({ nokiaRsvpLabelZReverse: s }),
       setTimeHour: (h) => set({ timeHour: h }),
+      setBackupTradeoffEnabled: (v) => set({ backupTradeoffEnabled: v }),
       setMonolithicConfig: (s) => set({ monolithicConfig: s }),
+      setFloatingPanelOpen: (v) => set({ floatingPanelOpen: v }),
+      setActivePanelTab: (t) => set({ activePanelTab: t }),
+      setConfigOverlayOpen: (v) => set({ configOverlayOpen: v }),
       upsertLsp: (lsp) =>
         set((s) => ({
           lsps: { ...s.lsps, [lsp.name]: lsp },
@@ -187,7 +236,31 @@ export const useAppStore = create<AppState>()(
       clearLsps: () => set({ lsps: {} }),
     }),
     {
-      name: "lsp-simulator-ui",
+      name: "prism-ui",
+      version: 3,
+      /** Drop stale monolithic text from v1: it was saved without `lastCompute`, so it could be outdated. */
+      migrate: (persisted, fromVersion) => {
+        if (fromVersion < 2 && persisted && typeof persisted === "object") {
+          const p = persisted as { monolithicConfig?: unknown };
+          delete p.monolithicConfig;
+        }
+        if (fromVersion < 3 && persisted && typeof persisted === "object") {
+          const p = persisted as Record<string, unknown>;
+          const x = typeof p.nokiaRsvpLabelX === "string" ? p.nokiaRsvpLabelX : "";
+          const y = typeof p.nokiaRsvpLabelY === "string" ? p.nokiaRsvpLabelY : "";
+          const z = typeof p.nokiaRsvpLabelZ === "string" ? p.nokiaRsvpLabelZ : "";
+          if (typeof p.nokiaRsvpLabelXForward !== "string") p.nokiaRsvpLabelXForward = x;
+          if (typeof p.nokiaRsvpLabelYForward !== "string") p.nokiaRsvpLabelYForward = y;
+          if (typeof p.nokiaRsvpLabelZForward !== "string") p.nokiaRsvpLabelZForward = z;
+          if (typeof p.nokiaRsvpLabelXReverse !== "string") p.nokiaRsvpLabelXReverse = x;
+          if (typeof p.nokiaRsvpLabelYReverse !== "string") p.nokiaRsvpLabelYReverse = y;
+          if (typeof p.nokiaRsvpLabelZReverse !== "string") p.nokiaRsvpLabelZReverse = z;
+          delete p.nokiaRsvpLabelX;
+          delete p.nokiaRsvpLabelY;
+          delete p.nokiaRsvpLabelZ;
+        }
+        return persisted as object;
+      },
       partialize: (s) => ({
         source: s.source,
         destination: s.destination,
@@ -200,11 +273,19 @@ export const useAppStore = create<AppState>()(
         enforceRoles: s.enforceRoles,
         tradeoffMode: s.tradeoffMode,
         tradeoffValue: s.tradeoffValue,
+        backupTradeoffEnabled: s.backupTradeoffEnabled,
         nokiaCliStyle: s.nokiaCliStyle,
         lspName: s.lspName,
+        nokiaRsvpLabelXForward: s.nokiaRsvpLabelXForward,
+        nokiaRsvpLabelYForward: s.nokiaRsvpLabelYForward,
+        nokiaRsvpLabelZForward: s.nokiaRsvpLabelZForward,
+        nokiaRsvpLabelXReverse: s.nokiaRsvpLabelXReverse,
+        nokiaRsvpLabelYReverse: s.nokiaRsvpLabelYReverse,
+        nokiaRsvpLabelZReverse: s.nokiaRsvpLabelZReverse,
         timeHour: s.timeHour,
         heatmapEnabled: s.heatmapEnabled,
-        monolithicConfig: s.monolithicConfig,
+        floatingPanelOpen: s.floatingPanelOpen,
+        activePanelTab: s.activePanelTab,
         lsps: s.lsps,
       }),
     },

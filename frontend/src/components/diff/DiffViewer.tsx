@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { diffLines } from "diff";
-import { errorDetail } from "../../services/apiClient";
+import { errorDetail, exportClipboard, nokiaRsvpNamesForDirection } from "../../services/apiClient";
 import { useAppStore } from "../../store/useAppStore";
-import { exportClipboard } from "../../services/apiClient";
 import type { NokiaCliStyle } from "../../types";
 
 function renderDiff(existing: string, generated: string): Array<{ kind: "add" | "del" | "same"; text: string }> {
@@ -26,6 +25,9 @@ export function DiffViewer() {
   const lspName = useAppStore((s) => s.lspName);
   const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
   const reservations = useAppStore((s) => s.reservations);
+  const nxF = useAppStore((s) => s.nokiaRsvpLabelXForward);
+  const nyF = useAppStore((s) => s.nokiaRsvpLabelYForward);
+  const nzF = useAppStore((s) => s.nokiaRsvpLabelZForward);
 
   const diff = useMemo(() => renderDiff(existing, generated), [existing, generated]);
 
@@ -43,6 +45,7 @@ export function DiffViewer() {
         backup: last.backup,
         reservations,
         nokia_cli_style: nokiaCliStyle as NokiaCliStyle,
+        ...nokiaRsvpNamesForDirection("forward", nxF, nyF, nzF),
       });
       setGenerated(txt);
       toast.success("Generated config loaded");

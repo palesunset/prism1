@@ -51,7 +51,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="lsp-simulator",
+    name="prism",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

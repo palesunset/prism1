@@ -15,8 +15,24 @@ export interface ProjectUiState {
   /** Backup trade-off: percent of optimal or absolute ms. */
   tradeoffMode?: "percent" | "absolute";
   tradeoffValue?: number;
+  backupTradeoffEnabled?: boolean;
   nokiaCliStyle: NokiaCliStyle;
   lspName: string;
+  /** Nokia RSVP-TE monolithic naming (legacy single set); optional for older project files. */
+  nokiaRsvpLabelX?: string;
+  nokiaRsvpLabelY?: string;
+  nokiaRsvpLabelZ?: string;
+  /** Nokia RSVP-TE naming per direction; optional for older project files. */
+  nokiaRsvpLabelXForward?: string;
+  nokiaRsvpLabelYForward?: string;
+  nokiaRsvpLabelZForward?: string;
+  nokiaRsvpLabelXReverse?: string;
+  nokiaRsvpLabelYReverse?: string;
+  nokiaRsvpLabelZReverse?: string;
+  /** PRISM: left panel expanded. */
+  floatingPanelOpen?: boolean;
+  /** PRISM: constraints vs LSP details tab. */
+  activePanelTab?: "constraints" | "lspDetails";
 }
 
 export interface ProjectFileV1 {

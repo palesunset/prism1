@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ControlPanel } from "./components/ControlPanel";
-import { GraphView } from "./components/GraphView";
-import { JustificationPanel } from "./components/JustificationPanel";
-import { LspSidebar } from "./components/LspSidebar";
-import { computePaths, errorDetail, fetchTopology, importTopology, openProjectTopology } from "./services/apiClient";
-import type { TopologyPayload } from "./types";
+import { useLspCompute } from "./hooks/useLspCompute";
+import { GraphView, type GraphViewHandle } from "./components/GraphView";
 import { useAppStore } from "./store/useAppStore";
 import { loadLayoutPositions, saveLayoutPositions } from "./utils/layoutCache";
 import { downloadJson, isProjectFileV1, readTextFile, topologyToProjectPayload, type ProjectFileV1 } from "./utils/projectFile";
-
+import { fetchTopology, importTopology, openProjectTopology, errorDetail } from "./services/apiClient";
+import type { TopologyPayload } from "./types";
+import { TopBar } from "./components/TopBar";
+import { FloatingPanel } from "./components/FloatingPanel";
+import { MapToolbar } from "./components/MapToolbar";
+import { HeatmapLegend } from "./components/HeatmapLegend";
+import { ConfigOverlay, ConfigOverlayTrigger } from "./components/ConfigOverlay";
 const FILE_INPUT_ID = "lsp-csv-file-input";
 
 export default function App() {
@@ -17,6 +19,7 @@ export default function App() {
   const [topologyRevision, setTopologyRevision] = useState(0);
   const [dragHint, setDragHint] = useState(false);
   const [globalBusy, setGlobalBusy] = useState(false);
+  const graphRef = useRef<GraphViewHandle | null>(null);
 
   const lastCompute = useAppStore((s) => s.lastCompute);
   const setNeIds = useAppStore((s) => s.setNeIds);
@@ -31,29 +34,44 @@ export default function App() {
   const enforceRoles = useAppStore((s) => s.enforceRoles);
   const tradeoffMode = useAppStore((s) => s.tradeoffMode);
   const tradeoffValue = useAppStore((s) => s.tradeoffValue);
+  const backupTradeoffEnabled = useAppStore((s) => s.backupTradeoffEnabled);
   const timeHour = useAppStore((s) => s.timeHour);
   const failedNeIds = useAppStore((s) => s.failedNeIds);
   const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
-  const setLastCompute = useAppStore((s) => s.setLastCompute);
-  const setImpact = useAppStore((s) => s.setImpact);
   const setLastImportSummary = useAppStore((s) => s.setLastImportSummary);
   const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
   const lspName = useAppStore((s) => s.lspName);
   const lsps = useAppStore((s) => s.lsps);
+  const setReservations = useAppStore((s) => s.setReservations);
   const setMode = useAppStore((s) => s.setMode);
   const setRequiredBw = useAppStore((s) => s.setRequiredBw);
   const setMaxHops = useAppStore((s) => s.setMaxHops);
   const setNokiaCliStyle = useAppStore((s) => s.setNokiaCliStyle);
   const setLspName = useAppStore((s) => s.setLspName);
+  const setNokiaRsvpLabelXForward = useAppStore((s) => s.setNokiaRsvpLabelXForward);
+  const setNokiaRsvpLabelYForward = useAppStore((s) => s.setNokiaRsvpLabelYForward);
+  const setNokiaRsvpLabelZForward = useAppStore((s) => s.setNokiaRsvpLabelZForward);
+  const setNokiaRsvpLabelXReverse = useAppStore((s) => s.setNokiaRsvpLabelXReverse);
+  const setNokiaRsvpLabelYReverse = useAppStore((s) => s.setNokiaRsvpLabelYReverse);
+  const setNokiaRsvpLabelZReverse = useAppStore((s) => s.setNokiaRsvpLabelZReverse);
   const setSource = useAppStore((s) => s.setSource);
   const setDestination = useAppStore((s) => s.setDestination);
-  const setReservations = useAppStore((s) => s.setReservations);
   const setFlexAlgoId = useAppStore((s) => s.setFlexAlgoId);
   const upsertFlexAlgo = useAppStore((s) => s.upsertFlexAlgo);
   const setEnforceSrlgDiversity = useAppStore((s) => s.setEnforceSrlgDiversity);
   const setEnforceRoles = useAppStore((s) => s.setEnforceRoles);
   const setTradeoffMode = useAppStore((s) => s.setTradeoffMode);
   const setTradeoffValue = useAppStore((s) => s.setTradeoffValue);
+  const setBackupTradeoffEnabled = useAppStore((s) => s.setBackupTradeoffEnabled);
+  const setFloatingPanelOpen = useAppStore((s) => s.setFloatingPanelOpen);
+  const setActivePanelTab = useAppStore((s) => s.setActivePanelTab);
+  const heatmapEnabled = useAppStore((s) => s.heatmapEnabled);
+  const { runCompute } = useLspCompute({
+    onGlobalLoading: setGlobalBusy,
+  });
+  useEffect(() => {
+    document.title = "PRISM";
+  }, []);
 
   const reloadTopology = useCallback(async () => {
     const t = await fetchTopology();
@@ -62,18 +80,28 @@ export default function App() {
     const ids = t.nodes.map((n) => String(n.data.id)).sort();
     setNeIds(ids);
     const st = useAppStore.getState();
-    if (!st.source && ids[0]) {
-      st.setSource(ids[0]);
+    st.clearFailures();
+    const inGraph = new Set(ids);
+    if (ids.length === 0) {
+      st.setSource("");
+      st.setDestination("");
+      return;
     }
-    if (!st.destination && ids.length > 1) {
-      st.setDestination(ids[ids.length - 1]);
+    let nextSource = inGraph.has(st.source) && st.source ? st.source : ids[0]!;
+    let nextDest =
+      inGraph.has(st.destination) && st.destination && st.destination !== nextSource
+        ? st.destination
+        : ids[ids.length - 1]!;
+    if (nextDest === nextSource && ids.length > 1) {
+      nextDest = ids[0] === nextSource ? ids[ids.length - 1]! : ids[0]!;
     }
+    st.setSource(nextSource);
+    st.setDestination(nextDest);
   }, [setNeIds]);
 
   const focusPaths = Boolean(lastCompute?.primary);
 
   useEffect(() => {
-    // Keep heatmap reservations aligned to all saved LSPs
     const all = Object.values(lsps)
       .filter((l) => l.primary)
       .map((l) => ({
@@ -85,71 +113,40 @@ export default function App() {
   }, [lsps, setReservations]);
 
   useEffect(() => {
-    if (!topology || !source || !destination) {
-      return;
-    }
-    if (failedNeIds.length === 0 && failedLinkKeys.length === 0) {
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      setGlobalBusy(true);
-      void (async () => {
-        try {
-          const res = await computePaths({
-            source_ne_id: source,
-            destination_ne_id: destination,
-            flex_algo_id: flexAlgoId,
-            required_bw_mbps: requiredBw > 0 ? requiredBw : null,
-            max_hops: maxHops,
-            mode,
-            enforce_srlg_diversity: enforceSrlgDiversity,
-            enforce_roles: enforceRoles,
-            time_hour: timeHour,
-            failed_ne_ids: failedNeIds,
-            failed_link_keys: failedLinkKeys,
-            tradeoff_mode: tradeoffMode,
-            tradeoff_value: tradeoffValue,
-          });
-          setLastCompute(res);
-          const baseline = useAppStore.getState().baselinePrimary;
-          if (baseline && res.primary) {
-            setImpact({
-              primaryLatencyDeltaMs: res.primary.total_latency_ms - baseline.total_latency_ms,
-              primaryHopDelta: res.primary.hop_count - baseline.hop_count,
-            });
-          } else {
-            setImpact(null);
-          }
-        } catch (err) {
-          toast.error(errorDetail(err));
-        } finally {
-          setGlobalBusy(false);
-        }
-      })();
-    }, 200);
-
-    return () => {
-      window.clearTimeout(handle);
+    const onCompute = () => {
+      void runCompute();
     };
-  }, [
-    topology,
-    source,
-    destination,
-    requiredBw,
-    maxHops,
-    mode,
-    flexAlgoId,
-    enforceSrlgDiversity,
-    enforceRoles,
-    timeHour,
-    failedNeIds,
-    failedLinkKeys,
-    tradeoffMode,
-    tradeoffValue,
-    setLastCompute,
-    setImpact,
-  ]);
+    window.addEventListener("lsp:compute", onCompute);
+    return () => window.removeEventListener("lsp:compute", onCompute);
+  }, [runCompute]);
+
+  // Auto recompute: only when the backup availability *slider* value changes (not on source/dest or other settings).
+  const prevTradeoff = useRef(tradeoffValue);
+  const tradeoffSliderInit = useRef(true);
+  useEffect(() => {
+    if (tradeoffSliderInit.current) {
+      tradeoffSliderInit.current = false;
+      prevTradeoff.current = tradeoffValue;
+      return;
+    }
+    if (prevTradeoff.current === tradeoffValue) {
+      return;
+    }
+    prevTradeoff.current = tradeoffValue;
+    const s = useAppStore.getState();
+    if (!s.source || !s.destination) {
+      return;
+    }
+    if (!s.backupTradeoffEnabled) {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void runCompute();
+    }, 300);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [tradeoffValue, runCompute]);
 
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -168,7 +165,7 @@ export default function App() {
         setLastImportSummary(summary);
         toast.success(`Imported ${summary.ne_count} NEs, ${summary.link_count} links`);
         if (summary.invalid_rows?.length) {
-          toast(`${summary.invalid_rows.length} row(s) skipped — see Justification panel`, { duration: 6000 });
+          toast(`${summary.invalid_rows.length} row(s) skipped — see LSP Details`, { duration: 6000 });
         }
         await reloadTopology();
       } catch (err) {
@@ -178,26 +175,6 @@ export default function App() {
       }
     },
     [reloadTopology, setLastImportSummary],
-  );
-
-  const header = useMemo(
-    () => (
-      <div className="border-b border-slate-800 bg-[#0A0F1C] px-4 py-3">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-semibold text-slate-100">LSP Simulator</div>
-            <div className="text-xs text-slate-400">
-              Offline topology import, CSPF, failure simulation, and multi-vendor config snippets.
-            </div>
-          </div>
-          <div className="pt-1 text-right text-[11px] text-slate-500">
-            Developed by: <span className="text-slate-300">RC Saria</span> &amp;{" "}
-            <span className="text-slate-300">JC Emberga</span>
-          </div>
-        </div>
-      </div>
-    ),
-    [],
   );
 
   const browseFiles = useCallback(() => {
@@ -210,10 +187,11 @@ export default function App() {
       toast.error("No topology loaded");
       return;
     }
+    const s = useAppStore.getState();
     const defaultName = (lspName || "project").trim();
     const picked = window.prompt("Save project as…", defaultName);
     if (picked === null) {
-      return; // cancelled
+      return;
     }
     const name = picked.trim() || defaultName;
     const positions = loadLayoutPositions(topology);
@@ -223,40 +201,34 @@ export default function App() {
       topology,
       layoutPositions: positions,
       ui: {
-        source,
-        destination,
-        requiredBwMbps: requiredBw,
-        maxHops,
-        mode,
-        flexAlgoId,
-        enforceSrlgDiversity,
-        enforceRoles,
-        tradeoffMode,
-        tradeoffValue,
-        nokiaCliStyle,
-        lspName,
+        source: s.source,
+        destination: s.destination,
+        requiredBwMbps: s.requiredBwMbps,
+        maxHops: s.maxHops,
+        mode: s.mode,
+        flexAlgoId: s.flexAlgoId,
+        enforceSrlgDiversity: s.enforceSrlgDiversity,
+        enforceRoles: s.enforceRoles,
+        tradeoffMode: s.tradeoffMode,
+        tradeoffValue: s.tradeoffValue,
+        backupTradeoffEnabled: s.backupTradeoffEnabled,
+        nokiaCliStyle: s.nokiaCliStyle,
+        lspName: s.lspName,
+        nokiaRsvpLabelXForward: s.nokiaRsvpLabelXForward,
+        nokiaRsvpLabelYForward: s.nokiaRsvpLabelYForward,
+        nokiaRsvpLabelZForward: s.nokiaRsvpLabelZForward,
+        nokiaRsvpLabelXReverse: s.nokiaRsvpLabelXReverse,
+        nokiaRsvpLabelYReverse: s.nokiaRsvpLabelYReverse,
+        nokiaRsvpLabelZReverse: s.nokiaRsvpLabelZReverse,
+        floatingPanelOpen: s.floatingPanelOpen,
+        activePanelTab: s.activePanelTab,
       },
       lsps: Object.values(lsps),
       flex_algos: flexAlgos,
     };
     downloadJson(`${name}.lsp.json`, file);
     toast.success(`Project saved: ${name}.lsp.json`);
-  }, [
-    topology,
-    source,
-    destination,
-    requiredBw,
-    maxHops,
-    mode,
-    nokiaCliStyle,
-    lspName,
-    lsps,
-    flexAlgoId,
-    enforceSrlgDiversity,
-    enforceRoles,
-    tradeoffMode,
-    tradeoffValue,
-  ]);
+  }, [topology, lspName, lsps, flexAlgos]);
 
   const openProject = useCallback(
     async (file: File) => {
@@ -269,39 +241,55 @@ export default function App() {
           return;
         }
         const project = parsed as ProjectFileV1;
-        // Restore backend topology for compute/export APIs
         await openProjectTopology(topologyToProjectPayload(project.topology));
         await reloadTopology();
-        // Restore cached layout positions locally
         if (project.layoutPositions) {
           saveLayoutPositions(project.topology, project.layoutPositions);
         }
-        // Restore UI state
-        setMode(project.ui.mode);
-        setRequiredBw(project.ui.requiredBwMbps);
-        setMaxHops(project.ui.maxHops);
-        setNokiaCliStyle(project.ui.nokiaCliStyle);
-        setLspName(project.ui.lspName);
-        setSource(project.ui.source);
-        setDestination(project.ui.destination);
+        const ui = project.ui;
+        setMode(ui.mode);
+        setRequiredBw(ui.requiredBwMbps);
+        setMaxHops(Math.min(50, ui.maxHops));
+        setNokiaCliStyle(ui.nokiaCliStyle);
+        setLspName(ui.lspName);
+        setSource(ui.source);
+        setDestination(ui.destination);
+        if (ui.tradeoffMode === "percent" || ui.tradeoffMode === "absolute") {
+          setTradeoffMode(ui.tradeoffMode);
+        }
+        if (typeof ui.tradeoffValue === "number" && !Number.isNaN(ui.tradeoffValue)) {
+          setTradeoffValue(ui.tradeoffValue);
+        }
+        if (typeof ui.backupTradeoffEnabled === "boolean") {
+          setBackupTradeoffEnabled(ui.backupTradeoffEnabled);
+        }
         if (project.flex_algos) {
           for (const def of Object.values(project.flex_algos)) {
             upsertFlexAlgo(def);
           }
         }
-        if (typeof project.ui.enforceSrlgDiversity === "boolean") {
-          setEnforceSrlgDiversity(project.ui.enforceSrlgDiversity);
+        if (typeof ui.enforceSrlgDiversity === "boolean") {
+          setEnforceSrlgDiversity(ui.enforceSrlgDiversity);
         }
-        if (typeof project.ui.enforceRoles === "boolean") {
-          setEnforceRoles(project.ui.enforceRoles);
+        if (typeof ui.enforceRoles === "boolean") {
+          setEnforceRoles(ui.enforceRoles);
         }
-        if (project.ui.tradeoffMode === "percent" || project.ui.tradeoffMode === "absolute") {
-          setTradeoffMode(project.ui.tradeoffMode);
+        if (typeof ui.floatingPanelOpen === "boolean") {
+          setFloatingPanelOpen(ui.floatingPanelOpen);
         }
-        if (typeof project.ui.tradeoffValue === "number" && !Number.isNaN(project.ui.tradeoffValue)) {
-          setTradeoffValue(project.ui.tradeoffValue);
+        if (ui.activePanelTab === "constraints" || ui.activePanelTab === "lspDetails") {
+          setActivePanelTab(ui.activePanelTab);
         }
-        setFlexAlgoId(project.ui.flexAlgoId ?? null);
+        const legacyX = typeof ui.nokiaRsvpLabelX === "string" ? ui.nokiaRsvpLabelX : "";
+        const legacyY = typeof ui.nokiaRsvpLabelY === "string" ? ui.nokiaRsvpLabelY : "";
+        const legacyZ = typeof ui.nokiaRsvpLabelZ === "string" ? ui.nokiaRsvpLabelZ : "";
+        setNokiaRsvpLabelXForward(typeof ui.nokiaRsvpLabelXForward === "string" ? ui.nokiaRsvpLabelXForward : legacyX);
+        setNokiaRsvpLabelYForward(typeof ui.nokiaRsvpLabelYForward === "string" ? ui.nokiaRsvpLabelYForward : legacyY);
+        setNokiaRsvpLabelZForward(typeof ui.nokiaRsvpLabelZForward === "string" ? ui.nokiaRsvpLabelZForward : legacyZ);
+        setNokiaRsvpLabelXReverse(typeof ui.nokiaRsvpLabelXReverse === "string" ? ui.nokiaRsvpLabelXReverse : legacyX);
+        setNokiaRsvpLabelYReverse(typeof ui.nokiaRsvpLabelYReverse === "string" ? ui.nokiaRsvpLabelYReverse : legacyY);
+        setNokiaRsvpLabelZReverse(typeof ui.nokiaRsvpLabelZReverse === "string" ? ui.nokiaRsvpLabelZReverse : legacyZ);
+        setFlexAlgoId(ui.flexAlgoId ?? null);
         toast.success("Project opened");
       } catch (err) {
         toast.error(errorDetail(err));
@@ -314,6 +302,7 @@ export default function App() {
       setDestination,
       setEnforceRoles,
       setEnforceSrlgDiversity,
+      setFlexAlgoId,
       setLspName,
       setMaxHops,
       setMode,
@@ -321,36 +310,48 @@ export default function App() {
       setRequiredBw,
       setSource,
       upsertFlexAlgo,
-      setFlexAlgoId,
+      setBackupTradeoffEnabled,
       setTradeoffMode,
       setTradeoffValue,
+      setActivePanelTab,
+      setFloatingPanelOpen,
+      setNokiaRsvpLabelXForward,
+      setNokiaRsvpLabelYForward,
+      setNokiaRsvpLabelZForward,
+      setNokiaRsvpLabelXReverse,
+      setNokiaRsvpLabelYReverse,
+      setNokiaRsvpLabelZReverse,
     ],
   );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
-
-      if (e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        saveProject();
-      } else if (e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        const el = document.getElementById("ne-search") as HTMLInputElement | null;
-        el?.focus();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        window.dispatchEvent(new Event("lsp:compute"));
+      if (mod) {
+        if (e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          saveProject();
+        } else if (e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          const el = document.getElementById("ne-search-source") as HTMLInputElement | null;
+          el?.focus();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          window.dispatchEvent(new Event("lsp:compute"));
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [saveProject]);
 
+  const onLoadLspFromList = useCallback(() => {
+    // Store + graph are updated in SavedLsps block
+  }, []);
+
   return (
     <div
-      className="flex h-full flex-col"
+      className="flex h-full min-h-0 flex-col"
       onDragOver={(e) => {
         e.preventDefault();
         setDragHint(true);
@@ -358,34 +359,43 @@ export default function App() {
       onDragLeave={() => setDragHint(false)}
       onDrop={(e) => void onDrop(e)}
     >
-      {header}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <TopBar
+        onCompute={() => {
+          void runCompute();
+        }}
+        busy={globalBusy}
+      />
+      <div className="relative min-h-0 flex-1">
         {dragHint ? (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/40 text-sm text-white">
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/40 text-sm text-white">
             Drop nes.csv and links.csv
           </div>
         ) : null}
-        <GraphView
-          topology={topology}
-          topologyRevision={topologyRevision}
-          primary={lastCompute?.primary ?? null}
-          backup={lastCompute?.backup ?? null}
-          focusPaths={focusPaths}
-          busy={globalBusy}
-          onBrowseFiles={browseFiles}
-        />
-        <ControlPanel
-          fileInputId={FILE_INPUT_ID}
-          onGlobalLoading={setGlobalBusy}
-          onImported={reloadTopology}
-          onComputed={async () => {
-            /* graph updates from store */
-          }}
-          onSaveProject={saveProject}
-          onOpenProject={(f) => void openProject(f)}
-        />
-        <LspSidebar />
-        <JustificationPanel />
+        <div className="flex h-full min-h-0 flex-1">
+          <GraphView
+            ref={graphRef}
+            topology={topology}
+            topologyRevision={topologyRevision}
+            primary={lastCompute?.primary ?? null}
+            backup={lastCompute?.backup ?? null}
+            focusPaths={focusPaths}
+            busy={globalBusy}
+            onBrowseFiles={browseFiles}
+          />
+          {topology ? <MapToolbar graphRef={graphRef} /> : null}
+          {heatmapEnabled ? <HeatmapLegend /> : null}
+          <FloatingPanel
+            fileInputId={FILE_INPUT_ID}
+            globalBusy={globalBusy}
+            onGlobalLoading={setGlobalBusy}
+            onImported={reloadTopology}
+            onLoadLspFromList={onLoadLspFromList}
+            onSaveProject={saveProject}
+            onOpenProject={(f) => void openProject(f)}
+          />
+        </div>
+        <ConfigOverlay />
+        <ConfigOverlayTrigger />
       </div>
     </div>
   );

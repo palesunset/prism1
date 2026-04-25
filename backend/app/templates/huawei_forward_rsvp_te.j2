@@ -1,7 +1,7 @@
-{# Huawei VRP — forward (ingress) RSVP-TE — explicit-path / tunnel names use source NE id (legacy) #}
+{# Huawei VRP — forward (ingress) RSVP-TE — explicit-path names use destination NE id #}
 sys
 #
-explicit-path {{ source_ne_id }}-LP:01
+explicit-path {{ dest_label }}-LP:01
 {% for hop in primary_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
@@ -9,7 +9,7 @@ commit
 quit
 #
 {% if backup_hops %}
-explicit-path {{ source_ne_id }}-LP:02
+explicit-path {{ dest_label }}-LP:02
 {% for hop in backup_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
@@ -27,9 +27,9 @@ interface Tunnel0/0/{{ dest_tunnel_id }}
  mpls te metric inherit-igp
  mpls te fast-reroute
  mpls te tunnel-id {{ dest_tunnel_id }}
- mpls te path explicit-path {{ source_ne_id }}-LP:01
+ mpls te path explicit-path {{ dest_label }}-LP:01
 {% if backup_hops %}
- mpls te path explicit-path {{ source_ne_id }}-LP:02 secondary
+ mpls te path explicit-path {{ dest_label }}-LP:02 secondary
 {% endif %}
 #
 {% if dest_vendor == "nokia" %}

@@ -1,11 +1,11 @@
-# LSP Simulator
+# PRISM
 
-Local, offline-first desktop-style application for importing a physical topology from CSV, computing CSPF primary and strict node-disjoint backup paths, simulating failures, and generating multi-vendor MPLS/SRv6 configuration snippets.
+Local, offline-first desktop application for importing a physical topology from CSV, computing CSPF primary and strict node-disjoint backup paths, simulating failures, and generating multi-vendor MPLS/SRv6 configuration snippets.
 
 ## Features
 
 - Bulk import of `nes.csv` and `links.csv` (drag-and-drop in the UI or file picker).
-- UI state persistence (mode/constraints/Nokia CLI style) via localStorage.
+- UI state persistence (mode/path rules/Nokia CLI style) via localStorage.
 - Save/Open a portable project file (`.lsp.json`) containing topology, cached layout positions, and saved LSPs.
 - FastAPI backend with NetworkX CSPF (parallel links supported via an expanded graph model).
 - React + Vite + TypeScript UI with Cytoscape.js and the `cose-bilkent` compound layout for site grouping.
@@ -59,13 +59,24 @@ You can import the sample topology by importing the CSV files, or generate them 
 
 ## Keyboard shortcuts
 
-- **Ctrl/Cmd + K**: focus NE search box
+- **Ctrl/Cmd + K**: focus Source NE field
 - **Ctrl/Cmd + Enter**: compute LSP
 - **Ctrl/Cmd + S**: save project
 
+## Configuration Output (forward / reverse)
+
+- Click **View Configuration** to open the exported configuration overlay.
+- Tabs:
+  - **Path details**: path summary (nodes + totals).
+  - **Forward path** and **Reverse path**: vendor CLI blocks.
+- **User Define Configuration** (X/Y/Z):
+  - Visible on **Forward path** and **Reverse path** tabs.
+  - Editing X/Y/Z updates the preview after a short delay.
+  - **Update configuration** updates only the currently selected tab block (forward or reverse).
+
 ## Packaging (PyInstaller)
 
-Build the frontend first, then run PyInstaller from the repository root. The spec builds a **single `lsp-simulator.exe`** (one-file) that unpacks to a temp directory at runtime; templates and `frontend_dist` are included as data files (see `app/main.py` frozen-path handling).
+Build the frontend first, then run PyInstaller from the repository root. The spec builds a **single `prism.exe`** (one-file) that unpacks to a temp directory at runtime; templates and `frontend_dist` are included as data files (see `app/main.py` frozen-path handling).
 
 ```powershell
 cd frontend
@@ -74,7 +85,7 @@ cd ..
 pyinstaller .\build_scripts\pyinstaller.spec
 ```
 
-The executable is written to `dist/lsp-simulator.exe` (Windows). First launch may be a few seconds slower than an onedir build while the bundle extracts.
+The executable is written to `dist/prism.exe` (Windows). First launch may be a few seconds slower than an onedir build while the bundle extracts.
 
 ### Icons & macOS notarization
 
@@ -98,12 +109,10 @@ python -m pytest
 | `POST` | `/api/compute` | CSPF primary + strict node-disjoint backup. |
 | `POST` | `/api/export` | ZIP bundle of per-NE `.cfg` files. |
 | `POST` | `/api/export/clipboard` | Ingress-only plaintext configuration. |
+| `POST` | `/api/export/monolithic` | Legacy monolithic plaintext (Path details + Forward + Reverse). |
+| `POST` | `/api/export/monolithic/section?section=forward\|reverse` | Render one monolithic block for partial refresh. |
 | `GET` | `/api/health` | Health probe. |
 
 ## Documentation
 
 See `USER_MANUAL.md` for CSV schemas, UI walkthrough, and vendor notes.
-
-## License
-
-MIT — see `LICENSE`.

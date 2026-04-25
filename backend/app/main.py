@@ -1,4 +1,4 @@
-"""FastAPI entry point for the LSP Simulator desktop service."""
+"""FastAPI entry point for the PRISM desktop service."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def create_app() -> FastAPI:
     _configure_logging()
     log = logging.getLogger(__name__)
     settings = get_settings()
-    app = FastAPI(title="LSP Simulator", version="0.1.0")
+    app = FastAPI(title="PRISM", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,

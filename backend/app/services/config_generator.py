@@ -84,6 +84,15 @@ def get_vendor(ne: NERecord) -> str:
     return "huawei" if infer_vendor_from_role(ne.role) == Vendor.huawei else "nokia"
 
 
+def rsvp_template_family(ne: NERecord) -> str:
+    """Which RSVP-TE monolithic block to render: use NE's declared vendor for nokia/huawei, else role fallback."""
+    if ne.vendor == Vendor.huawei:
+        return "huawei"
+    if ne.vendor == Vendor.nokia:
+        return "nokia"
+    return get_vendor(ne)
+
+
 def calc_sdp(ip: str) -> str:
     """Legacy prompt helper: 1000 + last octet, 4 digits."""
     return calculate_sdp_number(ip)
@@ -104,6 +113,31 @@ def get_hops_without_source(
     nes: dict[str, NERecord],
 ) -> list[dict[str, str]]:
     return [{"ip": str(nes[ne_id].loopback_ipv4)} for ne_id in path_nodes[1:]]
+
+
+def _nokia_rsvp_label_ctx(
+    source_ne: NERecord, req: ExportRequest, direction: Literal["forward", "reverse"]
+) -> dict[str, str]:
+    """Nokia RSVP-TE: user-overridable path prefix (X) and LSP names (Y, Z).
+
+    Forward and reverse blocks can be customized independently. For backward compatibility,
+    direction-specific values fall back to the legacy global fields, then the server defaults.
+    """
+    s = source_ne.ne_id
+
+    if direction == "forward":
+        x_in = req.nokia_path_name_prefix_forward or req.nokia_path_name_prefix
+        y_in = req.nokia_lsp_name_y_forward or req.nokia_lsp_name_y
+        z_in = req.nokia_lsp_name_z_forward or req.nokia_lsp_name_z
+    else:
+        x_in = req.nokia_path_name_prefix_reverse or req.nokia_path_name_prefix
+        y_in = req.nokia_lsp_name_y_reverse or req.nokia_lsp_name_y
+        z_in = req.nokia_lsp_name_z_reverse or req.nokia_lsp_name_z
+
+    x = (x_in or s).strip()
+    y = (y_in or f"{s}-SP:01").strip()
+    z = (z_in or f"{s}-SP:02").strip()
+    return {"nokia_path_name_prefix": x, "nokia_lsp_name_y": y, "nokia_lsp_name_z": z}
 
 
 def get_node_position(
@@ -211,12 +245,13 @@ class ConfigGenerator:
         backup: PathResult | None,
         dest_ne: NERecord,
         nes: dict[str, NERecord],
+        req: ExportRequest,
     ) -> dict[str, object]:
         dest_ip = str(dest_ne.loopback_ipv4)
         # Legacy: hop list uses node loopbacks excluding the source.
         primary_hops = get_hops_without_source(list(primary.nodes), nes)
         backup_hops = get_hops_without_source(list(backup.nodes), nes) if backup and backup.nodes else []
-        return {
+        out: dict[str, object] = {
             "ne_id": source_ne.ne_id,
             "source_ne_id": source_ne.ne_id,
             "dest_ip": dest_ip,
@@ -228,6 +263,8 @@ class ConfigGenerator:
             "sdp_number": calculate_sdp_number(dest_ip),
             "is_drrtr_pecrt": is_drrtr_pecrt(source_ne.role, dest_ne.role),
         }
+        out.update(_nokia_rsvp_label_ctx(source_ne, req, "forward"))
+        return out
 
     def _build_rsvp_reverse_context(
         self,
@@ -237,13 +274,14 @@ class ConfigGenerator:
         source_ne: NERecord,
         links: list[LinkRecord],
         nes: dict[str, NERecord],
+        req: ExportRequest,
     ) -> dict[str, object]:
-        """Reverse block is authored on the egress NE; legacy naming still uses source_ne_id."""
+        """Reverse block is authored on the egress NE; Nokia names use the same X/Y/Z as the forward block."""
         source_ip = str(source_ne.loopback_ipv4)
         dest_ip_local = str(dest_ne.loopback_ipv4)
         rev_p = reverse_hops_without_first(list(primary.nodes), nes)
         rev_b = reverse_hops_without_first(list(backup.nodes), nes) if backup and backup.nodes else []
-        return {
+        out: dict[str, object] = {
             "ne_id": dest_ne.ne_id,
             "source_ne_id": source_ne.ne_id,
             "source_ip": source_ip,
@@ -257,6 +295,8 @@ class ConfigGenerator:
             "reverse_sdp_number": calculate_sdp_number(source_ip),
             "is_drrtr_pecrt_reverse": is_drrtr_pecrt(dest_ne.role, source_ne.role),
         }
+        out.update(_nokia_rsvp_label_ctx(source_ne, req, "reverse"))
+        return out
 
     def _render_forward(
         self,
@@ -266,11 +306,14 @@ class ConfigGenerator:
         links: list[LinkRecord],
         nes: dict[str, NERecord],
     ) -> str:
-        """Forward block uses inferred source vendor (role-based)."""
-        vendor = infer_vendor_from_role(source_ne.role)
-        ctx = self._build_rsvp_forward_context(source_ne, req.primary, req.backup, dest_ne, nes)
-        # role-based vendor strings for template conditions
-        ctx["dest_vendor"] = infer_vendor_from_role(dest_ne.role).value
+        """Forward block: template family from NE vendor (CSV) when nokia/huawei, else role inference."""
+        vendor = (
+            source_ne.vendor
+            if source_ne.vendor in (Vendor.huawei, Vendor.nokia)
+            else infer_vendor_from_role(source_ne.role)
+        )
+        ctx = self._build_rsvp_forward_context(source_ne, req.primary, req.backup, dest_ne, nes, req)
+        ctx["dest_vendor"] = str(dest_ne.vendor.value)
         if vendor == Vendor.huawei:
             return self._render("huawei_forward_rsvp_te.j2", **ctx)
         tpl = "nokia_md_forward_rsvp_te.j2" if req.nokia_cli_style == NokiaCliStyle.md else "nokia_forward_rsvp_te.j2"
@@ -284,10 +327,14 @@ class ConfigGenerator:
         links: list[LinkRecord],
         nes: dict[str, NERecord],
     ) -> str:
-        """Reverse block uses inferred destination vendor (role-based)."""
-        vendor = infer_vendor_from_role(dest_ne.role)
-        ctx = self._build_rsvp_reverse_context(dest_ne, req.primary, req.backup, source_ne, links, nes)
-        ctx["source_vendor"] = infer_vendor_from_role(source_ne.role).value
+        """Reverse block: template family from NE vendor (CSV) when nokia/huawei, else role inference."""
+        vendor = (
+            dest_ne.vendor
+            if dest_ne.vendor in (Vendor.huawei, Vendor.nokia)
+            else infer_vendor_from_role(dest_ne.role)
+        )
+        ctx = self._build_rsvp_reverse_context(dest_ne, req.primary, req.backup, source_ne, links, nes, req)
+        ctx["source_vendor"] = str(source_ne.vendor.value)
         if vendor == Vendor.huawei:
             return self._render("huawei_reverse_rsvp_te.j2", **ctx)
         tpl = "nokia_md_reverse_rsvp_te.j2" if req.nokia_cli_style == NokiaCliStyle.md else "nokia_reverse_rsvp_te.j2"
@@ -311,6 +358,52 @@ class ConfigGenerator:
             nokia_cli_style=req.nokia_cli_style,
         )
 
+    def _render_rsvp_forward_text(
+        self,
+        nes: dict[str, NERecord],
+        req: ExportRequest,
+    ) -> str:
+        """Nokia/Huawei forward (ingress) RSVP-TE block only, no path-details wrapper."""
+        p = req.primary
+        if not p.nodes:
+            return ""
+        source_ne = nes[p.nodes[0]]
+        dest_ne = nes[p.nodes[-1]]
+        forward_vendor = rsvp_template_family(source_ne)
+        forward_ctx = self._build_rsvp_forward_context(source_ne, req.primary, req.backup, dest_ne, nes, req)
+        forward_ctx["dest_vendor"] = str(dest_ne.vendor.value)
+        return self._render(f"{forward_vendor}_forward_rsvp_te.j2", **forward_ctx)
+
+    def _render_rsvp_reverse_text(
+        self,
+        nes: dict[str, NERecord],
+        req: ExportRequest,
+    ) -> str:
+        """Nokia/Huawei reverse (egress) RSVP-TE block only."""
+        p = req.primary
+        if not p.nodes:
+            return ""
+        source_ne = nes[p.nodes[0]]
+        dest_ne = nes[p.nodes[-1]]
+        links = topology.links if topology.links is not None else []
+        reverse_vendor = rsvp_template_family(dest_ne)
+        reverse_ctx = self._build_rsvp_reverse_context(dest_ne, req.primary, req.backup, source_ne, links, nes, req)
+        reverse_ctx["source_vendor"] = str(source_ne.vendor.value)
+        return self._render(f"{reverse_vendor}_reverse_rsvp_te.j2", **reverse_ctx)
+
+    def render_rsvp_monolithic_section(
+        self,
+        nes: dict[str, NERecord],
+        req: ExportRequest,
+        section: Literal["forward", "reverse"],
+    ) -> str:
+        """Single monolithic block for REST partial refresh (client merges into full string)."""
+        if req.mode != Mode.rsvp_te:
+            return ""
+        if section == "forward":
+            return self._render_rsvp_forward_text(nes, req)
+        return self._render_rsvp_reverse_text(nes, req)
+
     def generate_monolithic_config(
         self,
         nes: dict[str, NERecord],
@@ -322,19 +415,8 @@ class ConfigGenerator:
         p = req.primary
         if not p.nodes:
             return ""
-        source_ne = nes[p.nodes[0]]
-        dest_ne = nes[p.nodes[-1]]
-        links = topology.links if topology.links is not None else []
-        forward_vendor = get_vendor(source_ne)
-        reverse_vendor = get_vendor(dest_ne)
-
-        forward_ctx = self._build_rsvp_forward_context(source_ne, req.primary, req.backup, dest_ne, nes)
-        forward_ctx["dest_vendor"] = get_vendor(dest_ne)
-        forward_text = self._render(f"{forward_vendor}_forward_rsvp_te.j2", **forward_ctx)
-
-        reverse_ctx = self._build_rsvp_reverse_context(dest_ne, req.primary, req.backup, source_ne, links, nes)
-        reverse_ctx["source_vendor"] = get_vendor(source_ne)
-        reverse_text = self._render(f"{reverse_vendor}_reverse_rsvp_te.j2", **reverse_ctx)
+        forward_text = self._render_rsvp_forward_text(nes, req)
+        reverse_text = self._render_rsvp_reverse_text(nes, req)
 
         def fmt_nodes_with_ip(nodes: list[str]) -> str:
             lines: list[str] = []
@@ -352,16 +434,22 @@ class ConfigGenerator:
         def fmt_chain(nodes: list[str]) -> str:
             return " -> ".join(nodes) if nodes else "(none)"
 
+        # Path details = topology only. Nokia X/Y/Z and vendor hints are edited in the UI, not repeated here.
         details = "=== PATH DETAILS ===\n\n" + (
             f"Primary LSP: {fmt_chain(primary_nodes)}\n"
             f"\n{fmt_nodes_with_ip(primary_nodes)}\n\n"
+            f"Total latency: {p.total_latency_ms:.2f} ms\n"
+            f"Total hops: {p.hop_count}\n\n"
             f"Reverse Primary LSP: {fmt_chain(primary_rev)}\n"
             f"\n{fmt_nodes_with_ip(primary_rev)}\n\n"
         )
-        if has_backup:
+        if has_backup and req.backup is not None:
+            b = req.backup
             details += (
                 f"Secondary LSP: {fmt_chain(backup_nodes)}\n"
                 f"\n{fmt_nodes_with_ip(backup_nodes)}\n\n"
+                f"Total latency: {b.total_latency_ms:.2f} ms\n"
+                f"Total hops: {b.hop_count}\n\n"
                 f"Reverse Secondary LSP: {fmt_chain(backup_rev)}\n"
                 f"\n{fmt_nodes_with_ip(backup_rev)}\n\n"
             )

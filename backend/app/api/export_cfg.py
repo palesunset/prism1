@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Response
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.core.exceptions import TopologyNotLoadedError
 from app.core.models import ErrorResponse, ExportRequest
@@ -53,6 +55,28 @@ async def export_monolithic(req: ExportRequest) -> Response:
     gen = ConfigGenerator()
     forced = req.model_copy(update={"mode": Mode.rsvp_te})
     text = gen.generate_ingress_combo(topology.nes, forced)
+    return Response(content=text, media_type="text/plain; charset=utf-8")
+
+
+@router.post("/export/monolithic/section", response_class=Response)
+async def export_monolithic_section(
+    req: ExportRequest,
+    section: Literal["forward", "reverse"] = Query(
+        ...,
+        description="RSVP-TE monolithic block to render (client merges into full monolithic string)",
+    ),
+) -> Response:
+    """Return only the forward or reverse block (for independent UI updates)."""
+    if topology.nes is None:
+        raise TopologyNotLoadedError
+    gen = ConfigGenerator()
+    forced = req.model_copy(update={"mode": Mode.rsvp_te})
+    text = gen.render_rsvp_monolithic_section(topology.nes, forced, section)
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No primary path or not RSVP-TE; cannot render this section",
+        )
     return Response(content=text, media_type="text/plain; charset=utf-8")
 
 

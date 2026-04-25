@@ -1,7 +1,9 @@
-{# Huawei VRP — reverse (egress) — legacy naming uses source_ne_id for explicit-path names #}
+{# reverse on egress: explicit-path uses this NE = dest/egress ({{ dest_label }}) | tunnel "description" names the remote peer = ingress ({{ source_label }}) #}
 sys
 #
-explicit-path {{ source_ne_id }}-LP:01
+# this NE (egress) id: {{ dest_label }} | far-end peer (ingress) id: {{ source_label }} | explicit-path: {{ dest_label }}-LP:01/02
+#
+explicit-path {{ dest_label }}-LP:01
 {% for hop in reverse_primary_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
@@ -9,7 +11,7 @@ commit
 quit
 #
 {% if reverse_backup_hops %}
-explicit-path {{ source_ne_id }}-LP:02
+explicit-path {{ dest_label }}-LP:02
 {% for hop in reverse_backup_hops %}
 next hop {{ hop.ip }}
 {% endfor %}
@@ -27,9 +29,9 @@ interface Tunnel0/0/{{ source_tunnel_id }}
  mpls te metric inherit-igp
  mpls te fast-reroute
  mpls te tunnel-id {{ source_tunnel_id }}
- mpls te path explicit-path {{ source_ne_id }}-LP:01
+ mpls te path explicit-path {{ dest_label }}-LP:01
 {% if reverse_backup_hops %}
- mpls te path explicit-path {{ source_ne_id }}-LP:02 secondary
+ mpls te path explicit-path {{ dest_label }}-LP:02 secondary
 {% endif %}
 #
 {% if source_vendor == "nokia" %}

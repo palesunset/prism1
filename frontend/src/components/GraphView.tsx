@@ -1,6 +1,6 @@
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { PathResult, TopologyPayload } from "../types";
 import { baseStylesheet } from "../utils/layoutConfig";
 import { useAppStore } from "../store/useAppStore";
@@ -78,15 +78,22 @@ function buildElements(topology: TopologyPayload): ElementDefinition[] {
   return elements;
 }
 
-export function GraphView(props: {
-  topology: TopologyPayload | null;
-  topologyRevision: number;
-  primary: PathResult | null;
-  backup: PathResult | null;
-  focusPaths: boolean;
-  busy?: boolean;
-  onBrowseFiles?: () => void;
-}) {
+export type GraphViewHandle = {
+  fit: () => void;
+};
+
+export const GraphView = forwardRef<
+  GraphViewHandle,
+  {
+    topology: TopologyPayload | null;
+    topologyRevision: number;
+    primary: PathResult | null;
+    backup: PathResult | null;
+    focusPaths: boolean;
+    busy?: boolean;
+    onBrowseFiles?: () => void;
+  }
+>(function GraphView(props, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; kind: "node" | "edge"; id: string } | null>(
@@ -99,19 +106,38 @@ export function GraphView(props: {
   const reservations = useAppStore((s) => s.reservations);
   const failNe = useAppStore((s) => s.failNe);
   const failLink = useAppStore((s) => s.failLink);
+  const mapLabelsEnabled = useAppStore((s) => s.mapLabelsEnabled);
 
-  const applyZoomLabels = useCallback((cy: Core) => {
-    const z = cy.zoom();
-    const showFull = z > 1.5;
-    cy.batch(() => {
-      cy.nodes(".ne").forEach((n) => {
-        n.data("shortLabel", showFull ? n.id() : "");
+  const applyZoomLabels = useCallback(
+    (cy: Core) => {
+      const z = cy.zoom();
+      const showFull = z > 1.5;
+      const hide = !mapLabelsEnabled;
+      cy.batch(() => {
+        cy.nodes(".ne").forEach((n) => {
+          if (heatmapEnabled) {
+            // Match colored links to endpoints at any zoom; ignore eye toggle while heatmap is on
+            n.data("shortLabel", n.id());
+          } else {
+            n.data("shortLabel", hide ? "" : showFull ? n.id() : "");
+          }
+        });
+        cy.nodes(".site").forEach((s) => {
+          s.style("label", s.data("label"));
+        });
       });
-      cy.nodes(".site").forEach((s) => {
-        s.style("label", showFull ? s.data("label") : s.data("label"));
-      });
-    });
-  }, []);
+    },
+    [mapLabelsEnabled, heatmapEnabled],
+  );
+
+  useImperativeHandle(ref, () => ({
+    fit: () => {
+      const cy = cyRef.current;
+      if (cy) {
+        cy.fit(undefined, 48);
+      }
+    },
+  }));
 
   useEffect(() => {
     if (!props.topology || !containerRef.current) {
@@ -125,8 +151,9 @@ export function GraphView(props: {
       style: baseStylesheet,
       minZoom: 0.05,
       maxZoom: 4,
-      hideEdgesOnViewport: true,
-      hideLabelsOnViewport: true,
+      // Keep edges/labels visible while panning (heatmap + path modes need readable NEs and links)
+      hideEdgesOnViewport: false,
+      hideLabelsOnViewport: false,
       textureOnViewport: true,
     });
     const topoRef = props.topology;
@@ -214,9 +241,17 @@ export function GraphView(props: {
     if (!cy) {
       return;
     }
+    applyZoomLabels(cy);
+  }, [mapLabelsEnabled, heatmapEnabled, applyZoomLabels]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) {
+      return;
+    }
     cy.batch(() => {
       cy.edges().removeClass("primary backup ecmpAlt primaryF primaryR backupF backupR dim heatmap failed");
-      cy.nodes(".ne").removeClass("path pathBackup dim failed");
+      cy.nodes(".ne").removeClass("path pathBackup dim failed hmFocus");
       cy.nodes(".site").removeClass("dim");
 
       for (const id of failedNeIds) {
@@ -308,7 +343,7 @@ export function GraphView(props: {
             }
           } else if (ecmpKeys.has(key)) {
             e.addClass("ecmpAlt");
-          } else if (props.focusPaths) {
+          } else if (props.focusPaths && !heatmapEnabled) {
             e.addClass("dim");
           }
         });
@@ -320,24 +355,32 @@ export function GraphView(props: {
           if (props.backup?.nodes.includes(id)) {
             n.addClass("pathBackup");
           }
-          if (props.focusPaths && !pathNodes.has(id)) {
+          if (props.focusPaths && !pathNodes.has(id) && !heatmapEnabled) {
             n.addClass("dim");
           }
         });
-        if (props.focusPaths) {
+        if (props.focusPaths && !heatmapEnabled) {
           cy.nodes(".site").addClass("dim");
         }
       }
-    });
-
-    if (props.primary) {
-      const ids = new Set([...props.primary.nodes, ...(props.backup?.nodes ?? [])]);
-      const col = cy.nodes().filter((n) => ids.has(n.id()));
-      if (col.nonempty()) {
-        cy.fit(col, 64);
+      if (heatmapEnabled) {
+        cy.nodes(".ne").addClass("hmFocus");
       }
-    }
+    });
   }, [props.primary, props.backup, props.focusPaths, failedNeIds, failedLinkKeys, heatmapEnabled, reservations]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !props.primary) {
+      return;
+    }
+    const ids = new Set([...props.primary.nodes, ...(props.backup?.nodes ?? [])]);
+    const col = cy.nodes().filter((n) => ids.has(n.id()));
+    if (col.nonempty()) {
+      /* Generous padding so the path doesn’t fill the whole view (less “zoomed in”) */
+      cy.fit(col, 200);
+    }
+  }, [props.primary, props.backup]);
 
   useEffect(() => {
     const cy = cyRef.current;
@@ -359,13 +402,13 @@ export function GraphView(props: {
   }, [props.primary]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full bg-[#080C14]">
       {!props.topology ? (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-[#0A0F1C] p-8 text-center">
           <div className="text-lg font-semibold text-slate-100">No topology loaded</div>
           <p className="max-w-md text-sm text-slate-400">
-            Drag <span className="text-slate-200">nes.csv</span> and <span className="text-slate-200">links.csv</span>{" "}
-            here, or use the file picker in Constraints to browse.
+            Drag <span className="text-slate-200">nes.csv</span> and <span className="text-slate-200">links.csv</span> here, or
+            use <span className="text-slate-200">Import Data</span> in the floating panel.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {props.onBrowseFiles ? (
@@ -386,7 +429,7 @@ export function GraphView(props: {
           <div className="text-sm text-slate-200">Working…</div>
         </div>
       ) : null}
-      <div ref={containerRef} className="absolute inset-0" />
+      <div ref={containerRef} className="absolute inset-0 bg-[#080C14]" />
       {tooltip ? (
         <div
           className="cy-tooltip fixed"
@@ -424,4 +467,4 @@ export function GraphView(props: {
       ) : null}
     </div>
   );
-}
+});

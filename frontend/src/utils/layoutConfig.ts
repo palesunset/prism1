@@ -138,7 +138,7 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.primary",
     style: {
       width: 5,
-      "line-color": "#06b6d4",
+      "line-color": "#22d3ee",
       "target-arrow-shape": "none",
       "source-arrow-shape": "none",
       opacity: 1,
@@ -153,21 +153,21 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.primaryF",
     style: {
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#06b6d4",
+      "target-arrow-color": "#22d3ee",
     },
   },
   {
     selector: "edge.primaryR",
     style: {
       "source-arrow-shape": "triangle",
-      "source-arrow-color": "#06b6d4",
+      "source-arrow-color": "#22d3ee",
     },
   },
   {
     selector: "edge.backup",
     style: {
       width: 4,
-      "line-color": "#f97316",
+      "line-color": "#fb923c",
       "target-arrow-shape": "none",
       "source-arrow-shape": "none",
       opacity: 1,
@@ -181,14 +181,14 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.backupF",
     style: {
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#f97316",
+      "target-arrow-color": "#fb923c",
     },
   },
   {
     selector: "edge.backupR",
     style: {
       "source-arrow-shape": "triangle",
-      "source-arrow-color": "#f97316",
+      "source-arrow-color": "#fb923c",
     },
   },
   {
@@ -249,23 +249,28 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.path",
     style: {
-      "border-color": "#06b6d4",
+      "border-color": "#22d3ee",
       "border-width": 4,
-      "shadow-color": "#06b6d4",
-      "shadow-blur": 14,
-      "shadow-opacity": 0.65,
       opacity: 1,
     },
   },
   {
     selector: "node.pathBackup",
     style: {
-      "border-color": "#f97316",
+      "border-color": "#fb923c",
       "border-width": 4,
-      "shadow-color": "#f97316",
-      "shadow-blur": 14,
-      "shadow-opacity": 0.65,
       opacity: 1,
+    },
+  },
+  /* Heatmap on: larger NEs + readable labels (class toggled in GraphView) */
+  {
+    selector: "node.ne.hmFocus",
+    style: {
+      width: 32,
+      height: 32,
+      "font-size": 12,
+      "text-outline-width": 2,
+      "text-outline-color": "#020617",
     },
   },
 ];

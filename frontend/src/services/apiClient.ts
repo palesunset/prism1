@@ -74,7 +74,51 @@ export async function openProjectTopology(payload: {
   return res.data;
 }
 
-export async function exportClipboard(payload: {
+/** Optional Nokia RSVP-TE naming (X=path match/prefix, Y=primary LSP, Z=backup LSP). Omitted/empty: server default. */
+export type NokiaRsvpExportNames = {
+  nokia_path_name_prefix?: string | null;
+  nokia_lsp_name_y?: string | null;
+  nokia_lsp_name_z?: string | null;
+  nokia_path_name_prefix_forward?: string | null;
+  nokia_lsp_name_y_forward?: string | null;
+  nokia_lsp_name_z_forward?: string | null;
+  nokia_path_name_prefix_reverse?: string | null;
+  nokia_lsp_name_y_reverse?: string | null;
+  nokia_lsp_name_z_reverse?: string | null;
+};
+
+export function nokiaRsvpNamesFromInput(x: string, y: string, z: string): NokiaRsvpExportNames {
+  // Legacy: one global set of names (kept for backward compatibility).
+  const o: NokiaRsvpExportNames = {};
+  if (x.trim()) o.nokia_path_name_prefix = x.trim();
+  if (y.trim()) o.nokia_lsp_name_y = y.trim();
+  if (z.trim()) o.nokia_lsp_name_z = z.trim();
+  return o;
+}
+
+export function nokiaRsvpNamesForDirection(
+  direction: "forward" | "reverse",
+  x: string,
+  y: string,
+  z: string,
+): NokiaRsvpExportNames {
+  const o: NokiaRsvpExportNames = {};
+  const xt = x.trim();
+  const yt = y.trim();
+  const zt = z.trim();
+  if (direction === "forward") {
+    if (xt) o.nokia_path_name_prefix_forward = xt;
+    if (yt) o.nokia_lsp_name_y_forward = yt;
+    if (zt) o.nokia_lsp_name_z_forward = zt;
+    return o;
+  }
+  if (xt) o.nokia_path_name_prefix_reverse = xt;
+  if (yt) o.nokia_lsp_name_y_reverse = yt;
+  if (zt) o.nokia_lsp_name_z_reverse = zt;
+  return o;
+}
+
+export type ExportMonolithicPayload = {
   lsp_name: string;
   mode: Mode;
   flex_algo_id?: number | null;
@@ -82,7 +126,9 @@ export async function exportClipboard(payload: {
   backup: PathResult | null;
   reservations: LspReservation[];
   nokia_cli_style: NokiaCliStyle;
-}): Promise<string> {
+} & NokiaRsvpExportNames;
+
+export async function exportClipboard(payload: ExportMonolithicPayload): Promise<string> {
   const res = await client.post<string>("/export/clipboard", payload, {
     responseType: "text",
     transformResponse: (r) => r,
@@ -90,16 +136,19 @@ export async function exportClipboard(payload: {
   return typeof res.data === "string" ? res.data : String(res.data);
 }
 
-export async function exportMonolithic(payload: {
-  lsp_name: string;
-  mode: Mode;
-  flex_algo_id?: number | null;
-  primary: PathResult;
-  backup: PathResult | null;
-  reservations: LspReservation[];
-  nokia_cli_style: NokiaCliStyle;
-}): Promise<string> {
+export async function exportMonolithic(payload: ExportMonolithicPayload): Promise<string> {
   const res = await client.post<string>("/export/monolithic", payload, {
+    responseType: "text",
+    transformResponse: (r) => r,
+  });
+  return typeof res.data === "string" ? res.data : String(res.data);
+}
+
+export async function exportMonolithicSection(
+  section: "forward" | "reverse",
+  payload: ExportMonolithicPayload,
+): Promise<string> {
+  const res = await client.post<string>(`/export/monolithic/section?section=${section}`, payload, {
     responseType: "text",
     transformResponse: (r) => r,
   });

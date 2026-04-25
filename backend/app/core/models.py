@@ -134,7 +134,7 @@ class ComputeRequest(BaseModel):
         description="Optional Flex-Algo identifier (RFC 9350 user-defined range 128-255).",
     )
     required_bw_mbps: int | None = None
-    max_hops: int = Field(default=32, ge=1, le=256)
+    max_hops: int = Field(default=50, ge=1, le=256)
     mode: Mode
     enforce_srlg_diversity: bool = Field(
         default=True,
@@ -262,6 +262,68 @@ class ExportRequest(BaseModel):
         default=NokiaCliStyle.classic,
         description="Nokia-only: Classic CLI vs MD-CLI template family.",
     )
+    nokia_path_name_prefix: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE: path/match name prefix (X) for X-SP:01, X-SP:02. Omitted/empty: source NE id.",
+    )
+    nokia_lsp_name_y: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE: first LSP name (Y). Omitted/empty: {source}-SP:01.",
+    )
+    nokia_lsp_name_z: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE: second LSP name (Z) when a backup path exists. Omitted/empty: {source}-SP:02.",
+    )
+    nokia_path_name_prefix_forward: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward tab): path/match name prefix (X). Omitted/empty: falls back to nokia_path_name_prefix, then source NE id.",
+    )
+    nokia_lsp_name_y_forward: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward tab): first LSP name (Y). Omitted/empty: falls back to nokia_lsp_name_y, then {source}-SP:01.",
+    )
+    nokia_lsp_name_z_forward: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward tab): second LSP name (Z). Omitted/empty: falls back to nokia_lsp_name_z, then {source}-SP:02.",
+    )
+    nokia_path_name_prefix_reverse: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse tab): path/match name prefix (X). Omitted/empty: falls back to nokia_path_name_prefix, then source NE id.",
+    )
+    nokia_lsp_name_y_reverse: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse tab): first LSP name (Y). Omitted/empty: falls back to nokia_lsp_name_y, then {source}-SP:01.",
+    )
+    nokia_lsp_name_z_reverse: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse tab): second LSP name (Z). Omitted/empty: falls back to nokia_lsp_name_z, then {source}-SP:02.",
+    )
+
+    @field_validator(
+        "nokia_path_name_prefix",
+        "nokia_lsp_name_y",
+        "nokia_lsp_name_z",
+        "nokia_path_name_prefix_forward",
+        "nokia_lsp_name_y_forward",
+        "nokia_lsp_name_z_forward",
+        "nokia_path_name_prefix_reverse",
+        "nokia_lsp_name_y_reverse",
+        "nokia_lsp_name_z_reverse",
+        mode="before",
+    )
+    @classmethod
+    def _strip_nokia_rsvp_labels(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        if not isinstance(v, str):
+            return v
+        s = v.strip()
+        if not s:
+            return None
+        if any(ch in s for ch in ("<", ">", "{", "}", "`")):
+            msg = "Nokia label contains disallowed characters"
+            raise ValueError(msg)
+        return s
 
 
 class ProjectNE(BaseModel):

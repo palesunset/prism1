@@ -1,1 +1,1 @@
-"""LSP Simulator backend application package."""
+"""PRISM backend application package."""

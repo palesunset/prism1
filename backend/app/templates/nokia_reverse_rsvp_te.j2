@@ -1,11 +1,15 @@
-{# Nokia SR OS — reverse (egress) RSVP-TE — legacy naming uses source_ne_id for path/LSP names #}
-admin display-config | match {{ source_ne_id }} context all
-show router mpls path {{ source_ne_id }}-SP:01 lsp-binding
-show router mpls path {{ source_ne_id }}-SP:02 lsp-binding
-show router mpls lsp {{ source_ne_id }}-SP:01
-show router mpls lsp {{ source_ne_id }}-SP:02
+{# Nokia SR OS — reverse (egress) RSVP-TE — same X / Y / Z as forward #}
+admin display-config | match {{ nokia_path_name_prefix }} context all
+show router mpls path {{ nokia_path_name_prefix }}-SP:01 lsp-binding
+{% if reverse_backup_hops %}
+show router mpls path {{ nokia_path_name_prefix }}-SP:02 lsp-binding
+{% endif %}
+show router mpls lsp {{ nokia_lsp_name_y }}
+{% if reverse_backup_hops %}
+show router mpls lsp {{ nokia_lsp_name_z }}
+{% endif %}
 
-/configure router mpls path {{ source_ne_id }}-SP:01
+/configure router mpls path {{ nokia_path_name_prefix }}-SP:01
 {% for hop in reverse_primary_hops %}
 hop {{ loop.index }} {{ hop.ip }} strict
 {% endfor %}
@@ -13,7 +17,7 @@ no shutdown
 exit
 
 {% if reverse_backup_hops %}
-/configure router mpls path {{ source_ne_id }}-SP:02
+/configure router mpls path {{ nokia_path_name_prefix }}-SP:02
 {% for hop in reverse_backup_hops %}
 hop {{ loop.index }} {{ hop.ip }} strict
 {% endfor %}
@@ -21,7 +25,7 @@ no shutdown
 exit
 
 {% endif %}
-/configure router mpls lsp {{ source_ne_id }}-SP:01
+/configure router mpls lsp {{ nokia_lsp_name_y }}
 to {{ source_ip }}
 path-computation-method local-cspf
 fast-reroute facility
@@ -30,16 +34,16 @@ egress-statistics
 collect-stats
 no shutdown
 exit
-primary {{ source_ne_id }}-SP:01 no shutdown
+primary {{ nokia_path_name_prefix }}-SP:01 no shutdown
 {% if reverse_backup_hops %}
-secondary {{ source_ne_id }}-SP:02 no shutdown
-secondary {{ source_ne_id }}-SP:02 standby
+secondary {{ nokia_path_name_prefix }}-SP:02 no shutdown
+secondary {{ nokia_path_name_prefix }}-SP:02 standby
 {% endif %}
 no shutdown
 exit
 
 {% if reverse_backup_hops %}
-/configure router mpls lsp {{ source_ne_id }}-SP:02
+/configure router mpls lsp {{ nokia_lsp_name_z }}
 to {{ source_ip }}
 cspf
 fast-reroute facility
@@ -48,18 +52,18 @@ egress-statistics
 collect-stats
 no shutdown
 exit
-primary {{ source_ne_id }}-SP:02 no shutdown
-secondary {{ source_ne_id }}-SP:01 no shutdown
-secondary {{ source_ne_id }}-SP:01 standby
+primary {{ nokia_path_name_prefix }}-SP:02 no shutdown
+secondary {{ nokia_path_name_prefix }}-SP:01 no shutdown
+secondary {{ nokia_path_name_prefix }}-SP:01 standby
 no shutdown
 exit
 
 {% endif %}
 /configure service sdp {{ reverse_sdp_number }} mpls create
 far-end {{ source_ip }}
-lsp {{ source_ne_id }}-SP:01
+lsp {{ nokia_lsp_name_y }}
 {% if reverse_backup_hops %}
-lsp {{ source_ne_id }}-SP:02
+lsp {{ nokia_lsp_name_z }}
 {% endif %}
 no shutdown
 exit

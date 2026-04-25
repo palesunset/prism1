@@ -3,6 +3,23 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("react")) return "react";
+          if (id.includes("cytoscape")) return "cytoscape";
+          if (id.includes("axios")) return "axios";
+          if (id.includes("zustand")) return "zustand";
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("react-hot-toast")) return "toast";
+          if (id.includes("diff")) return "diff";
+          return "vendor";
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
