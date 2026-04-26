@@ -70,6 +70,11 @@ class LinkRecord(BaseModel):
     latency_ms: float
     bandwidth_mbps: int
     reservable_bw_mbps: int
+    current_utilization_mbps: float | None = Field(
+        default=None,
+        ge=0,
+        description="Optional measured traffic on the link in Mbps (for Traffic Simulation mode).",
+    )
     srlg: list[str] = Field(default_factory=list, description="Optional SRLG identifiers for diversity planning.")
     interface_src: str | None = None
     interface_dst: str | None = None

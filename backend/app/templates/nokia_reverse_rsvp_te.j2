@@ -44,6 +44,7 @@ exit
 {% if reverse_backup_hops %}
 /configure router mpls lsp {{ nokia_lsp_name_z }}
 to {{ source_ip }}
+path-computation-method local-cspf
 cspf
 fast-reroute facility
 exit

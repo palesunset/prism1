@@ -77,3 +77,94 @@ export interface LspReservation {
   primary_edges: [string, string, number][];
   required_bw_mbps: number;
 }
+
+export type WorkspaceMode = "lsp" | "traffic";
+
+export type FailedTrafficElement = { type: "link" | "node"; id: string };
+
+export type TrafficFlow = {
+  flow_id?: string;
+  failed_link_id: string;
+  source?: string;
+  target?: string;
+  volume_mbps: number;
+  path_nodes: string[];
+  path_edges: string[];
+  path_latency_ms?: number;
+  manual_override?: boolean;
+  manual_volume_mbps?: number;
+  manual_new_path_nodes?: string[];
+  manual_new_path_edges?: string[];
+  manual_extra_latency_ms?: number;
+};
+
+export type CongestedLink = {
+  edge_id: string;
+  before_util_pct: number;
+  after_util_pct: number;
+  delta_mbps: number;
+  extra_bandwidth_mbps: number;
+};
+
+export type DisconnectedFlow = {
+  failed_link_id: string;
+  source: string;
+  target: string;
+  reason: string;
+};
+
+export type SimulationResult = {
+  flows: TrafficFlow[];
+  injected_flows?: InjectedFlowResult[];
+  link_utilization_before_pct: Record<string, number>;
+  link_utilization_after_pct: Record<string, number>;
+  congested_links: CongestedLink[];
+  disconnected_flows: DisconnectedFlow[];
+};
+
+export type InjectedFlow = {
+  id: string;
+  source_ne_id: string;
+  dest_ne_id: string;
+  volume_mbps: number;
+};
+
+export type InjectedFlowResult = {
+  id: string;
+  flow_id?: string;
+  source_ne_id: string;
+  dest_ne_id: string;
+  volume_mbps: number;
+  path_nodes?: string[];
+  path_edges?: string[];
+  path_latency_ms?: number;
+  disconnected: boolean;
+  reason?: string;
+};
+
+export type ManualRedistribution = {
+  flowId: string;
+  originalPath: string[];
+  newPath: string[];
+  volumeMbps: number;
+};
+
+export type ReliefRecommendation = {
+  flow_id: string;
+  volume_mbps: number;
+  current_path: string[];
+  new_path: string[];
+  extra_latency_ms: number;
+  new_utilization: Record<string, number>;
+  reason: string;
+};
+
+export type ReliefSuggestion = {
+  congested_link_id: string;
+  original_utilization_pct: number;
+  recommendations: ReliefRecommendation[];
+};
+
+export type TrafficReliefResponse = {
+  suggestions: ReliefSuggestion[];
+};

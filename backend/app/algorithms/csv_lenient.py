@@ -271,6 +271,31 @@ def parse_links_csv_lenient(
                 )
             )
             continue
+        util_raw = row.get(fields.get("current_utilization_mbps", ""), "") if "current_utilization_mbps" in fields else ""
+        current_util_mbps: float | None = None
+        if str(util_raw).strip():
+            try:
+                current_util_mbps = float(str(util_raw).strip())
+                if current_util_mbps < 0:
+                    issues.append(
+                        CsvRowIssue(
+                            file="links.csv",
+                            row=row_index,
+                            field="current_utilization_mbps",
+                            message="'current_utilization_mbps' must be >= 0",
+                        )
+                    )
+                    current_util_mbps = None
+            except ValueError:
+                issues.append(
+                    CsvRowIssue(
+                        file="links.csv",
+                        row=row_index,
+                        field="current_utilization_mbps",
+                        message="'current_utilization_mbps' must be a number",
+                    )
+                )
+                current_util_mbps = None
         res_raw = row.get(fields.get("reservable_bw_mbps", ""), "") if "reservable_bw_mbps" in fields else ""
         try:
             res_bw = int(float(str(res_raw).strip())) if str(res_raw).strip() else bw
@@ -336,6 +361,7 @@ def parse_links_csv_lenient(
             "latency_24h": latency_24h,
             "bandwidth_mbps": bw,
             "reservable_bw_mbps": res_bw,
+            "current_utilization_mbps": current_util_mbps,
             "srlg": srlg,
             "interface_src": iface_src,
             "interface_dst": iface_dst,
@@ -352,6 +378,7 @@ def parse_links_csv_lenient(
                 latency_ms=lat,
                 bandwidth_mbps=bw,
                 reservable_bw_mbps=res_bw,
+                current_utilization_mbps=current_util_mbps,
                 srlg=srlg,
                 interface_src=iface_src,
                 interface_dst=iface_dst,

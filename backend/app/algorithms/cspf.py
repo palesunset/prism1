@@ -14,7 +14,7 @@ from app.algorithms.graph_builder import (
     expanded_path_to_ne_path,
 )
 from app.algorithms.role_validator import validate_path_roles
-from app.algorithms.utils import dijkstra_shortest_path, yen_k_shortest_paths_simple
+from app.algorithms.utils import yen_k_shortest_paths_simple
 from app.core.models import HopDetail, NERecord, PathResult, PrunedEdge, RejectedPath
 
 log = logging.getLogger(__name__)

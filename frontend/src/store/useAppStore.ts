@@ -1,6 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { ComputeResponse, ImportSummary, Mode, NokiaCliStyle, PathResult, LspReservation } from "../types";
+import type {
+  ComputeResponse,
+  FailedTrafficElement,
+  InjectedFlow,
+  ImportSummary,
+  ManualRedistribution,
+  Mode,
+  NokiaCliStyle,
+  PathResult,
+  ReliefSuggestion,
+  LspReservation,
+  SimulationResult,
+  WorkspaceMode,
+} from "../types";
 
 export interface SavedLsp {
   name: string;
@@ -34,6 +47,8 @@ const STARTER_FLEX_ALGOS: Record<number, FlexAlgoDefinition> = {
 };
 
 interface AppState {
+  /** Workspace mode: LSP Design vs Traffic Simulation (separate from tunnel signaling mode). */
+  workspaceMode: WorkspaceMode;
   neIds: string[];
   source: string;
   destination: string;
@@ -78,6 +93,54 @@ interface AppState {
   activePanelTab: "constraints" | "lspDetails";
   configOverlayOpen: boolean;
   lsps: Record<string, SavedLsp>;
+
+  // ---- Traffic Simulation slice (standalone what-if mode) ----
+  trafficActiveTab: "failures" | "scenario" | "advisor";
+
+  // Failure Simulation (tab: failures)
+  trafficFailedElements: FailedTrafficElement[];
+  trafficSelectionMode: "none" | "addFailure";
+  trafficFailureResult: SimulationResult | null;
+
+  // Scenario Builder (tab: scenario)
+  scenarioFailedElements: FailedTrafficElement[];
+  scenarioSelectionMode: "none" | "addFailure";
+  scenarioResult: SimulationResult | null;
+  trafficOverlayVisible: boolean;
+  trafficHeatmapEnabled: boolean;
+  manualRedistributions: ManualRedistribution[];
+  reliefSuggestions: ReliefSuggestion[];
+  injectedFlows: InjectedFlow[];
+  trafficEnforceRoles: boolean;
+  scenarioPathOptions: Record<string, Array<{ path_nodes: string[]; path_edges: string[]; total_latency_ms: number }>>;
+  scenarioPathPreview: { flowId: string; idx: number } | null;
+
+  setWorkspaceMode: (m: WorkspaceMode) => void;
+  setTrafficActiveTab: (t: "failures" | "scenario" | "advisor") => void;
+
+  addTrafficFailure: (e: FailedTrafficElement) => void;
+  removeTrafficFailure: (e: FailedTrafficElement) => void;
+  clearTrafficFailures: () => void;
+  setTrafficSelectionMode: (m: "none" | "addFailure") => void;
+  setTrafficFailureResult: (r: SimulationResult | null) => void;
+
+  addScenarioFailure: (e: FailedTrafficElement) => void;
+  removeScenarioFailure: (e: FailedTrafficElement) => void;
+  clearScenarioFailures: () => void;
+  setScenarioSelectionMode: (m: "none" | "addFailure") => void;
+  setScenarioResult: (r: SimulationResult | null) => void;
+  setTrafficOverlayVisible: (v: boolean) => void;
+  setTrafficHeatmapEnabled: (v: boolean) => void;
+  toggleTrafficHeatmap: () => void;
+  setManualRedistributions: (r: ManualRedistribution[]) => void;
+  setReliefSuggestions: (s: ReliefSuggestion[]) => void;
+  setInjectedFlows: (f: InjectedFlow[]) => void;
+  setTrafficEnforceRoles: (v: boolean) => void;
+  setScenarioPathOptions: (
+    flowId: string,
+    paths: Array<{ path_nodes: string[]; path_edges: string[]; total_latency_ms: number }>,
+  ) => void;
+  setScenarioPathPreview: (p: { flowId: string; idx: number } | null) => void;
   setNeIds: (ids: string[]) => void;
   setSource: (v: string) => void;
   setDestination: (v: string) => void;
@@ -123,6 +186,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
+      workspaceMode: "lsp",
       neIds: [],
       source: "",
       destination: "",
@@ -159,6 +223,71 @@ export const useAppStore = create<AppState>()(
       timeHour: 0,
       monolithicConfig: null,
       lsps: {},
+
+      trafficFailedElements: [],
+      trafficSelectionMode: "none",
+      trafficFailureResult: null,
+      trafficActiveTab: "failures",
+      scenarioFailedElements: [],
+      scenarioSelectionMode: "none",
+      scenarioResult: null,
+      trafficOverlayVisible: true,
+      trafficHeatmapEnabled: true,
+      manualRedistributions: [],
+      reliefSuggestions: [],
+      injectedFlows: [],
+      trafficEnforceRoles: true,
+      scenarioPathOptions: {},
+      scenarioPathPreview: null,
+
+      setWorkspaceMode: (m) =>
+        set((s) => ({
+          workspaceMode: m,
+          trafficSelectionMode: "none",
+          scenarioSelectionMode: "none",
+          // Close config overlay when leaving LSP Design.
+          configOverlayOpen: m === "traffic" ? false : s.configOverlayOpen,
+        })),
+      setTrafficActiveTab: (t) => set({ trafficActiveTab: t }),
+      addTrafficFailure: (e) =>
+        set((s) => ({
+          trafficFailedElements: s.trafficFailedElements.some((x) => x.type === e.type && x.id === e.id)
+            ? s.trafficFailedElements
+            : [...s.trafficFailedElements, e],
+        })),
+      removeTrafficFailure: (e) =>
+        set((s) => ({
+          trafficFailedElements: s.trafficFailedElements.filter((x) => !(x.type === e.type && x.id === e.id)),
+        })),
+      clearTrafficFailures: () => set({ trafficFailedElements: [], trafficFailureResult: null, trafficSelectionMode: "none" }),
+      setTrafficSelectionMode: (m) => set({ trafficSelectionMode: m }),
+      setTrafficFailureResult: (r) => set({ trafficFailureResult: r, trafficOverlayVisible: true }),
+
+      addScenarioFailure: (e) =>
+        set((s) => ({
+          scenarioFailedElements: s.scenarioFailedElements.some((x) => x.type === e.type && x.id === e.id)
+            ? s.scenarioFailedElements
+            : [...s.scenarioFailedElements, e],
+        })),
+      removeScenarioFailure: (e) =>
+        set((s) => ({
+          scenarioFailedElements: s.scenarioFailedElements.filter((x) => !(x.type === e.type && x.id === e.id)),
+        })),
+      clearScenarioFailures: () => set({ scenarioFailedElements: [], scenarioResult: null, scenarioSelectionMode: "none" }),
+      setScenarioSelectionMode: (m) => set({ scenarioSelectionMode: m }),
+      setScenarioResult: (r) => set({ scenarioResult: r, trafficOverlayVisible: true }),
+      setTrafficOverlayVisible: (v) => set({ trafficOverlayVisible: v }),
+      setTrafficHeatmapEnabled: (v) => set({ trafficHeatmapEnabled: v }),
+      toggleTrafficHeatmap: () => set((s) => ({ trafficHeatmapEnabled: !s.trafficHeatmapEnabled })),
+      setManualRedistributions: (r) => set({ manualRedistributions: r }),
+      setReliefSuggestions: (s) => set({ reliefSuggestions: s }),
+      setInjectedFlows: (f) => set({ injectedFlows: f }),
+      setTrafficEnforceRoles: (v) => set({ trafficEnforceRoles: v }),
+      setScenarioPathOptions: (flowId, paths) =>
+        set((s) => ({
+          scenarioPathOptions: { ...s.scenarioPathOptions, [flowId]: paths },
+        })),
+      setScenarioPathPreview: (p) => set({ scenarioPathPreview: p }),
       setNeIds: (ids) => set({ neIds: ids }),
       setSource: (v) => set({ source: v }),
       setDestination: (v) => set({ destination: v }),
@@ -237,7 +366,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "prism-ui",
-      version: 3,
+      version: 4,
       /** Drop stale monolithic text from v1: it was saved without `lastCompute`, so it could be outdated. */
       migrate: (persisted, fromVersion) => {
         if (fromVersion < 2 && persisted && typeof persisted === "object") {
@@ -259,9 +388,16 @@ export const useAppStore = create<AppState>()(
           delete p.nokiaRsvpLabelY;
           delete p.nokiaRsvpLabelZ;
         }
+        if (fromVersion < 4 && persisted && typeof persisted === "object") {
+          const p = persisted as Record<string, unknown>;
+          if (p.workspaceMode !== "lsp" && p.workspaceMode !== "traffic") {
+            p.workspaceMode = "lsp";
+          }
+        }
         return persisted as object;
       },
       partialize: (s) => ({
+        workspaceMode: s.workspaceMode,
         source: s.source,
         destination: s.destination,
         requiredBwMbps: s.requiredBwMbps,

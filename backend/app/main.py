@@ -17,6 +17,9 @@ from app.api.export_cfg import router as export_router
 from app.api.import_csv import router as import_router
 from app.api.project import router as project_router
 from app.api.topology import router as topology_router
+from app.api.traffic_relief import router as traffic_relief_router
+from app.api.traffic_paths import router as traffic_paths_router
+from app.api.traffic_simulate import router as traffic_sim_router
 from app.core.config import get_settings
 from app.core.exceptions import LspSimulatorError
 from app.core.models import ErrorResponse
@@ -79,6 +82,9 @@ def create_app() -> FastAPI:
     app.include_router(compute_router)
     app.include_router(export_router)
     app.include_router(topology_router)
+    app.include_router(traffic_sim_router)
+    app.include_router(traffic_relief_router)
+    app.include_router(traffic_paths_router)
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:

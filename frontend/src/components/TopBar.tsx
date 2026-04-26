@@ -40,6 +40,8 @@ function NeSearchInput(props: {
 
 export function TopBar(props: { onCompute: () => void; busy: boolean }) {
   const neIds = useAppStore((s) => s.neIds);
+  const workspaceMode = useAppStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useAppStore((s) => s.setWorkspaceMode);
   const source = useAppStore((s) => s.source);
   const destination = useAppStore((s) => s.destination);
   const setSource = useAppStore((s) => s.setSource);
@@ -62,49 +64,76 @@ export function TopBar(props: { onCompute: () => void; busy: boolean }) {
       </div>
 
       <div className="mx-6 flex min-w-0 flex-1 items-center gap-3">
-        <span className="hidden text-xs text-slate-500 sm:inline">Source</span>
-        <NeSearchInput
-          id="ne-search-source"
-          value={source}
-          onChange={setSource}
-          placeholder="Source NE"
-          neIds={neIds}
-        />
-        <span className="hidden text-xs text-slate-500 sm:inline">Dest</span>
-        <NeSearchInput
-          id="ne-search-dest"
-          value={destination}
-          onChange={setDestination}
-          placeholder="Destination NE"
-          neIds={neIds}
-        />
+        {workspaceMode === "lsp" ? (
+          <>
+            <span className="hidden text-xs text-slate-500 sm:inline">Source</span>
+            <NeSearchInput
+              id="ne-search-source"
+              value={source}
+              onChange={setSource}
+              placeholder="Source NE"
+              neIds={neIds}
+            />
+            <span className="hidden text-xs text-slate-500 sm:inline">Dest</span>
+            <NeSearchInput
+              id="ne-search-dest"
+              value={destination}
+              onChange={setDestination}
+              placeholder="Destination NE"
+              neIds={neIds}
+            />
+          </>
+        ) : (
+          <div className="min-w-0" />
+        )}
       </div>
 
       <div className="flex min-w-fit items-center gap-3">
         <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
-          {MODES.map((m) => (
+          {[
+            { id: "lsp" as const, label: "LSP Design" },
+            { id: "traffic" as const, label: "Traffic Simulation" },
+          ].map((m) => (
             <button
               key={m.id}
               type="button"
-              title={m.label}
-              onClick={() => setMode(m.id)}
+              onClick={() => setWorkspaceMode(m.id)}
               className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
-                mode === m.id ? "bg-cyan-600 text-white" : "text-slate-300 hover:text-white"
+                workspaceMode === m.id ? "bg-cyan-600 text-white" : "text-slate-300 hover:text-white"
               }`}
             >
-              <span className="sm:hidden">{m.short}</span>
-              <span className="hidden sm:inline">{m.label}</span>
+              {m.label}
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          disabled={props.busy || !canCompute}
-          onClick={props.onCompute}
-          className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:shadow-cyan-500/25 disabled:opacity-50"
-        >
-          {props.busy ? "Computing…" : "Compute LSP"}
-        </button>
+        {workspaceMode === "lsp" ? (
+          <>
+            <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  title={m.label}
+                  onClick={() => setMode(m.id)}
+                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                    mode === m.id ? "bg-cyan-600 text-white" : "text-slate-300 hover:text-white"
+                  }`}
+                >
+                  <span className="sm:hidden">{m.short}</span>
+                  <span className="hidden sm:inline">{m.label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={props.busy || !canCompute}
+              onClick={props.onCompute}
+              className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:shadow-cyan-500/25 disabled:opacity-50"
+            >
+              {props.busy ? "Computing…" : "Compute LSP"}
+            </button>
+          </>
+        ) : null}
       </div>
     </header>
   );

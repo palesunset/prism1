@@ -1,4 +1,5 @@
 {# reverse on egress: explicit-path names follow the tunnel destination ({{ source_label }}) for consistency #}
+#
 system-view
 #
 explicit-path {{ source_label }}-SP:01
@@ -35,3 +36,12 @@ commit
 #
 return
 save
+
+NOTE: Check the status of the new path. Expected status should be UP.
+display mpls te tunnel-interface Tunnel0/0/{{ source_tunnel_id }} | i State
+display explicit-path {{ source_label }}-SP:01
+display explicit-path {{ source_label }}-SP:02
+ping lsp te Tunnel0/0/{{ source_tunnel_id }}
+tracert lsp te Tunnel0/0/{{ source_tunnel_id }}
+ping lsp te Tunnel 0/0/{{ source_tunnel_id }} hot-standby
+tracert lsp te Tunnel 0/0/{{ source_tunnel_id }} hot-standby

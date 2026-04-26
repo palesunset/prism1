@@ -1,7 +1,7 @@
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { PathResult, TopologyPayload } from "../types";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { FailedTrafficElement, PathResult, SimulationResult, TopologyPayload } from "../types";
 import { baseStylesheet } from "../utils/layoutConfig";
 import { useAppStore } from "../store/useAppStore";
 import { loadLayoutPositions, saveLayoutPositions } from "../utils/layoutCache";
@@ -24,6 +24,35 @@ function normalizeEdgeId(id: string): string {
   const k = Number(parts[2]);
   if (!Number.isFinite(k)) return id;
   return normalizeEdgeParts(parts[0], parts[1], k);
+}
+
+function fmtMbpsDelta(mbps: number): string {
+  if (!Number.isFinite(mbps)) return "";
+  if (mbps >= 1000) return `+${(mbps / 1000).toFixed(2)} Gbps`;
+  return `+${mbps.toFixed(0)} Mbps`;
+}
+
+function fmtPct(p: number): string {
+  if (!Number.isFinite(p)) return "";
+  return `${p.toFixed(0)}%`;
+}
+
+function tryParseEdgeId(id: string): { u: string; v: string; k: number } | null {
+  const parts = id.split("|");
+  if (parts.length !== 3) return null;
+  const u = parts[0] ?? "";
+  const v = parts[1] ?? "";
+  const k = Number(parts[2]);
+  if (!u || !v || !Number.isFinite(k)) return null;
+  return { u, v, k };
+}
+
+function utilColor(pct: number): string {
+  if (!Number.isFinite(pct)) return "#334155";
+  if (pct >= 80) return "#ef4444";
+  if (pct >= 50) return "#f97316";
+  if (pct >= 20) return "#eab308";
+  return "#22c55e";
 }
 
 function buildElements(topology: TopologyPayload): ElementDefinition[] {
@@ -100,6 +129,8 @@ export const GraphView = forwardRef<
     null,
   );
   const [tooltip, setTooltip] = useState<{ x: number; y: number; html: string } | null>(null);
+  const workspaceMode = useAppStore((s) => s.workspaceMode);
+  const trafficActiveTab = useAppStore((s) => s.trafficActiveTab);
   const failedNeIds = useAppStore((s) => s.failedNeIds);
   const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
   const heatmapEnabled = useAppStore((s) => s.heatmapEnabled);
@@ -107,6 +138,34 @@ export const GraphView = forwardRef<
   const failNe = useAppStore((s) => s.failNe);
   const failLink = useAppStore((s) => s.failLink);
   const mapLabelsEnabled = useAppStore((s) => s.mapLabelsEnabled);
+
+  const trafficSelectionMode = useAppStore((s) => s.trafficSelectionMode);
+  const trafficFailed = useAppStore((s) => s.trafficFailedElements);
+  const addTrafficFailure = useAppStore((s) => s.addTrafficFailure);
+  const trafficFailureResult = useAppStore((s) => s.trafficFailureResult);
+  const scenarioSelectionMode = useAppStore((s) => s.scenarioSelectionMode);
+  const scenarioFailed = useAppStore((s) => s.scenarioFailedElements);
+  const addScenarioFailure = useAppStore((s) => s.addScenarioFailure);
+  const scenarioResult = useAppStore((s) => s.scenarioResult);
+  const trafficHeatmapEnabled = useAppStore((s) => s.trafficHeatmapEnabled);
+  const scenarioPathOptions = useAppStore((s) => s.scenarioPathOptions);
+  const scenarioPathPreview = useAppStore((s) => s.scenarioPathPreview);
+
+  const activeTrafficFailed = useMemo(
+    () => (trafficActiveTab === "scenario" ? scenarioFailed : trafficFailed),
+    [trafficActiveTab, scenarioFailed, trafficFailed],
+  );
+  const activeTrafficSelectionMode = trafficActiveTab === "scenario" ? scenarioSelectionMode : trafficSelectionMode;
+  const activeTrafficResult: SimulationResult | null =
+    trafficActiveTab === "scenario" ? scenarioResult : trafficFailureResult;
+
+  const trafficFailedKeySet = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of activeTrafficFailed) {
+      s.add(`${f.type}:${f.id}`);
+    }
+    return s;
+  }, [activeTrafficFailed]);
 
   const applyZoomLabels = useCallback(
     (cy: Core) => {
@@ -197,6 +256,44 @@ export const GraphView = forwardRef<
         ].join("");
         setTooltip({ x: p.clientX + 12, y: p.clientY + 12, html });
       } else if (t.group() === "edges") {
+        // Scenario Builder: show before/after utilization on hover when available
+        if (useAppStore.getState().workspaceMode === "traffic") {
+          const activeTab = useAppStore.getState().trafficActiveTab;
+          const res =
+            activeTab === "scenario" ? useAppStore.getState().scenarioResult : useAppStore.getState().trafficFailureResult;
+          if (res) {
+            const id = String(t.id());
+            const b = res.link_utilization_before_pct?.[id];
+            const a = res.link_utilization_after_pct?.[id];
+            if (typeof b === "number" && typeof a === "number") {
+              const bw = Number(t.data("bandwidth_mbps") ?? 0);
+              const deltaMbps = bw > 0 ? ((a - b) / 100) * bw : 0;
+              const html = [
+                `<div><strong>Link impact</strong></div>`,
+                `<div>Before: ${b.toFixed(1)}%</div>`,
+                `<div>After: ${a.toFixed(1)}%</div>`,
+                bw > 0 ? `<div>Δ traffic: ${fmtMbpsDelta(Math.max(0, deltaMbps)).replace("+", "")}</div>` : "",
+              ].join("");
+              setTooltip({ x: p.clientX + 12, y: p.clientY + 12, html });
+              return;
+            }
+          }
+        }
+        if (t.hasClass("traffic-congested")) {
+          const before = Number(t.data("trafficBeforePct") ?? 0);
+          const after = Number(t.data("trafficAfterPct") ?? 0);
+          const delta = Number(t.data("trafficDeltaMbps") ?? 0);
+          const extra = Number(t.data("trafficExtraMbps") ?? 0);
+          const html = [
+            `<div><strong>Congested link</strong></div>`,
+            `<div>Before: ${before.toFixed(1)}%</div>`,
+            `<div>After: ${after.toFixed(1)}%</div>`,
+            `<div>Added: ${fmtMbpsDelta(delta).replace("+", "")}</div>`,
+            `<div>Suggested extra: ${fmtMbpsDelta(extra).replace("+", "")}</div>`,
+          ].join("");
+          setTooltip({ x: p.clientX + 12, y: p.clientY + 12, html });
+          return;
+        }
         const srlg = Array.isArray(t.data("srlg")) ? (t.data("srlg") as unknown[]).join(", ") : "";
         const html = [
           `<div><strong>Link</strong></div>`,
@@ -244,9 +341,75 @@ export const GraphView = forwardRef<
     applyZoomLabels(cy);
   }, [mapLabelsEnabled, heatmapEnabled, applyZoomLabels]);
 
+  // Traffic selection mode: click to add failures.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (workspaceMode !== "traffic") return;
+    if (activeTrafficSelectionMode !== "addFailure") return;
+    const onTap = (evt: cytoscape.EventObject) => {
+      const t = evt.target;
+      if (t.group() === "nodes" && t.hasClass("ne")) {
+        if (trafficActiveTab === "scenario") {
+          addScenarioFailure({ type: "node", id: t.id() });
+        } else {
+          addTrafficFailure({ type: "node", id: t.id() });
+        }
+      } else if (t.group() === "edges") {
+        if (trafficActiveTab === "scenario") {
+          addScenarioFailure({ type: "link", id: t.id() });
+        } else {
+          addTrafficFailure({ type: "link", id: t.id() });
+        }
+      }
+    };
+    cy.on("tap", "node.ne, edge", onTap);
+    return () => {
+      cy.off("tap", "node.ne, edge", onTap);
+    };
+  }, [workspaceMode, activeTrafficSelectionMode, trafficActiveTab, addTrafficFailure, addScenarioFailure]);
+
+  // Mode switch: clear inactive overlays without touching underlying data.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.batch(() => {
+      if (workspaceMode === "traffic") {
+        // Clear LSP path overlays.
+        cy.edges().removeClass("primary backup ecmpAlt primaryF primaryR backupF backupR dim");
+        cy.nodes(".ne").removeClass("path pathBackup dim");
+        cy.nodes(".site").removeClass("dim");
+      } else {
+        // Clear traffic overlays.
+        cy.remove("edge.traffic-flow");
+        cy.remove("edge.traffic-flow-original");
+        cy.remove("edge.traffic-flow-applied");
+        cy.remove("edge.injected-flow");
+        cy.edges().removeClass("traffic-failed traffic-congested");
+        cy.nodes(".ne").removeClass("traffic-failed traffic-dim");
+        cy.edges().removeClass("traffic-dim");
+        cy.edges().forEach((e) => {
+          // Drop any traffic heatmap styling we applied inline.
+          e.removeStyle("line-color");
+          e.removeStyle("opacity");
+          e.removeStyle("width");
+          e.removeData("trafficBeforePct");
+          e.removeData("trafficAfterPct");
+          e.removeData("trafficDeltaMbps");
+          e.removeData("trafficExtraMbps");
+          e.removeData("trafficAfterLabel");
+          e.removeData("trafficFailedLabel");
+        });
+      }
+    });
+  }, [workspaceMode]);
+
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) {
+      return;
+    }
+    if (workspaceMode !== "lsp") {
       return;
     }
     cy.batch(() => {
@@ -367,7 +530,239 @@ export const GraphView = forwardRef<
         cy.nodes(".ne").addClass("hmFocus");
       }
     });
-  }, [props.primary, props.backup, props.focusPaths, failedNeIds, failedLinkKeys, heatmapEnabled, reservations]);
+  }, [workspaceMode, props.primary, props.backup, props.focusPaths, failedNeIds, failedLinkKeys, heatmapEnabled, reservations]);
+
+  // Traffic overlays: failed elements, flow arrows, and post-failure utilization heatmap.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (workspaceMode !== "traffic") return;
+    cy.batch(() => {
+      // Clear previous overlays
+      cy.remove("edge.traffic-flow");
+      cy.remove("edge.traffic-flow-original");
+      cy.remove("edge.traffic-flow-applied");
+      cy.remove("edge.injected-flow");
+      cy.remove("edge.scenario-path-preview");
+      cy.edges().removeClass("traffic-failed traffic-congested");
+      cy.nodes(".ne").removeClass("traffic-failed");
+      cy.edges().removeClass("traffic-dim");
+      cy.nodes(".ne").removeClass("traffic-dim");
+      // Clear any previous traffic styles/labels (so toggles don't "lose" the map state)
+      cy.edges().forEach((e) => {
+        e.removeStyle("line-color");
+        e.removeStyle("opacity");
+        e.removeStyle("width");
+        e.removeData("trafficBeforePct");
+        e.removeData("trafficAfterPct");
+        e.removeData("trafficDeltaMbps");
+        e.removeData("trafficExtraMbps");
+        e.removeData("trafficAfterLabel");
+        e.removeData("trafficFailedLabel");
+      });
+
+      // Apply failed styling
+      for (const f of activeTrafficFailed) {
+        if (f.type === "node") {
+          const n = cy.getElementById(f.id);
+          if (n.nonempty()) n.addClass("traffic-failed");
+        } else {
+          const e = cy.getElementById(f.id);
+          if (e.nonempty()) {
+            e.addClass("traffic-failed");
+            e.data("trafficFailedLabel", "!");
+          }
+        }
+      }
+
+      if (!activeTrafficResult) {
+        return;
+      }
+
+      // Dim all not-affected elements so the user can focus on the reroute.
+      const affectedNodes = new Set<string>();
+      const affectedEdges = new Set<string>();
+      for (const f of trafficFailed) {
+        if (f.type === "node") {
+          affectedNodes.add(f.id);
+        } else {
+          affectedEdges.add(f.id);
+          const parsed = tryParseEdgeId(f.id);
+          if (parsed) {
+            affectedNodes.add(parsed.u);
+            affectedNodes.add(parsed.v);
+          }
+        }
+      }
+      for (const flow of activeTrafficResult.flows ?? []) {
+        for (const n of flow.path_nodes ?? []) affectedNodes.add(String(n));
+        for (const e of flow.path_edges ?? []) affectedEdges.add(String(e));
+        // Manual relief/apply: ensure the applied path also stays undimmed.
+        for (const n of flow.manual_new_path_nodes ?? []) affectedNodes.add(String(n));
+        for (const e of flow.manual_new_path_edges ?? []) affectedEdges.add(String(e));
+      }
+      for (const inj of activeTrafficResult.injected_flows ?? []) {
+        if (inj.disconnected) continue;
+        for (const n of inj.path_nodes ?? []) affectedNodes.add(String(n));
+        for (const e of inj.path_edges ?? []) affectedEdges.add(String(e));
+      }
+      // When a Scenario Builder preview path is selected, treat it as "affected" (do not dim).
+      if (scenarioPathPreview) {
+        const paths = scenarioPathOptions[scenarioPathPreview.flowId] ?? [];
+        const picked = paths[scenarioPathPreview.idx];
+        for (const n of picked?.path_nodes ?? []) affectedNodes.add(String(n));
+        for (const e of picked?.path_edges ?? []) affectedEdges.add(String(e));
+      }
+      for (const c of activeTrafficResult.congested_links ?? []) {
+        affectedEdges.add(String(c.edge_id));
+        const parsed = tryParseEdgeId(String(c.edge_id));
+        if (parsed) {
+          affectedNodes.add(parsed.u);
+          affectedNodes.add(parsed.v);
+        }
+      }
+      cy.nodes(".ne").forEach((n) => {
+        // Heatmap ON: keep nodes readable (no dim), only dim links.
+        if (trafficHeatmapEnabled) return;
+        if (!affectedNodes.has(n.id())) n.addClass("traffic-dim");
+      });
+      cy.edges().forEach((e) => {
+        if (!affectedEdges.has(e.id())) e.addClass("traffic-dim");
+      });
+
+      // Post-failure heatmap coloring (all links) — optional
+      if (trafficHeatmapEnabled) {
+        const after = activeTrafficResult.link_utilization_after_pct ?? {};
+        for (const [edgeId, pct] of Object.entries(after)) {
+          const e = cy.getElementById(edgeId);
+          if (e.nonempty()) {
+            const p = Number(pct);
+            e.style("line-color", utilColor(p));
+            e.style("opacity", 0.95);
+            // Heatmap on: keep links thinner to reduce clutter.
+            e.style("width", 2);
+          }
+        }
+      }
+
+      // Congested links: class + label + tooltip data fields
+      for (const c of activeTrafficResult.congested_links ?? []) {
+        const e = cy.getElementById(c.edge_id);
+        if (e.nonempty()) {
+          e.addClass("traffic-congested");
+          e.data("trafficBeforePct", c.before_util_pct);
+          e.data("trafficAfterPct", c.after_util_pct);
+          e.data("trafficDeltaMbps", c.delta_mbps);
+          e.data("trafficExtraMbps", c.extra_bandwidth_mbps);
+          e.data("trafficAfterLabel", fmtPct(Number(c.after_util_pct)));
+          if (trafficHeatmapEnabled) {
+            e.style("width", 3);
+          }
+        }
+      }
+
+      // Label links on injected paths with their after-utilization (helps users see impact beyond congestion).
+      const injectedEdges = new Set<string>();
+      for (const inj of activeTrafficResult.injected_flows ?? []) {
+        if (inj.disconnected) continue;
+        for (const eid of inj.path_edges ?? []) injectedEdges.add(String(eid));
+      }
+      if (injectedEdges.size) {
+        const after = activeTrafficResult.link_utilization_after_pct ?? {};
+        for (const eid of injectedEdges) {
+          const e = cy.getElementById(eid);
+          if (e.nonempty()) {
+            const pct = Number(after[eid]);
+            if (Number.isFinite(pct)) {
+              e.addClass("injected-impact");
+              e.data("trafficAfterLabel", fmtPct(pct));
+            }
+          }
+        }
+      }
+
+      // Flow arrows
+      const flows = activeTrafficResult.flows ?? [];
+      for (const f of flows) {
+        const baseNodes = f.path_nodes ?? [];
+        const flowId = String(f.flow_id ?? f.failed_link_id ?? "");
+        const baseLabel = fmtMbpsDelta(Number(f.volume_mbps || 0));
+        const manual = Boolean(f.manual_override && f.manual_new_path_nodes?.length);
+
+        const addArrow = (nodes: string[], cls: string, label: string) => {
+          for (let i = 0; i < nodes.length - 1; i++) {
+            const src = String(nodes[i]);
+            const tgt = String(nodes[i + 1]);
+            const id = `${cls}:${flowId}:${i}:${src}->${tgt}`;
+            cy.add({
+              group: "edges",
+              data: { id, source: src, target: tgt, label },
+              classes: cls,
+            });
+          }
+        };
+
+        if (manual) {
+          addArrow(baseNodes.map(String), "traffic-flow-original", baseLabel);
+          addArrow((f.manual_new_path_nodes ?? []).map(String), "traffic-flow-applied", baseLabel);
+        } else {
+          addArrow(baseNodes.map(String), "traffic-flow", baseLabel);
+        }
+      }
+
+      // Injected flows (scenario builder)
+      const injected = activeTrafficResult.injected_flows ?? [];
+      for (const inj of injected) {
+        if (inj.disconnected) {
+          continue;
+        }
+        const nodes = (inj.path_nodes ?? []).map(String);
+        const label = fmtMbpsDelta(Number(inj.volume_mbps || 0)).replace("+", "");
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const src = nodes[i]!;
+          const tgt = nodes[i + 1]!;
+          const id = `injected-flow:${inj.id}:${i}:${src}->${tgt}`;
+          cy.add({
+            group: "edges",
+            data: { id, source: src, target: tgt, label },
+            classes: "injected-flow",
+          });
+        }
+      }
+
+      // Scenario Builder path preview (k-shortest options)
+      if (scenarioPathPreview) {
+        const paths = scenarioPathOptions[scenarioPathPreview.flowId] ?? [];
+        const picked = paths[scenarioPathPreview.idx];
+        if (picked?.path_nodes?.length) {
+          const nodes = picked.path_nodes.map(String);
+          for (let i = 0; i < nodes.length - 1; i++) {
+            const src = nodes[i]!;
+            const tgt = nodes[i + 1]!;
+            const id = `scenario-path-preview:${scenarioPathPreview.flowId}:${scenarioPathPreview.idx}:${i}:${src}->${tgt}`;
+            cy.add({
+              group: "edges",
+              data: {
+                id,
+                source: src,
+                target: tgt,
+                label: `Path ${scenarioPathPreview.idx + 1}`,
+              },
+              classes: "scenario-path-preview",
+            });
+          }
+        }
+      }
+    });
+  }, [
+    workspaceMode,
+    trafficFailedKeySet,
+    activeTrafficFailed,
+    trafficHeatmapEnabled,
+    activeTrafficResult,
+    scenarioPathPreview,
+    scenarioPathOptions,
+  ]);
 
   useEffect(() => {
     const cy = cyRef.current;

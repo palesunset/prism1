@@ -5,6 +5,7 @@ import type { NokiaCliStyle } from "../types";
 import { useAppStore } from "../store/useAppStore";
 import type { SavedLsp } from "../store/useAppStore";
 import { LspDetailsTab } from "./LspPanelSections";
+import { TrafficPanel } from "./TrafficPanel";
 
 const PRESET_ALGO = new Set([128, 129, 130]);
 
@@ -21,6 +22,7 @@ export function FloatingPanel(props: {
   const setOpen = useAppStore((s) => s.setFloatingPanelOpen);
   const tab = useAppStore((s) => s.activePanelTab);
   const setTab = useAppStore((s) => s.setActivePanelTab);
+  const workspaceMode = useAppStore((s) => s.workspaceMode);
   const requiredBw = useAppStore((s) => s.requiredBwMbps);
   const setRequiredBw = useAppStore((s) => s.setRequiredBw);
   const maxHops = useAppStore((s) => s.maxHops);
@@ -108,24 +110,34 @@ export function FloatingPanel(props: {
       <div className="flex min-h-0 max-h-[calc(100dvh-6.5rem)] flex-col">
         <div className="flex items-stretch border-b border-white/5">
           <div className="flex min-w-0 flex-1 text-xs font-medium">
-            <button
-              type="button"
-              onClick={() => setTab("constraints")}
-              className={`flex-1 border-b-2 px-2 py-2.5 ${
-                tab === "constraints" ? "border-cyan-400 text-cyan-400" : "border-transparent text-slate-400 hover:text-white"
-              }`}
-            >
-              Path Rules
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("lspDetails")}
-              className={`flex-1 border-b-2 px-2 py-2.5 ${
-                tab === "lspDetails" ? "border-cyan-400 text-cyan-400" : "border-transparent text-slate-400 hover:text-white"
-              }`}
-            >
-              LSP Details
-            </button>
+            {workspaceMode === "lsp" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTab("constraints")}
+                  className={`flex-1 border-b-2 px-2 py-2.5 ${
+                    tab === "constraints"
+                      ? "border-cyan-400 text-cyan-400"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Path Rules
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("lspDetails")}
+                  className={`flex-1 border-b-2 px-2 py-2.5 ${
+                    tab === "lspDetails"
+                      ? "border-cyan-400 text-cyan-400"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  LSP Details
+                </button>
+              </>
+            ) : (
+              <div className="flex-1 px-2 py-2.5 text-slate-300">Failure Controls</div>
+            )}
           </div>
           <button
             type="button"
@@ -136,7 +148,9 @@ export function FloatingPanel(props: {
             <X size={16} className="m-1" />
           </button>
         </div>
-        {tab === "constraints" ? (
+        {workspaceMode === "traffic" ? (
+          <TrafficPanel globalBusy={props.globalBusy} onGlobalLoading={props.onGlobalLoading} />
+        ) : tab === "constraints" ? (
           <div className="floating-panel-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-3 text-sm text-slate-100">
             <div>
               <div className="mb-1 text-[10px] uppercase text-slate-500">Project</div>

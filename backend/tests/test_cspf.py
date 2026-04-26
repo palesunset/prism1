@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import networkx as nx
-
 from app.algorithms.cspf import compute_paths, tradeoff_max_latency_ms
-from app.core.models import NERecord, Vendor
 
 from conftest import build_triangle_topology
 

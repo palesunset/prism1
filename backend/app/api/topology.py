@@ -47,6 +47,9 @@ async def get_topology() -> dict[str, list[dict[str, object]]]:
         pair = tuple(sorted((u, v)))
         idx = seen_parallel.get(pair, 0)
         seen_parallel[pair] = idx + 1
+        bw = int(data.get("bandwidth_mbps", 0) or 0)
+        util_mbps_raw = data.get("current_utilization_mbps", None)
+        util_mbps = float(util_mbps_raw) if util_mbps_raw is not None else float(bw) * 0.5
         edges.append(
             {
                 "data": {
@@ -55,8 +58,9 @@ async def get_topology() -> dict[str, list[dict[str, object]]]:
                     "target": v,
                     "latency_ms": float(data.get("latency_ms", 0.0)),
                     "has_latency_24h": bool(isinstance(data.get("latency_24h"), list) and len(data.get("latency_24h")) == 24),
-                    "bandwidth_mbps": int(data.get("bandwidth_mbps", 0)),
+                    "bandwidth_mbps": bw,
                     "reservable_bw_mbps": int(data.get("reservable_bw_mbps", 0)),
+                    "current_utilization_mbps": util_mbps,
                     "srlg": data.get("srlg") or [],
                     "interface_src": data.get("interface_src") or "",
                     "interface_dst": data.get("interface_dst") or "",

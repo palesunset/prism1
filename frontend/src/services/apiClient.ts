@@ -3,6 +3,8 @@ import type {
   ComputeResponse,
   ImportSummary,
   NokiaCliStyle,
+  TrafficReliefResponse,
+  SimulationResult,
   TopologyPayload,
 } from "../types";
 import type { Mode, PathResult, LspReservation } from "../types";
@@ -153,4 +155,39 @@ export async function exportMonolithicSection(
     transformResponse: (r) => r,
   });
   return typeof res.data === "string" ? res.data : String(res.data);
+}
+
+export async function trafficSimulate(body: {
+  failed_elements: Array<{ type: "link" | "node"; id: string }>;
+  injected_flows?: Array<{ id: string; source_ne_id: string; dest_ne_id: string; volume_mbps: number }>;
+  congestion_threshold_pct: number;
+  manual_redistributions?: Array<{ flow_id: string; new_path: string[]; volume_mbps: number }>;
+  enforce_roles?: boolean;
+}): Promise<SimulationResult> {
+  const res = await client.post<SimulationResult>("/traffic-simulate", body);
+  return res.data;
+}
+
+export async function trafficRelief(body: {
+  failed_elements: Array<{ type: "link" | "node"; id: string }>;
+  congestion_threshold_pct: number;
+  max_extra_latency_ms: number;
+  max_suggestions_per_link: number;
+  enforce_roles?: boolean;
+}): Promise<TrafficReliefResponse> {
+  const res = await client.post<TrafficReliefResponse>("/traffic-relief", body);
+  return res.data;
+}
+
+export async function trafficPaths(body: {
+  source_ne_id: string;
+  dest_ne_id: string;
+  failed_elements: Array<{ type: "link" | "node"; id: string }>;
+  k: number;
+}): Promise<{ paths: Array<{ path_nodes: string[]; path_edges: string[]; total_latency_ms: number }> }> {
+  const res = await client.post<{ paths: Array<{ path_nodes: string[]; path_edges: string[]; total_latency_ms: number }> }>(
+    "/traffic-paths",
+    body,
+  );
+  return res.data;
 }

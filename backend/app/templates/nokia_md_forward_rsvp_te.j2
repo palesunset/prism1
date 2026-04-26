@@ -38,6 +38,7 @@
 {% if backup_hops %}
 /configure router mpls lsp {{ nokia_lsp_name_z }}
     to {{ dest_ip }}
+    path-computation-method local-cspf
     cspf
     fast-reroute facility
     egress-statistics

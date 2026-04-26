@@ -4,8 +4,11 @@ import type { GraphViewHandle } from "./GraphView";
 import type { RefObject } from "react";
 
 export function MapToolbar(props: { graphRef: RefObject<GraphViewHandle | null> }) {
+  const workspaceMode = useAppStore((s) => s.workspaceMode);
   const heatmapEnabled = useAppStore((s) => s.heatmapEnabled);
   const toggleHeatmap = useAppStore((s) => s.toggleHeatmap);
+  const trafficHeatmapEnabled = useAppStore((s) => s.trafficHeatmapEnabled);
+  const toggleTrafficHeatmap = useAppStore((s) => s.toggleTrafficHeatmap);
   const mapLabelsEnabled = useAppStore((s) => s.mapLabelsEnabled);
   const setMapLabelsEnabled = useAppStore((s) => s.setMapLabelsEnabled);
 
@@ -21,10 +24,18 @@ export function MapToolbar(props: { graphRef: RefObject<GraphViewHandle | null> 
       </button>
       <button
         type="button"
-        title="Toggle heatmap"
-        onClick={() => toggleHeatmap()}
+        title={workspaceMode === "traffic" ? "Toggle traffic heatmap" : "Toggle heatmap"}
+        onClick={() => {
+          if (workspaceMode === "traffic") {
+            toggleTrafficHeatmap();
+          } else {
+            toggleHeatmap();
+          }
+        }}
         className={`rounded p-1.5 transition hover:bg-white/10 ${
-          heatmapEnabled ? "bg-cyan-500/20 text-cyan-200" : "text-slate-200"
+          (workspaceMode === "traffic" ? trafficHeatmapEnabled : heatmapEnabled)
+            ? "bg-cyan-500/20 text-cyan-200"
+            : "text-slate-200"
         }`}
       >
         <Flame size={18} />
