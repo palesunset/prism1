@@ -47,16 +47,6 @@ python .\run_desktop.py
 
 This starts FastAPI on `http://127.0.0.1:5000` and opens your browser. The backend automatically serves `frontend/dist` when present.
 
-## Sample data
-
-The repository includes `sample_data/sample_nes.csv` and `sample_data/sample_links.csv`: **30 sites**, each with 2× DRRTR, 2× P routers (`P_RTR` in the `role` column; NE names may still use the `PRTR` prefix, e.g. `SITE01-PRTR02-01`), 2× PERTR, and 2 or 3× PECRT. NE names follow a pattern like `SITE01-DRRTR01-01`, `SITE01-PRTR02-01` (`SITE{nn}-{ROLE}{XX}-{nn}`). Within a site there are **no** direct links between DRRTR, PECRT, and PERTR (only **PRTR01/PRTR02** interconnect those layers). Each DRRTR, PERTR, and PECRT is **dual-homed** to both PRTRs; PRTR01–PRTR02 are meshed. Regenerate with:
-
-```powershell
-python .\sample_data\generate_sample.py
-```
-
-You can import the sample topology by importing the CSV files, or generate them with the script above.
-
 ## Keyboard shortcuts
 
 - **Ctrl/Cmd + K**: focus Source NE field
