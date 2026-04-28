@@ -1,0 +1,12 @@
+{# Huawei VRP — revert — shutdown TE tunnel (tunnel id = last octet of loopback IP) #}
+#
+system-view
+#
+interface Tunnel0/0/{{ tunnel_id }}
+ shutdown
+#
+commit
+#
+return
+save
+#

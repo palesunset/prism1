@@ -29,6 +29,12 @@ export interface ProjectUiState {
   nokiaRsvpLabelXReverse?: string;
   nokiaRsvpLabelYReverse?: string;
   nokiaRsvpLabelZReverse?: string;
+  nokiaRsvpLabelXForwardRevert?: string;
+  nokiaRsvpLabelYForwardRevert?: string;
+  nokiaRsvpLabelZForwardRevert?: string;
+  nokiaRsvpLabelXReverseRevert?: string;
+  nokiaRsvpLabelYReverseRevert?: string;
+  nokiaRsvpLabelZReverseRevert?: string;
   /** PRISM: left panel expanded. */
   floatingPanelOpen?: boolean;
   /** PRISM: constraints vs LSP details tab. */

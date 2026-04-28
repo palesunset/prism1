@@ -54,6 +54,12 @@ export default function App() {
   const setNokiaRsvpLabelXReverse = useAppStore((s) => s.setNokiaRsvpLabelXReverse);
   const setNokiaRsvpLabelYReverse = useAppStore((s) => s.setNokiaRsvpLabelYReverse);
   const setNokiaRsvpLabelZReverse = useAppStore((s) => s.setNokiaRsvpLabelZReverse);
+  const setNokiaRsvpLabelXForwardRevert = useAppStore((s) => s.setNokiaRsvpLabelXForwardRevert);
+  const setNokiaRsvpLabelYForwardRevert = useAppStore((s) => s.setNokiaRsvpLabelYForwardRevert);
+  const setNokiaRsvpLabelZForwardRevert = useAppStore((s) => s.setNokiaRsvpLabelZForwardRevert);
+  const setNokiaRsvpLabelXReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelXReverseRevert);
+  const setNokiaRsvpLabelYReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelYReverseRevert);
+  const setNokiaRsvpLabelZReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelZReverseRevert);
   const setSource = useAppStore((s) => s.setSource);
   const setDestination = useAppStore((s) => s.setDestination);
   const setFlexAlgoId = useAppStore((s) => s.setFlexAlgoId);
@@ -220,6 +226,12 @@ export default function App() {
         nokiaRsvpLabelXReverse: s.nokiaRsvpLabelXReverse,
         nokiaRsvpLabelYReverse: s.nokiaRsvpLabelYReverse,
         nokiaRsvpLabelZReverse: s.nokiaRsvpLabelZReverse,
+        nokiaRsvpLabelXForwardRevert: s.nokiaRsvpLabelXForwardRevert,
+        nokiaRsvpLabelYForwardRevert: s.nokiaRsvpLabelYForwardRevert,
+        nokiaRsvpLabelZForwardRevert: s.nokiaRsvpLabelZForwardRevert,
+        nokiaRsvpLabelXReverseRevert: s.nokiaRsvpLabelXReverseRevert,
+        nokiaRsvpLabelYReverseRevert: s.nokiaRsvpLabelYReverseRevert,
+        nokiaRsvpLabelZReverseRevert: s.nokiaRsvpLabelZReverseRevert,
         floatingPanelOpen: s.floatingPanelOpen,
         activePanelTab: s.activePanelTab,
       },
@@ -289,6 +301,12 @@ export default function App() {
         setNokiaRsvpLabelXReverse(typeof ui.nokiaRsvpLabelXReverse === "string" ? ui.nokiaRsvpLabelXReverse : legacyX);
         setNokiaRsvpLabelYReverse(typeof ui.nokiaRsvpLabelYReverse === "string" ? ui.nokiaRsvpLabelYReverse : legacyY);
         setNokiaRsvpLabelZReverse(typeof ui.nokiaRsvpLabelZReverse === "string" ? ui.nokiaRsvpLabelZReverse : legacyZ);
+        setNokiaRsvpLabelXForwardRevert(typeof ui.nokiaRsvpLabelXForwardRevert === "string" ? ui.nokiaRsvpLabelXForwardRevert : "");
+        setNokiaRsvpLabelYForwardRevert(typeof ui.nokiaRsvpLabelYForwardRevert === "string" ? ui.nokiaRsvpLabelYForwardRevert : "");
+        setNokiaRsvpLabelZForwardRevert(typeof ui.nokiaRsvpLabelZForwardRevert === "string" ? ui.nokiaRsvpLabelZForwardRevert : "");
+        setNokiaRsvpLabelXReverseRevert(typeof ui.nokiaRsvpLabelXReverseRevert === "string" ? ui.nokiaRsvpLabelXReverseRevert : "");
+        setNokiaRsvpLabelYReverseRevert(typeof ui.nokiaRsvpLabelYReverseRevert === "string" ? ui.nokiaRsvpLabelYReverseRevert : "");
+        setNokiaRsvpLabelZReverseRevert(typeof ui.nokiaRsvpLabelZReverseRevert === "string" ? ui.nokiaRsvpLabelZReverseRevert : "");
         setFlexAlgoId(ui.flexAlgoId ?? null);
         toast.success("Project opened");
       } catch (err) {
@@ -321,6 +339,12 @@ export default function App() {
       setNokiaRsvpLabelXReverse,
       setNokiaRsvpLabelYReverse,
       setNokiaRsvpLabelZReverse,
+      setNokiaRsvpLabelXForwardRevert,
+      setNokiaRsvpLabelYForwardRevert,
+      setNokiaRsvpLabelZForwardRevert,
+      setNokiaRsvpLabelXReverseRevert,
+      setNokiaRsvpLabelYReverseRevert,
+      setNokiaRsvpLabelZReverseRevert,
     ],
   );
 

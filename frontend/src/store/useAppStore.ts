@@ -83,6 +83,14 @@ interface AppState {
   nokiaRsvpLabelXReverse: string;
   nokiaRsvpLabelYReverse: string;
   nokiaRsvpLabelZReverse: string;
+  /** Nokia RSVP-TE (Forward Path Revert tab): independent from Forward path. */
+  nokiaRsvpLabelXForwardRevert: string;
+  nokiaRsvpLabelYForwardRevert: string;
+  nokiaRsvpLabelZForwardRevert: string;
+  /** Nokia RSVP-TE (Reverse Path Revert tab): independent from Reverse path. */
+  nokiaRsvpLabelXReverseRevert: string;
+  nokiaRsvpLabelYReverseRevert: string;
+  nokiaRsvpLabelZReverseRevert: string;
   timeHour: number;
   /** When false, backup trade-off slider is ignored and 0% extra primary latency is used. */
   backupTradeoffEnabled: boolean;
@@ -172,6 +180,14 @@ interface AppState {
   setNokiaRsvpLabelXReverse: (s: string) => void;
   setNokiaRsvpLabelYReverse: (s: string) => void;
   setNokiaRsvpLabelZReverse: (s: string) => void;
+  setNokiaRsvpLabelXForwardRevert: (s: string) => void;
+  setNokiaRsvpLabelYForwardRevert: (s: string) => void;
+  setNokiaRsvpLabelZForwardRevert: (s: string) => void;
+  setNokiaRsvpLabelXReverseRevert: (s: string) => void;
+  setNokiaRsvpLabelYReverseRevert: (s: string) => void;
+  setNokiaRsvpLabelZReverseRevert: (s: string) => void;
+  /** Clear all six Nokia user-define fields (after a fresh compute). */
+  clearNokiaRsvpUserLabels: () => void;
   setTimeHour: (h: number) => void;
   setBackupTradeoffEnabled: (v: boolean) => void;
   setMonolithicConfig: (s: string | null) => void;
@@ -220,6 +236,12 @@ export const useAppStore = create<AppState>()(
       nokiaRsvpLabelXReverse: "",
       nokiaRsvpLabelYReverse: "",
       nokiaRsvpLabelZReverse: "",
+      nokiaRsvpLabelXForwardRevert: "",
+      nokiaRsvpLabelYForwardRevert: "",
+      nokiaRsvpLabelZForwardRevert: "",
+      nokiaRsvpLabelXReverseRevert: "",
+      nokiaRsvpLabelYReverseRevert: "",
+      nokiaRsvpLabelZReverseRevert: "",
       timeHour: 0,
       monolithicConfig: null,
       lsps: {},
@@ -346,6 +368,27 @@ export const useAppStore = create<AppState>()(
       setNokiaRsvpLabelXReverse: (s) => set({ nokiaRsvpLabelXReverse: s }),
       setNokiaRsvpLabelYReverse: (s) => set({ nokiaRsvpLabelYReverse: s }),
       setNokiaRsvpLabelZReverse: (s) => set({ nokiaRsvpLabelZReverse: s }),
+      setNokiaRsvpLabelXForwardRevert: (s) => set({ nokiaRsvpLabelXForwardRevert: s }),
+      setNokiaRsvpLabelYForwardRevert: (s) => set({ nokiaRsvpLabelYForwardRevert: s }),
+      setNokiaRsvpLabelZForwardRevert: (s) => set({ nokiaRsvpLabelZForwardRevert: s }),
+      setNokiaRsvpLabelXReverseRevert: (s) => set({ nokiaRsvpLabelXReverseRevert: s }),
+      setNokiaRsvpLabelYReverseRevert: (s) => set({ nokiaRsvpLabelYReverseRevert: s }),
+      setNokiaRsvpLabelZReverseRevert: (s) => set({ nokiaRsvpLabelZReverseRevert: s }),
+      clearNokiaRsvpUserLabels: () =>
+        set({
+          nokiaRsvpLabelXForward: "",
+          nokiaRsvpLabelYForward: "",
+          nokiaRsvpLabelZForward: "",
+          nokiaRsvpLabelXReverse: "",
+          nokiaRsvpLabelYReverse: "",
+          nokiaRsvpLabelZReverse: "",
+          nokiaRsvpLabelXForwardRevert: "",
+          nokiaRsvpLabelYForwardRevert: "",
+          nokiaRsvpLabelZForwardRevert: "",
+          nokiaRsvpLabelXReverseRevert: "",
+          nokiaRsvpLabelYReverseRevert: "",
+          nokiaRsvpLabelZReverseRevert: "",
+        }),
       setTimeHour: (h) => set({ timeHour: h }),
       setBackupTradeoffEnabled: (v) => set({ backupTradeoffEnabled: v }),
       setMonolithicConfig: (s) => set({ monolithicConfig: s }),
@@ -366,7 +409,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "prism-ui",
-      version: 4,
+      version: 5,
       /** Drop stale monolithic text from v1: it was saved without `lastCompute`, so it could be outdated. */
       migrate: (persisted, fromVersion) => {
         if (fromVersion < 2 && persisted && typeof persisted === "object") {
@@ -394,6 +437,15 @@ export const useAppStore = create<AppState>()(
             p.workspaceMode = "lsp";
           }
         }
+        if (fromVersion < 5 && persisted && typeof persisted === "object") {
+          const p = persisted as Record<string, unknown>;
+          if (typeof p.nokiaRsvpLabelXForwardRevert !== "string") p.nokiaRsvpLabelXForwardRevert = "";
+          if (typeof p.nokiaRsvpLabelYForwardRevert !== "string") p.nokiaRsvpLabelYForwardRevert = "";
+          if (typeof p.nokiaRsvpLabelZForwardRevert !== "string") p.nokiaRsvpLabelZForwardRevert = "";
+          if (typeof p.nokiaRsvpLabelXReverseRevert !== "string") p.nokiaRsvpLabelXReverseRevert = "";
+          if (typeof p.nokiaRsvpLabelYReverseRevert !== "string") p.nokiaRsvpLabelYReverseRevert = "";
+          if (typeof p.nokiaRsvpLabelZReverseRevert !== "string") p.nokiaRsvpLabelZReverseRevert = "";
+        }
         return persisted as object;
       },
       partialize: (s) => ({
@@ -418,6 +470,12 @@ export const useAppStore = create<AppState>()(
         nokiaRsvpLabelXReverse: s.nokiaRsvpLabelXReverse,
         nokiaRsvpLabelYReverse: s.nokiaRsvpLabelYReverse,
         nokiaRsvpLabelZReverse: s.nokiaRsvpLabelZReverse,
+        nokiaRsvpLabelXForwardRevert: s.nokiaRsvpLabelXForwardRevert,
+        nokiaRsvpLabelYForwardRevert: s.nokiaRsvpLabelYForwardRevert,
+        nokiaRsvpLabelZForwardRevert: s.nokiaRsvpLabelZForwardRevert,
+        nokiaRsvpLabelXReverseRevert: s.nokiaRsvpLabelXReverseRevert,
+        nokiaRsvpLabelYReverseRevert: s.nokiaRsvpLabelYReverseRevert,
+        nokiaRsvpLabelZReverseRevert: s.nokiaRsvpLabelZReverseRevert,
         timeHour: s.timeHour,
         heatmapEnabled: s.heatmapEnabled,
         floatingPanelOpen: s.floatingPanelOpen,

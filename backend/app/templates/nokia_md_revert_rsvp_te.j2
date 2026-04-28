@@ -1,0 +1,10 @@
+{# Nokia SR OS — MD-CLI — revert (disable LSPs matching forward/reverse blocks) #}
+/configure router mpls lsp "{{ nokia_lsp_name_y }}"
+    admin-state disable
+!
+{% if backup_hops %}
+/configure router mpls lsp "{{ nokia_lsp_name_z }}"
+    admin-state disable
+!
+{% endif %}
+/admin save

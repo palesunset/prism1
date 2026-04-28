@@ -303,6 +303,30 @@ class ExportRequest(BaseModel):
         default=None,
         description="Nokia RSVP-TE (Reverse tab): second LSP name (Z). Omitted/empty: falls back to nokia_lsp_name_z, then {source}-SP:02.",
     )
+    nokia_path_name_prefix_forward_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward Path Revert tab): X. Omitted/empty: falls back to forward tab, then legacy.",
+    )
+    nokia_lsp_name_y_forward_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward Path Revert tab): Y. Omitted/empty: falls back to forward tab, then legacy.",
+    )
+    nokia_lsp_name_z_forward_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Forward Path Revert tab): Z. Omitted/empty: falls back to forward tab, then legacy.",
+    )
+    nokia_path_name_prefix_reverse_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse Path Revert tab): X. Omitted/empty: falls back to reverse tab, then legacy.",
+    )
+    nokia_lsp_name_y_reverse_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse Path Revert tab): Y. Omitted/empty: falls back to reverse tab, then legacy.",
+    )
+    nokia_lsp_name_z_reverse_revert: str | None = Field(
+        default=None,
+        description="Nokia RSVP-TE (Reverse Path Revert tab): Z. Omitted/empty: falls back to reverse tab, then legacy.",
+    )
 
     @field_validator(
         "nokia_path_name_prefix",
@@ -314,6 +338,12 @@ class ExportRequest(BaseModel):
         "nokia_path_name_prefix_reverse",
         "nokia_lsp_name_y_reverse",
         "nokia_lsp_name_z_reverse",
+        "nokia_path_name_prefix_forward_revert",
+        "nokia_lsp_name_y_forward_revert",
+        "nokia_lsp_name_z_forward_revert",
+        "nokia_path_name_prefix_reverse_revert",
+        "nokia_lsp_name_y_reverse_revert",
+        "nokia_lsp_name_z_reverse_revert",
         mode="before",
     )
     @classmethod

@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, FileCode, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { errorDetail, exportMonolithic, exportMonolithicSection, nokiaRsvpNamesForDirection } from "../services/apiClient";
+import {
+  errorDetail,
+  exportMonolithic,
+  exportMonolithicSection,
+  nokiaRsvpNamesForDirection,
+  nokiaRsvpNamesForRevertDirection,
+} from "../services/apiClient";
 import { useAppStore } from "../store/useAppStore";
 import { replaceMonolithicSection, splitMonolithicConfig } from "../utils/splitMonolithicConfig";
 
-type ConfigTab = "pathDetails" | "forward" | "reverse";
+type ConfigTab = "pathDetails" | "forward" | "reverse" | "revertForward" | "revertReverse";
 
 export function ConfigOverlay() {
   const monolithicConfig = useAppStore((s) => s.monolithicConfig);
@@ -23,12 +29,24 @@ export function ConfigOverlay() {
   const nxR = useAppStore((s) => s.nokiaRsvpLabelXReverse);
   const nyR = useAppStore((s) => s.nokiaRsvpLabelYReverse);
   const nzR = useAppStore((s) => s.nokiaRsvpLabelZReverse);
+  const nxFR = useAppStore((s) => s.nokiaRsvpLabelXForwardRevert);
+  const nyFR = useAppStore((s) => s.nokiaRsvpLabelYForwardRevert);
+  const nzFR = useAppStore((s) => s.nokiaRsvpLabelZForwardRevert);
+  const nxRR = useAppStore((s) => s.nokiaRsvpLabelXReverseRevert);
+  const nyRR = useAppStore((s) => s.nokiaRsvpLabelYReverseRevert);
+  const nzRR = useAppStore((s) => s.nokiaRsvpLabelZReverseRevert);
   const setNxF = useAppStore((s) => s.setNokiaRsvpLabelXForward);
   const setNyF = useAppStore((s) => s.setNokiaRsvpLabelYForward);
   const setNzF = useAppStore((s) => s.setNokiaRsvpLabelZForward);
   const setNxR = useAppStore((s) => s.setNokiaRsvpLabelXReverse);
   const setNyR = useAppStore((s) => s.setNokiaRsvpLabelYReverse);
   const setNzR = useAppStore((s) => s.setNokiaRsvpLabelZReverse);
+  const setNxFR = useAppStore((s) => s.setNokiaRsvpLabelXForwardRevert);
+  const setNyFR = useAppStore((s) => s.setNokiaRsvpLabelYForwardRevert);
+  const setNzFR = useAppStore((s) => s.setNokiaRsvpLabelZForwardRevert);
+  const setNxRR = useAppStore((s) => s.setNokiaRsvpLabelXReverseRevert);
+  const setNyRR = useAppStore((s) => s.setNokiaRsvpLabelYReverseRevert);
+  const setNzRR = useAppStore((s) => s.setNokiaRsvpLabelZReverseRevert);
   const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
 
   const split = useMemo(
@@ -48,18 +66,38 @@ export function ConfigOverlay() {
     if (activeTab === "forward") {
       return split.forward;
     }
-    return split.reverse;
+    if (activeTab === "reverse") {
+      return split.reverse;
+    }
+    if (activeTab === "revertForward") {
+      return split.revertForward;
+    }
+    return split.revertReverse;
   }, [split, activeTab]);
 
-  /** User Define Configuration (X/Y/Z), RSVP-TE and SR-MPLS; Forward/Reverse tabs only. */
+  /** User Define Configuration (X/Y/Z) on path + revert tabs; show whenever LSP is computed (do not wait on split parse). */
   const showNokiaRsvpNameFields =
     (mode === "rsvp_te" || mode === "sr_mpls") &&
-    split != null &&
-    (activeTab === "forward" || activeTab === "reverse");
+    lastCompute?.primary != null &&
+    (activeTab === "forward" ||
+      activeTab === "reverse" ||
+      activeTab === "revertForward" ||
+      activeTab === "revertReverse");
+
+  const userDefineScopeHint =
+    activeTab === "revertForward"
+      ? "These values apply to Forward Path (Revert) only. Updates change that section."
+      : activeTab === "revertReverse"
+        ? "These values apply to Reverse Path (Revert) only. Updates change that section."
+        : activeTab === "forward"
+          ? "These values apply to Forward path only. Updates change that section."
+          : activeTab === "reverse"
+            ? "These values apply to Reverse path only. Updates change that section."
+            : null;
 
   /** Use getState() for X/Y/Z. Full: whole monolithic. Forward/Reverse: only that block (Path details unchanged). */
   const applyMonolithicRefresh = useCallback(
-    async (scope: "full" | "forward" | "reverse") => {
+    async (scope: "full" | "forward" | "reverse" | "revert_forward" | "revert_reverse") => {
       const s = useAppStore.getState();
       if (!s.lastCompute?.primary) {
         return;
@@ -76,6 +114,18 @@ export function ConfigOverlay() {
         s.nokiaRsvpLabelYReverse,
         s.nokiaRsvpLabelZReverse,
       );
+      const forwardRevertNames = nokiaRsvpNamesForRevertDirection(
+        "forward_revert",
+        s.nokiaRsvpLabelXForwardRevert,
+        s.nokiaRsvpLabelYForwardRevert,
+        s.nokiaRsvpLabelZForwardRevert,
+      );
+      const reverseRevertNames = nokiaRsvpNamesForRevertDirection(
+        "reverse_revert",
+        s.nokiaRsvpLabelXReverseRevert,
+        s.nokiaRsvpLabelYReverseRevert,
+        s.nokiaRsvpLabelZReverseRevert,
+      );
       const basePayload = {
         lsp_name: s.lspName,
         mode: s.mode,
@@ -85,27 +135,48 @@ export function ConfigOverlay() {
         reservations: s.reservations,
         nokia_cli_style: s.nokiaCliStyle,
       };
-      if (scope === "full") {
-        const txt = await exportMonolithic({ ...basePayload, ...forwardNames, ...reverseNames });
+      const allNokiaNames = {
+        ...forwardNames,
+        ...reverseNames,
+        ...forwardRevertNames,
+        ...reverseRevertNames,
+      };
+      const fullExport = async () => {
+        const txt = await exportMonolithic({ ...basePayload, ...allNokiaNames });
         useAppStore.getState().setMonolithicConfig(txt);
+      };
+      if (scope === "full") {
+        await fullExport();
         return;
       }
       const monolithic = s.monolithicConfig;
       if (monolithic == null) {
-        const txt = await exportMonolithic({ ...basePayload, ...forwardNames, ...reverseNames });
-        useAppStore.getState().setMonolithicConfig(txt);
+        await fullExport();
         return;
       }
-      if (!splitMonolithicConfig(monolithic).hasThreeWaySplit) {
-        const txt = await exportMonolithic({ ...basePayload, ...forwardNames, ...reverseNames });
-        useAppStore.getState().setMonolithicConfig(txt);
+      const parsed = splitMonolithicConfig(monolithic);
+      if (!parsed.hasThreeWaySplit) {
+        await fullExport();
         return;
       }
-      const names = scope === "forward" ? forwardNames : reverseNames;
-      const block = await exportMonolithicSection(scope, { ...basePayload, ...names });
-      useAppStore
-        .getState()
-        .setMonolithicConfig(replaceMonolithicSection(monolithic, scope, block));
+      if ((scope === "revert_forward" || scope === "revert_reverse") && !parsed.hasRevertSplit) {
+        await fullExport();
+        return;
+      }
+      const sectionNames =
+        scope === "forward"
+          ? forwardNames
+          : scope === "revert_forward"
+            ? forwardRevertNames
+            : scope === "reverse"
+              ? reverseNames
+              : reverseRevertNames;
+      const mergedPayload = {
+        ...basePayload,
+        ...sectionNames,
+      };
+      const block = await exportMonolithicSection(scope, mergedPayload);
+      useAppStore.getState().setMonolithicConfig(replaceMonolithicSection(monolithic, scope, block));
     },
     [],
   );
@@ -156,7 +227,27 @@ export function ConfigOverlay() {
     };
   }, [open, applyMonolithicRefresh, lastCompute?.primary]);
 
-  /** Debounced preview: full monolithic on Path details tab; only Forward or only Reverse block on those tabs. */
+  /** Labels that affect only the current tab’s section (avoid refreshing revert forward when only reverse X/Y/Z change). */
+  const labelDepsForActiveTab = useMemo(() => {
+    if (activeTab === "pathDetails") {
+      return `${nxF}\0${nyF}\0${nzF}\0${nxR}\0${nyR}\0${nzR}\0${nxFR}\0${nyFR}\0${nzFR}\0${nxRR}\0${nyRR}\0${nzRR}`;
+    }
+    if (activeTab === "forward") {
+      return `${nxF}\0${nyF}\0${nzF}`;
+    }
+    if (activeTab === "revertForward") {
+      return `${nxFR}\0${nyFR}\0${nzFR}`;
+    }
+    if (activeTab === "reverse") {
+      return `${nxR}\0${nyR}\0${nzR}`;
+    }
+    if (activeTab === "revertReverse") {
+      return `${nxRR}\0${nyRR}\0${nzRR}`;
+    }
+    return "";
+  }, [activeTab, nxF, nyF, nzF, nxR, nyR, nzR, nxFR, nyFR, nzFR, nxRR, nyRR, nzRR]);
+
+  /** Debounced preview: Path details = full; other tabs = that section only (forward vs reverse naming scoped per tab). */
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (!useAppStore.getState().configOverlayOpen) {
@@ -165,8 +256,16 @@ export function ConfigOverlay() {
       if (!useAppStore.getState().lastCompute?.primary) {
         return;
       }
-      const scope: "full" | "forward" | "reverse" =
-        activeTab === "pathDetails" ? "full" : activeTab === "forward" ? "forward" : "reverse";
+      const scope: "full" | "forward" | "reverse" | "revert_forward" | "revert_reverse" =
+        activeTab === "pathDetails"
+          ? "full"
+          : activeTab === "forward"
+            ? "forward"
+            : activeTab === "reverse"
+              ? "reverse"
+              : activeTab === "revertForward"
+                ? "revert_forward"
+                : "revert_reverse";
       void (async () => {
         try {
           await applyMonolithicRefresh(scope);
@@ -178,25 +277,53 @@ export function ConfigOverlay() {
     return () => {
       window.clearTimeout(t);
     };
-  }, [nxF, nyF, nzF, nxR, nyR, nzR, nokiaCliStyle, activeTab, applyMonolithicRefresh]);
+  }, [labelDepsForActiveTab, nokiaCliStyle, activeTab, applyMonolithicRefresh]);
 
-  if (!open) {
-    return null;
+  /** Plain derivation (no useMemo): avoids hook-order edge cases; inputs only shown when showNokiaRsvpNameFields. */
+  let xVal = "";
+  let yVal = "";
+  let zVal = "";
+  let setX: (v: string) => void = () => {};
+  let setY: (v: string) => void = () => {};
+  let setZ: (v: string) => void = () => {};
+  if (activeTab === "forward") {
+    xVal = nxF;
+    yVal = nyF;
+    zVal = nzF;
+    setX = setNxF;
+    setY = setNyF;
+    setZ = setNzF;
+  } else if (activeTab === "revertForward") {
+    xVal = nxFR;
+    yVal = nyFR;
+    zVal = nzFR;
+    setX = setNxFR;
+    setY = setNyFR;
+    setZ = setNzFR;
+  } else if (activeTab === "reverse") {
+    xVal = nxR;
+    yVal = nyR;
+    zVal = nzR;
+    setX = setNxR;
+    setY = setNyR;
+    setZ = setNzR;
+  } else if (activeTab === "revertReverse") {
+    xVal = nxRR;
+    yVal = nyRR;
+    zVal = nzRR;
+    setX = setNxRR;
+    setY = setNyRR;
+    setZ = setNzRR;
   }
 
   const copyTabLabel: Record<ConfigTab, string> = {
     pathDetails: "Path details",
     forward: "Forward path",
     reverse: "Reverse path",
+    revertForward: "Forward Path (Revert)",
+    revertReverse: "Reverse Path (Revert)",
   };
   const tabContent = activeBlockText;
-  const isForward = activeTab === "forward";
-  const xVal = isForward ? nxF : nxR;
-  const yVal = isForward ? nyF : nyR;
-  const zVal = isForward ? nzF : nzR;
-  const setX = isForward ? setNxF : setNxR;
-  const setY = isForward ? setNyF : setNyR;
-  const setZ = isForward ? setNzF : setNzR;
 
   const bodyReady = split != null;
   const showEmptyState = !openLoading && !bodyReady;
@@ -220,11 +347,32 @@ export function ConfigOverlay() {
       toast.error("Compute an LSP first (RSVP-TE or SR-MPLS).");
       return;
     }
+    const scope: "forward" | "reverse" | "revert_forward" | "revert_reverse" | null =
+      activeTab === "forward"
+        ? "forward"
+        : activeTab === "reverse"
+          ? "reverse"
+          : activeTab === "revertForward"
+            ? "revert_forward"
+            : activeTab === "revertReverse"
+              ? "revert_reverse"
+              : null;
+    if (scope == null) {
+      toast.error("Switch to a Forward, Reverse, or Revert tab to update naming.");
+      return;
+    }
     setUpdating(true);
     try {
-      const scope: "forward" | "reverse" = activeTab === "forward" ? "forward" : "reverse";
       await applyMonolithicRefresh(scope);
-      toast.success("Configuration updated");
+      toast.success(
+        scope === "revert_forward"
+          ? "Forward Path (Revert) updated"
+          : scope === "revert_reverse"
+            ? "Reverse Path (Revert) updated"
+            : scope === "forward"
+              ? "Forward path updated"
+              : "Reverse path updated",
+      );
     } catch (e) {
       toast.error(errorDetail(e));
     } finally {
@@ -252,7 +400,7 @@ export function ConfigOverlay() {
     );
   };
 
-  return (
+  return open ? (
     <>
       <div
         className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
@@ -299,12 +447,17 @@ export function ConfigOverlay() {
             {tabBtn("pathDetails", "Path details")}
             {tabBtn("forward", "Forward path")}
             {tabBtn("reverse", "Reverse path")}
+            {tabBtn("revertForward", "Forward Path (Revert)")}
+            {tabBtn("revertReverse", "Reverse Path (Revert)")}
           </div>
           {showNokiaRsvpNameFields ? (
             <div className="shrink-0 border-b border-cyan-900/30 bg-cyan-950/20 px-3 py-2.5 sm:px-4">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200/90">
                 User Define Configuration
               </div>
+              {userDefineScopeHint ? (
+                <p className="mt-1 text-[10px] leading-snug text-slate-500">{userDefineScopeHint}</p>
+              ) : null}
               <div className="mt-2 flex w-full min-w-0 items-end gap-2">
                 <label className="flex min-w-0 flex-1 flex-col">
                   <span className="text-[10px] text-slate-500">X Values</span>
@@ -344,16 +497,21 @@ export function ConfigOverlay() {
                 </label>
                 <button
                   type="button"
-                  disabled={updating}
+                  disabled={updating || openLoading || split == null}
                   onClick={() => void handleUpdateNokiaConfig()}
                   className="shrink-0 whitespace-nowrap rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-cyan-500 disabled:opacity-50"
+                  title={
+                    split == null || openLoading
+                      ? "Wait for configuration to finish loading"
+                      : "Apply X/Y/Z to this tab’s section only"
+                  }
                 >
                   {updating ? "Updating…" : "Update configuration"}
                 </button>
               </div>
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto p-4">
+          <div className="config-output-scroll min-h-0 flex-1 overflow-auto p-4">
             {openLoading && !bodyReady ? (
               <div className="whitespace-pre-wrap rounded-lg bg-[#0A0F1C] p-4 font-mono text-sm text-slate-400">
                 Loading the latest configuration from the server…
@@ -364,7 +522,10 @@ export function ConfigOverlay() {
               <pre
                 className={[
                   "whitespace-pre-wrap rounded-lg bg-[#0A0F1C] p-4 font-mono text-sm",
-                  split != null && !split.hasThreeWaySplit && (activeTab === "forward" || activeTab === "reverse")
+                  split != null &&
+                    ((!split.hasThreeWaySplit && activeTab !== "pathDetails") ||
+                      (!split.hasRevertSplit &&
+                        (activeTab === "revertForward" || activeTab === "revertReverse")))
                     ? "text-slate-400"
                     : "text-green-300",
                 ].join(" ")}
@@ -377,7 +538,7 @@ export function ConfigOverlay() {
         </div>
       </div>
     </>
-  );
+  ) : null;
 }
 
 export function ConfigOverlayTrigger() {

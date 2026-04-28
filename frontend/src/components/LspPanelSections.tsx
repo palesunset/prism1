@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { computePaths, errorDetail, exportMonolithic, nokiaRsvpNamesForDirection } from "../services/apiClient";
+import {
+  computePaths,
+  errorDetail,
+  exportMonolithic,
+  nokiaRsvpNamesForDirection,
+  nokiaRsvpNamesForRevertDirection,
+} from "../services/apiClient";
 import type { SavedLsp } from "../store/useAppStore";
 import { useAppStore } from "../store/useAppStore";
 import type { LspReservation, Mode, NokiaCliStyle, RejectedPath } from "../types";
@@ -464,6 +470,12 @@ function LoadConfigButton(props: {
   const nxR = useAppStore((s) => s.nokiaRsvpLabelXReverse);
   const nyR = useAppStore((s) => s.nokiaRsvpLabelYReverse);
   const nzR = useAppStore((s) => s.nokiaRsvpLabelZReverse);
+  const nxFR = useAppStore((s) => s.nokiaRsvpLabelXForwardRevert);
+  const nyFR = useAppStore((s) => s.nokiaRsvpLabelYForwardRevert);
+  const nzFR = useAppStore((s) => s.nokiaRsvpLabelZForwardRevert);
+  const nxRR = useAppStore((s) => s.nokiaRsvpLabelXReverseRevert);
+  const nyRR = useAppStore((s) => s.nokiaRsvpLabelYReverseRevert);
+  const nzRR = useAppStore((s) => s.nokiaRsvpLabelZReverseRevert);
   return (
     <button
       type="button"
@@ -484,6 +496,8 @@ function LoadConfigButton(props: {
             nokia_cli_style: props.nokia,
             ...nokiaRsvpNamesForDirection("forward", nxF, nyF, nzF),
             ...nokiaRsvpNamesForDirection("reverse", nxR, nyR, nzR),
+            ...nokiaRsvpNamesForRevertDirection("forward_revert", nxFR, nyFR, nzFR),
+            ...nokiaRsvpNamesForRevertDirection("reverse_revert", nxRR, nyRR, nzRR),
           });
           useAppStore.getState().setMonolithicConfig(text);
           useAppStore.getState().setConfigOverlayOpen(true);

@@ -87,6 +87,12 @@ export type NokiaRsvpExportNames = {
   nokia_path_name_prefix_reverse?: string | null;
   nokia_lsp_name_y_reverse?: string | null;
   nokia_lsp_name_z_reverse?: string | null;
+  nokia_path_name_prefix_forward_revert?: string | null;
+  nokia_lsp_name_y_forward_revert?: string | null;
+  nokia_lsp_name_z_forward_revert?: string | null;
+  nokia_path_name_prefix_reverse_revert?: string | null;
+  nokia_lsp_name_y_reverse_revert?: string | null;
+  nokia_lsp_name_z_reverse_revert?: string | null;
 };
 
 export function nokiaRsvpNamesFromInput(x: string, y: string, z: string): NokiaRsvpExportNames {
@@ -120,6 +126,29 @@ export function nokiaRsvpNamesForDirection(
   return o;
 }
 
+/** Revert-tab naming is independent from Forward path / Reverse path tabs. */
+export function nokiaRsvpNamesForRevertDirection(
+  direction: "forward_revert" | "reverse_revert",
+  x: string,
+  y: string,
+  z: string,
+): NokiaRsvpExportNames {
+  const o: NokiaRsvpExportNames = {};
+  const xt = x.trim();
+  const yt = y.trim();
+  const zt = z.trim();
+  if (direction === "forward_revert") {
+    if (xt) o.nokia_path_name_prefix_forward_revert = xt;
+    if (yt) o.nokia_lsp_name_y_forward_revert = yt;
+    if (zt) o.nokia_lsp_name_z_forward_revert = zt;
+    return o;
+  }
+  if (xt) o.nokia_path_name_prefix_reverse_revert = xt;
+  if (yt) o.nokia_lsp_name_y_reverse_revert = yt;
+  if (zt) o.nokia_lsp_name_z_reverse_revert = zt;
+  return o;
+}
+
 export type ExportMonolithicPayload = {
   lsp_name: string;
   mode: Mode;
@@ -147,7 +176,7 @@ export async function exportMonolithic(payload: ExportMonolithicPayload): Promis
 }
 
 export async function exportMonolithicSection(
-  section: "forward" | "reverse",
+  section: "forward" | "reverse" | "revert_forward" | "revert_reverse",
   payload: ExportMonolithicPayload,
 ): Promise<string> {
   const res = await client.post<string>(`/export/monolithic/section?section=${section}`, payload, {

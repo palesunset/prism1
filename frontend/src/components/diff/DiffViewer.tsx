@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { diffLines } from "diff";
-import { errorDetail, exportClipboard, nokiaRsvpNamesForDirection } from "../../services/apiClient";
+import {
+  errorDetail,
+  exportClipboard,
+  nokiaRsvpNamesForDirection,
+  nokiaRsvpNamesForRevertDirection,
+} from "../../services/apiClient";
 import { useAppStore } from "../../store/useAppStore";
 import type { NokiaCliStyle } from "../../types";
 
@@ -28,6 +33,15 @@ export function DiffViewer() {
   const nxF = useAppStore((s) => s.nokiaRsvpLabelXForward);
   const nyF = useAppStore((s) => s.nokiaRsvpLabelYForward);
   const nzF = useAppStore((s) => s.nokiaRsvpLabelZForward);
+  const nxR = useAppStore((s) => s.nokiaRsvpLabelXReverse);
+  const nyR = useAppStore((s) => s.nokiaRsvpLabelYReverse);
+  const nzR = useAppStore((s) => s.nokiaRsvpLabelZReverse);
+  const nxFR = useAppStore((s) => s.nokiaRsvpLabelXForwardRevert);
+  const nyFR = useAppStore((s) => s.nokiaRsvpLabelYForwardRevert);
+  const nzFR = useAppStore((s) => s.nokiaRsvpLabelZForwardRevert);
+  const nxRR = useAppStore((s) => s.nokiaRsvpLabelXReverseRevert);
+  const nyRR = useAppStore((s) => s.nokiaRsvpLabelYReverseRevert);
+  const nzRR = useAppStore((s) => s.nokiaRsvpLabelZReverseRevert);
 
   const diff = useMemo(() => renderDiff(existing, generated), [existing, generated]);
 
@@ -46,6 +60,9 @@ export function DiffViewer() {
         reservations,
         nokia_cli_style: nokiaCliStyle as NokiaCliStyle,
         ...nokiaRsvpNamesForDirection("forward", nxF, nyF, nzF),
+        ...nokiaRsvpNamesForDirection("reverse", nxR, nyR, nzR),
+        ...nokiaRsvpNamesForRevertDirection("forward_revert", nxFR, nyFR, nzFR),
+        ...nokiaRsvpNamesForRevertDirection("reverse_revert", nxRR, nyRR, nzRR),
       });
       setGenerated(txt);
       toast.success("Generated config loaded");

@@ -61,7 +61,7 @@ async def export_monolithic(req: ExportRequest) -> Response:
 @router.post("/export/monolithic/section", response_class=Response)
 async def export_monolithic_section(
     req: ExportRequest,
-    section: Literal["forward", "reverse"] = Query(
+    section: Literal["forward", "reverse", "revert_forward", "revert_reverse"] = Query(
         ...,
         description="RSVP-TE monolithic block to render (client merges into full monolithic string)",
     ),

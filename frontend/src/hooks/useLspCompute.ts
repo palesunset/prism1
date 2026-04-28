@@ -6,6 +6,7 @@ import {
   exportClipboard,
   exportMonolithic,
   nokiaRsvpNamesForDirection,
+  nokiaRsvpNamesForRevertDirection,
 } from "../services/apiClient";
 import { useAppStore } from "../store/useAppStore";
 
@@ -35,12 +36,6 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
       enforceSrlgDiversity,
       enforceRoles,
       reservations,
-      nokiaRsvpLabelXForward,
-      nokiaRsvpLabelYForward,
-      nokiaRsvpLabelZForward,
-      nokiaRsvpLabelXReverse,
-      nokiaRsvpLabelYReverse,
-      nokiaRsvpLabelZReverse,
     } = s;
 
     if (!source || !destination) {
@@ -67,6 +62,7 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
         tradeoff_value: tv,
       });
       s.setLastCompute(res);
+      s.clearNokiaRsvpUserLabels();
       if (failedNeIds.length === 0 && failedLinkKeys.length === 0) {
         s.setBaselinePrimary(res.primary);
         s.setImpact(null);
@@ -83,8 +79,31 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
       }
       if (res.primary) {
         try {
-          const forwardNames = nokiaRsvpNamesForDirection("forward", nokiaRsvpLabelXForward, nokiaRsvpLabelYForward, nokiaRsvpLabelZForward);
-          const reverseNames = nokiaRsvpNamesForDirection("reverse", nokiaRsvpLabelXReverse, nokiaRsvpLabelYReverse, nokiaRsvpLabelZReverse);
+          const s2 = useAppStore.getState();
+          const forwardNames = nokiaRsvpNamesForDirection(
+            "forward",
+            s2.nokiaRsvpLabelXForward,
+            s2.nokiaRsvpLabelYForward,
+            s2.nokiaRsvpLabelZForward,
+          );
+          const reverseNames = nokiaRsvpNamesForDirection(
+            "reverse",
+            s2.nokiaRsvpLabelXReverse,
+            s2.nokiaRsvpLabelYReverse,
+            s2.nokiaRsvpLabelZReverse,
+          );
+          const forwardRevertNames = nokiaRsvpNamesForRevertDirection(
+            "forward_revert",
+            s2.nokiaRsvpLabelXForwardRevert,
+            s2.nokiaRsvpLabelYForwardRevert,
+            s2.nokiaRsvpLabelZForwardRevert,
+          );
+          const reverseRevertNames = nokiaRsvpNamesForRevertDirection(
+            "reverse_revert",
+            s2.nokiaRsvpLabelXReverseRevert,
+            s2.nokiaRsvpLabelYReverseRevert,
+            s2.nokiaRsvpLabelZReverseRevert,
+          );
           const txt = await exportMonolithic({
             lsp_name: lspName,
             mode,
@@ -95,6 +114,8 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
             nokia_cli_style: nokiaCliStyle,
             ...forwardNames,
             ...reverseNames,
+            ...forwardRevertNames,
+            ...reverseRevertNames,
           });
           s.setMonolithicConfig(txt);
         } catch (err) {

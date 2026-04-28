@@ -8,6 +8,8 @@ import zipfile
 from pathlib import Path
 from typing import Literal
 
+_NokiaLabelDir = Literal["forward", "reverse", "forward_revert", "reverse_revert"]
+
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.state import topology
@@ -115,26 +117,36 @@ def get_hops_without_source(
     return [{"ip": str(nes[ne_id].loopback_ipv4)} for ne_id in path_nodes[1:]]
 
 
-def _nokia_rsvp_label_ctx(
-    source_ne: NERecord, req: ExportRequest, direction: Literal["forward", "reverse"]
-) -> dict[str, str]:
+def _nokia_rsvp_label_ctx(source_ne: NERecord, req: ExportRequest, direction: _NokiaLabelDir) -> dict[str, str]:
     """Nokia RSVP-TE: user-overridable path prefix (X) and LSP names (Y, Z).
 
-    Forward and reverse blocks can be customized independently. For backward compatibility,
-    direction-specific values fall back to the legacy global fields, then the server defaults.
+    Forward / reverse / revert variants fall back to parent tab labels, then legacy globals.
     """
-    s = source_ne.ne_id
-
     if direction == "forward":
         x_in = req.nokia_path_name_prefix_forward or req.nokia_path_name_prefix
         y_in = req.nokia_lsp_name_y_forward or req.nokia_lsp_name_y
         z_in = req.nokia_lsp_name_z_forward or req.nokia_lsp_name_z
-    else:
+    elif direction == "forward_revert":
+        x_in = (
+            req.nokia_path_name_prefix_forward_revert
+            or req.nokia_path_name_prefix_forward
+            or req.nokia_path_name_prefix
+        )
+        y_in = req.nokia_lsp_name_y_forward_revert or req.nokia_lsp_name_y_forward or req.nokia_lsp_name_y
+        z_in = req.nokia_lsp_name_z_forward_revert or req.nokia_lsp_name_z_forward or req.nokia_lsp_name_z
+    elif direction == "reverse":
         x_in = req.nokia_path_name_prefix_reverse or req.nokia_path_name_prefix
         y_in = req.nokia_lsp_name_y_reverse or req.nokia_lsp_name_y
         z_in = req.nokia_lsp_name_z_reverse or req.nokia_lsp_name_z
+    else:
+        x_in = (
+            req.nokia_path_name_prefix_reverse_revert
+            or req.nokia_path_name_prefix_reverse
+            or req.nokia_path_name_prefix
+        )
+        y_in = req.nokia_lsp_name_y_reverse_revert or req.nokia_lsp_name_y_reverse or req.nokia_lsp_name_y
+        z_in = req.nokia_lsp_name_z_reverse_revert or req.nokia_lsp_name_z_reverse or req.nokia_lsp_name_z
 
-    x = (x_in or s).strip()
     # Defaults are placeholders; user is expected to override in UI.
     x = (x_in or "XXXXX").strip()
     y = (y_in or "YYYYY-SP:01").strip()
@@ -410,14 +422,72 @@ class ConfigGenerator:
         self,
         nes: dict[str, NERecord],
         req: ExportRequest,
-        section: Literal["forward", "reverse"],
+        section: Literal["forward", "reverse", "revert_forward", "revert_reverse"],
     ) -> str:
         """Single monolithic block for REST partial refresh (client merges into full string)."""
         if req.mode != Mode.rsvp_te:
             return ""
         if section == "forward":
             return self._render_rsvp_forward_text(nes, req)
-        return self._render_rsvp_reverse_text(nes, req)
+        if section == "reverse":
+            return self._render_rsvp_reverse_text(nes, req)
+        if section == "revert_forward":
+            return self._render_rsvp_revert_forward_text(nes, req)
+        return self._render_rsvp_revert_reverse_text(nes, req)
+
+    def _render_rsvp_revert_forward_text(
+        self,
+        nes: dict[str, NERecord],
+        req: ExportRequest,
+    ) -> str:
+        """Shutdown/disable RSVP objects on the forward (ingress) NE."""
+        p = req.primary
+        if not p.nodes:
+            return ""
+        source_ne = nes[p.nodes[0]]
+        dest_ne = nes[p.nodes[-1]]
+        forward_vendor = rsvp_template_family(source_ne)
+        ctx = self._build_rsvp_forward_context(source_ne, req.primary, req.backup, dest_ne, nes, req)
+        ctx["dest_vendor"] = str(dest_ne.vendor.value)
+        ctx.update(_nokia_rsvp_label_ctx(source_ne, req, "forward_revert"))
+        if forward_vendor == "huawei":
+            ctx["tunnel_id"] = tunnel_id_from_loopback_last_octet(str(dest_ne.loopback_ipv4))
+            return self._render("huawei_revert_rsvp_te.j2", **ctx)
+        tpl = (
+            "nokia_md_revert_rsvp_te.j2"
+            if req.nokia_cli_style == NokiaCliStyle.md
+            else "nokia_revert_rsvp_te.j2"
+        )
+        return self._render(tpl, **ctx)
+
+    def _render_rsvp_revert_reverse_text(
+        self,
+        nes: dict[str, NERecord],
+        req: ExportRequest,
+    ) -> str:
+        """Shutdown/disable RSVP objects on the reverse (egress) NE."""
+        p = req.primary
+        if not p.nodes:
+            return ""
+        source_ne = nes[p.nodes[0]]
+        dest_ne = nes[p.nodes[-1]]
+        links = topology.links if topology.links is not None else []
+        reverse_vendor = rsvp_template_family(dest_ne)
+        ctx = self._build_rsvp_reverse_context(dest_ne, req.primary, req.backup, source_ne, links, nes, req)
+        ctx["source_vendor"] = str(source_ne.vendor.value)
+        # Shared Nokia revert templates branch on `backup_hops` like forward revert; reverse ctx uses `reverse_*` keys.
+        rev_b = ctx.get("reverse_backup_hops")
+        ctx["backup_hops"] = list(rev_b) if rev_b else []
+        ctx.update(_nokia_rsvp_label_ctx(source_ne, req, "reverse_revert"))
+        if reverse_vendor == "huawei":
+            ctx["tunnel_id"] = tunnel_id_from_loopback_last_octet(str(source_ne.loopback_ipv4))
+            return self._render("huawei_revert_rsvp_te.j2", **ctx)
+        tpl = (
+            "nokia_md_revert_rsvp_te.j2"
+            if req.nokia_cli_style == NokiaCliStyle.md
+            else "nokia_revert_rsvp_te.j2"
+        )
+        return self._render(tpl, **ctx)
 
     def generate_monolithic_config(
         self,
@@ -469,12 +539,18 @@ class ConfigGenerator:
                 f"\n{fmt_nodes_with_ip(backup_rev)}\n\n"
             )
 
+        revert_forward = self._render_rsvp_revert_forward_text(nes, req)
+        revert_reverse = self._render_rsvp_revert_reverse_text(nes, req)
         return (
             details
             + "=== FORWARD PATH ===\n\n"
             + forward_text
             + "\n\n=== REVERSE PATH ===\n\n"
             + reverse_text
+            + "\n\n=== REVERT FORWARD ===\n\n"
+            + revert_forward
+            + "\n\n=== REVERT REVERSE ===\n\n"
+            + revert_reverse
         )
 
     def generate_ingress_combo(self, nes: dict[str, NERecord], req: ExportRequest) -> str:

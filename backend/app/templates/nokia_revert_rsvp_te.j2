@@ -1,0 +1,27 @@
+{# Nokia SR OS — revert (shutdown primary/secondary paths under LSP Y and Z) — classic CLI #}
+#
+/configure router mpls lsp {{ nokia_lsp_name_y }}
+primary {{ nokia_path_name_prefix }}-SP:01 shutdown
+{% if backup_hops %}
+secondary {{ nokia_path_name_prefix }}-SP:02 shutdown
+secondary dynamic shutdown
+{% endif %}
+exit
+
+{% if backup_hops %}
+/configure router mpls lsp {{ nokia_lsp_name_z }}
+{% if use_sp03 %}
+primary {{ nokia_path_name_prefix }}-SP:03 shutdown
+{% else %}
+primary {{ nokia_path_name_prefix }}-SP:02 shutdown
+{% endif %}
+{% if use_sp03 %}
+secondary {{ nokia_path_name_prefix }}-SP:02 shutdown
+{% else %}
+secondary {{ nokia_path_name_prefix }}-SP:01 shutdown
+{% endif %}
+secondary dynamic shutdown
+exit
+
+{% endif %}
+/admin save
