@@ -126,27 +126,9 @@ export function nokiaRsvpNamesForDirection(
   return o;
 }
 
-/** Revert-tab naming is independent from Forward path / Reverse path tabs. */
-export function nokiaRsvpNamesForRevertDirection(
-  direction: "forward_revert" | "reverse_revert",
-  x: string,
-  y: string,
-  z: string,
-): NokiaRsvpExportNames {
-  const o: NokiaRsvpExportNames = {};
-  const xt = x.trim();
-  const yt = y.trim();
-  const zt = z.trim();
-  if (direction === "forward_revert") {
-    if (xt) o.nokia_path_name_prefix_forward_revert = xt;
-    if (yt) o.nokia_lsp_name_y_forward_revert = yt;
-    if (zt) o.nokia_lsp_name_z_forward_revert = zt;
-    return o;
-  }
-  if (xt) o.nokia_path_name_prefix_reverse_revert = xt;
-  if (yt) o.nokia_lsp_name_y_reverse_revert = yt;
-  if (zt) o.nokia_lsp_name_z_reverse_revert = zt;
-  return o;
+/** Revert sections use Forward / Reverse tab labels via server fallback — do not send separate revert overrides. */
+export function nokiaRsvpNamesForRevertDirection(): NokiaRsvpExportNames {
+  return {};
 }
 
 export type ExportMonolithicPayload = {

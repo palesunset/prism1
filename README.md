@@ -84,11 +84,26 @@ The executable is written to `dist/prism.exe` (Windows). First launch may be a f
 
 ## Tests
 
+### Backend
+
 ```powershell
 cd backend
 $env:PYTHONPATH = "."
 python -m pytest
 ```
+
+Coverage is enforced for CSPF and role-validation modules (see `backend/pytest.ini`).
+
+### Frontend
+
+```powershell
+cd frontend
+npm run lint
+npm run test
+npm run build
+```
+
+Vitest covers the NE picker combobox (`NeSearchInput`, `nePicker`) and project-file validation.
 
 ## API overview
 

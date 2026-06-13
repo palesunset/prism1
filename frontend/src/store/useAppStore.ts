@@ -83,13 +83,17 @@ interface AppState {
   nokiaRsvpLabelXReverse: string;
   nokiaRsvpLabelYReverse: string;
   nokiaRsvpLabelZReverse: string;
-  /** Nokia RSVP-TE (Forward Path Revert tab): independent from Forward path. */
+  /** @deprecated Revert tabs inherit Forward path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelXForwardRevert: string;
+  /** @deprecated Revert tabs inherit Forward path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelYForwardRevert: string;
+  /** @deprecated Revert tabs inherit Forward path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelZForwardRevert: string;
-  /** Nokia RSVP-TE (Reverse Path Revert tab): independent from Reverse path. */
+  /** @deprecated Revert tabs inherit Reverse path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelXReverseRevert: string;
+  /** @deprecated Revert tabs inherit Reverse path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelYReverseRevert: string;
+  /** @deprecated Revert tabs inherit Reverse path labels; kept for persisted project compatibility. */
   nokiaRsvpLabelZReverseRevert: string;
   timeHour: number;
   /** When false, backup trade-off slider is ignored and 0% extra primary latency is used. */
@@ -166,6 +170,8 @@ interface AppState {
   setMapLabelsEnabled: (v: boolean) => void;
   setReservations: (r: LspReservation[]) => void;
   setLastCompute: (c: ComputeResponse | null) => void;
+  /** Clear displayed paths/config without running compute (e.g. after endpoint change). */
+  clearLspComputeState: () => void;
   setBaselinePrimary: (p: PathResult | null) => void;
   setImpact: (i: ImpactDiff | null) => void;
   failNe: (id: string) => void;
@@ -348,6 +354,14 @@ export const useAppStore = create<AppState>()(
       setMapLabelsEnabled: (v) => set({ mapLabelsEnabled: v }),
       setReservations: (r) => set({ reservations: r }),
       setLastCompute: (c) => set({ lastCompute: c }),
+      clearLspComputeState: () =>
+        set({
+          lastCompute: null,
+          monolithicConfig: null,
+          baselinePrimary: null,
+          impact: null,
+          configOverlayOpen: false,
+        }),
       setBaselinePrimary: (p) => set({ baselinePrimary: p }),
       setImpact: (i) => set({ impact: i }),
       failNe: (id) =>

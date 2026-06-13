@@ -6,9 +6,9 @@ import {
   exportMonolithic,
   exportMonolithicSection,
   nokiaRsvpNamesForDirection,
-  nokiaRsvpNamesForRevertDirection,
 } from "../services/apiClient";
 import { useAppStore } from "../store/useAppStore";
+import { isNokiaRsvpBlockText } from "../utils/isNokiaRsvpBlockText";
 import { replaceMonolithicSection, splitMonolithicConfig } from "../utils/splitMonolithicConfig";
 
 type ConfigTab = "pathDetails" | "forward" | "reverse" | "revertForward" | "revertReverse";
@@ -29,24 +29,12 @@ export function ConfigOverlay() {
   const nxR = useAppStore((s) => s.nokiaRsvpLabelXReverse);
   const nyR = useAppStore((s) => s.nokiaRsvpLabelYReverse);
   const nzR = useAppStore((s) => s.nokiaRsvpLabelZReverse);
-  const nxFR = useAppStore((s) => s.nokiaRsvpLabelXForwardRevert);
-  const nyFR = useAppStore((s) => s.nokiaRsvpLabelYForwardRevert);
-  const nzFR = useAppStore((s) => s.nokiaRsvpLabelZForwardRevert);
-  const nxRR = useAppStore((s) => s.nokiaRsvpLabelXReverseRevert);
-  const nyRR = useAppStore((s) => s.nokiaRsvpLabelYReverseRevert);
-  const nzRR = useAppStore((s) => s.nokiaRsvpLabelZReverseRevert);
   const setNxF = useAppStore((s) => s.setNokiaRsvpLabelXForward);
   const setNyF = useAppStore((s) => s.setNokiaRsvpLabelYForward);
   const setNzF = useAppStore((s) => s.setNokiaRsvpLabelZForward);
   const setNxR = useAppStore((s) => s.setNokiaRsvpLabelXReverse);
   const setNyR = useAppStore((s) => s.setNokiaRsvpLabelYReverse);
   const setNzR = useAppStore((s) => s.setNokiaRsvpLabelZReverse);
-  const setNxFR = useAppStore((s) => s.setNokiaRsvpLabelXForwardRevert);
-  const setNyFR = useAppStore((s) => s.setNokiaRsvpLabelYForwardRevert);
-  const setNzFR = useAppStore((s) => s.setNokiaRsvpLabelZForwardRevert);
-  const setNxRR = useAppStore((s) => s.setNokiaRsvpLabelXReverseRevert);
-  const setNyRR = useAppStore((s) => s.setNokiaRsvpLabelYReverseRevert);
-  const setNzRR = useAppStore((s) => s.setNokiaRsvpLabelZReverseRevert);
   const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
 
   const split = useMemo(
@@ -75,25 +63,28 @@ export function ConfigOverlay() {
     return split.revertReverse;
   }, [split, activeTab]);
 
-  /** User Define Configuration (X/Y/Z) on path + revert tabs; show whenever LSP is computed (do not wait on split parse). */
-  const showNokiaRsvpNameFields =
-    (mode === "rsvp_te" || mode === "sr_mpls") &&
-    lastCompute?.primary != null &&
-    (activeTab === "forward" ||
-      activeTab === "reverse" ||
-      activeTab === "revertForward" ||
-      activeTab === "revertReverse");
+  /** X/Y/Z naming applies only to Nokia RSVP-TE forward/reverse blocks (not Huawei or SR-MPLS). */
+  const isNokiaRsvpActiveTab = useMemo(() => {
+    if (mode !== "rsvp_te" || !split?.hasThreeWaySplit) {
+      return false;
+    }
+    if (activeTab === "forward") {
+      return isNokiaRsvpBlockText(split.forward);
+    }
+    if (activeTab === "reverse") {
+      return isNokiaRsvpBlockText(split.reverse);
+    }
+    return false;
+  }, [mode, split, activeTab]);
+
+  const showNokiaRsvpNameFields = lastCompute?.primary != null && isNokiaRsvpActiveTab;
 
   const userDefineScopeHint =
-    activeTab === "revertForward"
-      ? "These values apply to Forward Path (Revert) only. Updates change that section."
-      : activeTab === "revertReverse"
-        ? "These values apply to Reverse Path (Revert) only. Updates change that section."
-        : activeTab === "forward"
-          ? "These values apply to Forward path only. Updates change that section."
-          : activeTab === "reverse"
-            ? "These values apply to Reverse path only. Updates change that section."
-            : null;
+    activeTab === "forward"
+      ? "Nokia configuration only. These values apply to Forward path and Forward Path (Revert). Updates change those sections."
+      : activeTab === "reverse"
+        ? "Nokia configuration only. These values apply to Reverse path and Reverse Path (Revert). Updates change those sections."
+        : null;
 
   /** Use getState() for X/Y/Z. Full: whole monolithic. Forward/Reverse: only that block (Path details unchanged). */
   const applyMonolithicRefresh = useCallback(
@@ -114,18 +105,6 @@ export function ConfigOverlay() {
         s.nokiaRsvpLabelYReverse,
         s.nokiaRsvpLabelZReverse,
       );
-      const forwardRevertNames = nokiaRsvpNamesForRevertDirection(
-        "forward_revert",
-        s.nokiaRsvpLabelXForwardRevert,
-        s.nokiaRsvpLabelYForwardRevert,
-        s.nokiaRsvpLabelZForwardRevert,
-      );
-      const reverseRevertNames = nokiaRsvpNamesForRevertDirection(
-        "reverse_revert",
-        s.nokiaRsvpLabelXReverseRevert,
-        s.nokiaRsvpLabelYReverseRevert,
-        s.nokiaRsvpLabelZReverseRevert,
-      );
       const basePayload = {
         lsp_name: s.lspName,
         mode: s.mode,
@@ -138,8 +117,6 @@ export function ConfigOverlay() {
       const allNokiaNames = {
         ...forwardNames,
         ...reverseNames,
-        ...forwardRevertNames,
-        ...reverseRevertNames,
       };
       const fullExport = async () => {
         const txt = await exportMonolithic({ ...basePayload, ...allNokiaNames });
@@ -164,17 +141,34 @@ export function ConfigOverlay() {
         return;
       }
       const sectionNames =
-        scope === "forward"
-          ? forwardNames
-          : scope === "revert_forward"
-            ? forwardRevertNames
-            : scope === "reverse"
-              ? reverseNames
-              : reverseRevertNames;
+        scope === "forward" || scope === "revert_forward" ? forwardNames : reverseNames;
       const mergedPayload = {
         ...basePayload,
         ...sectionNames,
       };
+      const patch = async (
+        section: "forward" | "reverse" | "revert_forward" | "revert_reverse",
+        current: string,
+      ) => {
+        const block = await exportMonolithicSection(section, mergedPayload);
+        return replaceMonolithicSection(current, section, block);
+      };
+      if (scope === "forward") {
+        let next = await patch("forward", monolithic);
+        if (parsed.hasRevertSplit) {
+          next = await patch("revert_forward", next);
+        }
+        useAppStore.getState().setMonolithicConfig(next);
+        return;
+      }
+      if (scope === "reverse") {
+        let next = await patch("reverse", monolithic);
+        if (parsed.hasRevertSplit) {
+          next = await patch("revert_reverse", next);
+        }
+        useAppStore.getState().setMonolithicConfig(next);
+        return;
+      }
       const block = await exportMonolithicSection(scope, mergedPayload);
       useAppStore.getState().setMonolithicConfig(replaceMonolithicSection(monolithic, scope, block));
     },
@@ -229,23 +223,20 @@ export function ConfigOverlay() {
 
   /** Labels that affect only the current tab’s section (avoid refreshing revert forward when only reverse X/Y/Z change). */
   const labelDepsForActiveTab = useMemo(() => {
-    if (activeTab === "pathDetails") {
-      return `${nxF}\0${nyF}\0${nzF}\0${nxR}\0${nyR}\0${nzR}\0${nxFR}\0${nyFR}\0${nzFR}\0${nxRR}\0${nyRR}\0${nzRR}`;
+    if (!showNokiaRsvpNameFields && (activeTab === "forward" || activeTab === "reverse")) {
+      return "";
     }
-    if (activeTab === "forward") {
+    if (activeTab === "pathDetails") {
+      return `${nxF}\0${nyF}\0${nzF}\0${nxR}\0${nyR}\0${nzR}`;
+    }
+    if (activeTab === "forward" || activeTab === "revertForward") {
       return `${nxF}\0${nyF}\0${nzF}`;
     }
-    if (activeTab === "revertForward") {
-      return `${nxFR}\0${nyFR}\0${nzFR}`;
-    }
-    if (activeTab === "reverse") {
+    if (activeTab === "reverse" || activeTab === "revertReverse") {
       return `${nxR}\0${nyR}\0${nzR}`;
     }
-    if (activeTab === "revertReverse") {
-      return `${nxRR}\0${nyRR}\0${nzRR}`;
-    }
     return "";
-  }, [activeTab, nxF, nyF, nzF, nxR, nyR, nzR, nxFR, nyFR, nzFR, nxRR, nyRR, nzRR]);
+  }, [activeTab, nxF, nyF, nzF, nxR, nyR, nzR, showNokiaRsvpNameFields]);
 
   /** Debounced preview: Path details = full; other tabs = that section only (forward vs reverse naming scoped per tab). */
   useEffect(() => {
@@ -293,13 +284,6 @@ export function ConfigOverlay() {
     setX = setNxF;
     setY = setNyF;
     setZ = setNzF;
-  } else if (activeTab === "revertForward") {
-    xVal = nxFR;
-    yVal = nyFR;
-    zVal = nzFR;
-    setX = setNxFR;
-    setY = setNyFR;
-    setZ = setNzFR;
   } else if (activeTab === "reverse") {
     xVal = nxR;
     yVal = nyR;
@@ -307,13 +291,6 @@ export function ConfigOverlay() {
     setX = setNxR;
     setY = setNyR;
     setZ = setNzR;
-  } else if (activeTab === "revertReverse") {
-    xVal = nxRR;
-    yVal = nyRR;
-    zVal = nzRR;
-    setX = setNxRR;
-    setY = setNyRR;
-    setZ = setNzRR;
   }
 
   const copyTabLabel: Record<ConfigTab, string> = {
@@ -343,35 +320,27 @@ export function ConfigOverlay() {
 
   const handleUpdateNokiaConfig = async () => {
     const s = useAppStore.getState();
-    if ((s.mode !== "rsvp_te" && s.mode !== "sr_mpls") || !s.lastCompute?.primary) {
-      toast.error("Compute an LSP first (RSVP-TE or SR-MPLS).");
+    if (s.mode !== "rsvp_te" || !s.lastCompute?.primary) {
+      toast.error("Compute an RSVP-TE LSP first.");
       return;
     }
-    const scope: "forward" | "reverse" | "revert_forward" | "revert_reverse" | null =
-      activeTab === "forward"
-        ? "forward"
-        : activeTab === "reverse"
-          ? "reverse"
-          : activeTab === "revertForward"
-            ? "revert_forward"
-            : activeTab === "revertReverse"
-              ? "revert_reverse"
-              : null;
+    if (!isNokiaRsvpActiveTab) {
+      toast.error("X/Y/Z naming applies to Nokia RSVP-TE configuration only.");
+      return;
+    }
+    const scope: "forward" | "reverse" | null =
+      activeTab === "forward" ? "forward" : activeTab === "reverse" ? "reverse" : null;
     if (scope == null) {
-      toast.error("Switch to a Forward, Reverse, or Revert tab to update naming.");
+      toast.error("Switch to Forward path or Reverse path to update naming.");
       return;
     }
     setUpdating(true);
     try {
       await applyMonolithicRefresh(scope);
       toast.success(
-        scope === "revert_forward"
-          ? "Forward Path (Revert) updated"
-          : scope === "revert_reverse"
-            ? "Reverse Path (Revert) updated"
-            : scope === "forward"
-              ? "Forward path updated"
-              : "Reverse path updated",
+        scope === "forward"
+          ? "Forward path and Forward Path (Revert) updated"
+          : "Reverse path and Reverse Path (Revert) updated",
       );
     } catch (e) {
       toast.error(errorDetail(e));
@@ -453,7 +422,7 @@ export function ConfigOverlay() {
           {showNokiaRsvpNameFields ? (
             <div className="shrink-0 border-b border-cyan-900/30 bg-cyan-950/20 px-3 py-2.5 sm:px-4">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200/90">
-                User Define Configuration
+                Nokia User Define Configuration
               </div>
               {userDefineScopeHint ? (
                 <p className="mt-1 text-[10px] leading-snug text-slate-500">{userDefineScopeHint}</p>
@@ -503,7 +472,9 @@ export function ConfigOverlay() {
                   title={
                     split == null || openLoading
                       ? "Wait for configuration to finish loading"
-                      : "Apply X/Y/Z to this tab’s section only"
+                      : activeTab === "forward"
+                        ? "Apply X/Y/Z to Forward path and Forward Path (Revert)"
+                        : "Apply X/Y/Z to Reverse path and Reverse Path (Revert)"
                   }
                 >
                   {updating ? "Updating…" : "Update configuration"}
@@ -513,15 +484,15 @@ export function ConfigOverlay() {
           ) : null}
           <div className="config-output-scroll min-h-0 flex-1 overflow-auto p-4">
             {openLoading && !bodyReady ? (
-              <div className="whitespace-pre-wrap rounded-lg bg-[#0A0F1C] p-4 font-mono text-sm text-slate-400">
+              <div className="whitespace-pre-wrap rounded-lg bg-prism-hlBg p-4 font-mono text-sm text-slate-400">
                 Loading the latest configuration from the server…
               </div>
             ) : showEmptyState ? (
-              <div className="whitespace-pre-wrap rounded-lg bg-[#0A0F1C] p-4 text-sm text-slate-300">{emptyHint}</div>
+              <div className="whitespace-pre-wrap rounded-lg bg-prism-hlBg p-4 text-sm text-slate-300">{emptyHint}</div>
             ) : (
               <pre
                 className={[
-                  "whitespace-pre-wrap rounded-lg bg-[#0A0F1C] p-4 font-mono text-sm",
+                  "whitespace-pre-wrap rounded-lg bg-prism-hlBg p-4 font-mono text-sm",
                   split != null &&
                     ((!split.hasThreeWaySplit && activeTab !== "pathDetails") ||
                       (!split.hasRevertSplit &&

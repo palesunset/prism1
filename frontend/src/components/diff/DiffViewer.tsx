@@ -5,7 +5,6 @@ import {
   errorDetail,
   exportClipboard,
   nokiaRsvpNamesForDirection,
-  nokiaRsvpNamesForRevertDirection,
 } from "../../services/apiClient";
 import { useAppStore } from "../../store/useAppStore";
 import type { NokiaCliStyle } from "../../types";
@@ -36,12 +35,6 @@ export function DiffViewer() {
   const nxR = useAppStore((s) => s.nokiaRsvpLabelXReverse);
   const nyR = useAppStore((s) => s.nokiaRsvpLabelYReverse);
   const nzR = useAppStore((s) => s.nokiaRsvpLabelZReverse);
-  const nxFR = useAppStore((s) => s.nokiaRsvpLabelXForwardRevert);
-  const nyFR = useAppStore((s) => s.nokiaRsvpLabelYForwardRevert);
-  const nzFR = useAppStore((s) => s.nokiaRsvpLabelZForwardRevert);
-  const nxRR = useAppStore((s) => s.nokiaRsvpLabelXReverseRevert);
-  const nyRR = useAppStore((s) => s.nokiaRsvpLabelYReverseRevert);
-  const nzRR = useAppStore((s) => s.nokiaRsvpLabelZReverseRevert);
 
   const diff = useMemo(() => renderDiff(existing, generated), [existing, generated]);
 
@@ -61,8 +54,6 @@ export function DiffViewer() {
         nokia_cli_style: nokiaCliStyle as NokiaCliStyle,
         ...nokiaRsvpNamesForDirection("forward", nxF, nyF, nzF),
         ...nokiaRsvpNamesForDirection("reverse", nxR, nyR, nzR),
-        ...nokiaRsvpNamesForRevertDirection("forward_revert", nxFR, nyFR, nzFR),
-        ...nokiaRsvpNamesForRevertDirection("reverse_revert", nxRR, nyRR, nzRR),
       });
       setGenerated(txt);
       toast.success("Generated config loaded");
@@ -104,7 +95,7 @@ export function DiffViewer() {
               value={existing}
               onChange={(e) => setExisting(e.target.value)}
               rows={8}
-              className="w-full rounded border border-slate-700 bg-[#0A0F1C] p-2 font-mono text-[11px] text-slate-100"
+              className="w-full rounded border border-slate-600 bg-prism-hlBg p-2 font-mono text-[11px] text-slate-100"
             />
           </label>
           <label className="block">
@@ -113,12 +104,12 @@ export function DiffViewer() {
               value={generated}
               onChange={(e) => setGenerated(e.target.value)}
               rows={8}
-              className="w-full rounded border border-slate-700 bg-[#0A0F1C] p-2 font-mono text-[11px] text-slate-100"
+              className="w-full rounded border border-slate-600 bg-prism-hlBg p-2 font-mono text-[11px] text-slate-100"
             />
           </label>
         </div>
         {(existing || generated) && (
-          <div className="max-h-64 overflow-auto rounded border border-slate-800 bg-[#0A0F1C] p-2 font-mono text-[11px]">
+          <div className="max-h-64 overflow-auto rounded border border-slate-600 bg-prism-hlBg p-2 font-mono text-[11px]">
             {diff.map((d, idx) => (
               <pre
                 key={idx}

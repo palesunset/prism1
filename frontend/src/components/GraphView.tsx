@@ -1,7 +1,8 @@
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import type { FailedTrafficElement, PathResult, SimulationResult, TopologyPayload } from "../types";
+import type { PathResult, SimulationResult, TopologyPayload } from "../types";
+import { graphColors } from "../theme/odysseus";
 import { baseStylesheet } from "../utils/layoutConfig";
 import { useAppStore } from "../store/useAppStore";
 import { loadLayoutPositions, saveLayoutPositions } from "../utils/layoutCache";
@@ -48,11 +49,11 @@ function tryParseEdgeId(id: string): { u: string; v: string; k: number } | null 
 }
 
 function utilColor(pct: number): string {
-  if (!Number.isFinite(pct)) return "#334155";
-  if (pct >= 80) return "#ef4444";
-  if (pct >= 50) return "#f97316";
-  if (pct >= 20) return "#eab308";
-  return "#22c55e";
+  if (!Number.isFinite(pct)) return graphColors.heatmapIdle;
+  if (pct >= 80) return graphColors.heatmapCritical;
+  if (pct >= 50) return graphColors.heatmapHigh;
+  if (pct >= 20) return graphColors.heatmapMid;
+  return graphColors.heatmapLow;
 }
 
 function buildElements(topology: TopologyPayload): ElementDefinition[] {
@@ -443,13 +444,13 @@ export const GraphView = forwardRef<
           const cap = Math.max(1, Number(e.data("bandwidth_mbps") ?? 1));
           const util = Math.min(1, used / cap);
           e.data("utilization", util);
-          let color = "#22c55e";
+          let color = graphColors.heatmapLow;
           if (util > 0.8) {
-            color = "#ef4444";
+            color = graphColors.heatmapCritical;
           } else if (util > 0.5) {
-            color = "#f97316";
+            color = graphColors.heatmapHigh;
           } else if (util > 0.2) {
-            color = "#eab308";
+            color = graphColors.heatmapMid;
           }
           e.style("line-color", color);
           e.style("opacity", 0.95);
@@ -758,6 +759,7 @@ export const GraphView = forwardRef<
     workspaceMode,
     trafficFailedKeySet,
     activeTrafficFailed,
+    trafficFailed,
     trafficHeatmapEnabled,
     activeTrafficResult,
     scenarioPathPreview,
@@ -797,9 +799,9 @@ export const GraphView = forwardRef<
   }, [props.primary]);
 
   return (
-    <div className="relative h-full w-full bg-[#080C14]">
+    <div className="relative h-full w-full bg-prism-bg">
       {!props.topology ? (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-[#0A0F1C] p-8 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-prism-hlBg p-8 text-center">
           <div className="text-lg font-semibold text-slate-100">No topology loaded</div>
           <p className="max-w-md text-sm text-slate-400">
             Drag <span className="text-slate-200">nes.csv</span> and <span className="text-slate-200">links.csv</span> here, or
@@ -819,12 +821,12 @@ export const GraphView = forwardRef<
         </div>
       ) : null}
       {props.busy ? (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-[#0A0F1C]/70 backdrop-blur-sm">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-prism-hlBg/70 backdrop-blur-sm">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
           <div className="text-sm text-slate-200">Working…</div>
         </div>
       ) : null}
-      <div ref={containerRef} className="absolute inset-0 bg-[#080C14]" />
+      <div ref={containerRef} className="absolute inset-0 bg-prism-bg" />
       {tooltip ? (
         <div
           className="cy-tooltip fixed"

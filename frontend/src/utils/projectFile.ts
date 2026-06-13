@@ -1,6 +1,20 @@
 import type { SavedPositions } from "./layoutCache";
-import type { Mode, NokiaCliStyle, PathResult, TopologyPayload } from "../types";
+import type { Mode, NokiaCliStyle, TopologyPayload } from "../types";
 import type { FlexAlgoDefinition, SavedLsp } from "../store/useAppStore";
+
+/** Pick saved LSP paths to restore after opening a project file. */
+export function findRestoredLsp(
+  lsps: SavedLsp[],
+  lspName: string,
+  source: string,
+  destination: string,
+): SavedLsp | null {
+  return (
+    lsps.find((l) => l.name === lspName && l.primary) ??
+    lsps.find((l) => l.source === source && l.destination === destination && l.primary) ??
+    null
+  );
+}
 
 export interface ProjectUiState {
   source: string;
@@ -70,7 +84,19 @@ export function isProjectFileV1(x: unknown): x is ProjectFileV1 {
     return false;
   }
   const o = x as Record<string, unknown>;
-  return o.version === 1 && typeof o.exportedAt === "string" && typeof o.topology === "object";
+  if (o.version !== 1 || typeof o.exportedAt !== "string" || typeof o.topology !== "object" || o.topology === null) {
+    return false;
+  }
+  if (typeof o.ui !== "object" || o.ui === null) {
+    return false;
+  }
+  const ui = o.ui as Record<string, unknown>;
+  return (
+    typeof ui.source === "string" &&
+    typeof ui.destination === "string" &&
+    typeof ui.mode === "string" &&
+    typeof ui.lspName === "string"
+  );
 }
 
 export function topologyToProjectPayload(topology: TopologyPayload): {

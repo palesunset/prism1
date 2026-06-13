@@ -80,14 +80,6 @@ export function TrafficPanel(props: { globalBusy: boolean; onGlobalLoading: (v: 
     return { diverted, flowCount: flows.length, disconnected: disconnected.length, congested };
   }, [failureResult]);
 
-  const scenarioSummary = useMemo(() => {
-    const flows = scenarioResult?.flows ?? [];
-    const disconnected = scenarioResult?.disconnected_flows ?? [];
-    const diverted = flows.reduce((a, f) => a + (Number(f.volume_mbps) || 0), 0);
-    const congested = scenarioResult?.congested_links?.length ?? 0;
-    return { diverted, flowCount: flows.length, disconnected: disconnected.length, congested };
-  }, [scenarioResult]);
-
   async function runFailure(nextManual?: ManualRedistribution[]) {
     props.onGlobalLoading(true);
     try {

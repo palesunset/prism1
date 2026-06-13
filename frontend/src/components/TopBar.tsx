@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { PrismLogo } from "./PrismLogo";
+import { NeSearchInput } from "./NeSearchInput";
 import type { Mode } from "../types";
+import { canComputeLsp } from "../utils/nePicker";
 import { useAppStore } from "../store/useAppStore";
 
 const MODES: { id: Mode; short: string; label: string }[] = [
@@ -8,35 +10,6 @@ const MODES: { id: Mode; short: string; label: string }[] = [
   { id: "sr_mpls", short: "SR", label: "SR-MPLS" },
   { id: "srv6", short: "v6", label: "SRv6" },
 ];
-
-function NeSearchInput(props: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  neIds: string[];
-}) {
-  const listId = `${props.id}-list`;
-  return (
-    <div className="min-w-0 flex-1">
-      <input
-        id={props.id}
-        type="search"
-        list={listId}
-        autoComplete="off"
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        placeholder={props.placeholder}
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
-      />
-      <datalist id={listId}>
-        {props.neIds.map((id) => (
-          <option key={id} value={id} />
-        ))}
-      </datalist>
-    </div>
-  );
-}
 
 export function TopBar(props: { onCompute: () => void; busy: boolean }) {
   const neIds = useAppStore((s) => s.neIds);
@@ -46,10 +19,35 @@ export function TopBar(props: { onCompute: () => void; busy: boolean }) {
   const destination = useAppStore((s) => s.destination);
   const setSource = useAppStore((s) => s.setSource);
   const setDestination = useAppStore((s) => s.setDestination);
+  const clearLspComputeState = useAppStore((s) => s.clearLspComputeState);
+  const clearFailures = useAppStore((s) => s.clearFailures);
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
 
-  const canCompute = useMemo(() => Boolean(source && destination), [source, destination]);
+  const onSourceChange = (v: string) => {
+    if (v !== source) {
+      clearLspComputeState();
+      clearFailures();
+    }
+    setSource(v);
+  };
+
+  const onDestinationChange = (v: string) => {
+    if (v !== destination) {
+      clearLspComputeState();
+      clearFailures();
+    }
+    setDestination(v);
+  };
+
+  const onModeChange = (next: Mode) => {
+    if (next !== mode) {
+      clearLspComputeState();
+    }
+    setMode(next);
+  };
+
+  const canCompute = useMemo(() => canComputeLsp(source, destination), [source, destination]);
 
   return (
     <header className="z-50 flex min-h-16 shrink-0 items-center gap-4 border-b border-white/5 bg-gray-950/80 px-4 py-2.5 backdrop-blur-md">
@@ -70,7 +68,7 @@ export function TopBar(props: { onCompute: () => void; busy: boolean }) {
             <NeSearchInput
               id="ne-search-source"
               value={source}
-              onChange={setSource}
+              onChange={onSourceChange}
               placeholder="Source NE"
               neIds={neIds}
             />
@@ -78,7 +76,7 @@ export function TopBar(props: { onCompute: () => void; busy: boolean }) {
             <NeSearchInput
               id="ne-search-dest"
               value={destination}
-              onChange={setDestination}
+              onChange={onDestinationChange}
               placeholder="Destination NE"
               neIds={neIds}
             />
@@ -114,7 +112,7 @@ export function TopBar(props: { onCompute: () => void; busy: boolean }) {
                   key={m.id}
                   type="button"
                   title={m.label}
-                  onClick={() => setMode(m.id)}
+                  onClick={() => onModeChange(m.id)}
                   className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
                     mode === m.id ? "bg-cyan-600 text-white" : "text-slate-300 hover:text-white"
                   }`}

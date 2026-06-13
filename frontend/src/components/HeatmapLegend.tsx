@@ -1,3 +1,5 @@
+import { graphColors } from "../theme/odysseus";
+
 export function HeatmapLegend() {
   return (
     <div className="absolute bottom-4 right-4 z-10 rounded-lg bg-black/60 p-2 text-xs text-white/80 backdrop-blur-sm">
@@ -6,7 +8,7 @@ export function HeatmapLegend() {
         <div
           className="h-full w-full"
           style={{
-            background: "linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 80%, #ef4444 100%)",
+            background: `linear-gradient(90deg, ${graphColors.heatmapLow} 0%, ${graphColors.heatmapMid} 50%, ${graphColors.heatmapCritical} 80%, ${graphColors.heatmapCritical} 100%)`,
           }}
         />
       </div>

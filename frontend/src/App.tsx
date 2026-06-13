@@ -4,7 +4,8 @@ import { useLspCompute } from "./hooks/useLspCompute";
 import { GraphView, type GraphViewHandle } from "./components/GraphView";
 import { useAppStore } from "./store/useAppStore";
 import { loadLayoutPositions, saveLayoutPositions } from "./utils/layoutCache";
-import { downloadJson, isProjectFileV1, readTextFile, topologyToProjectPayload, type ProjectFileV1 } from "./utils/projectFile";
+import { downloadJson, findRestoredLsp, isProjectFileV1, readTextFile, topologyToProjectPayload, type ProjectFileV1 } from "./utils/projectFile";
+import { canComputeLsp } from "./utils/nePicker";
 import { fetchTopology, importTopology, openProjectTopology, errorDetail } from "./services/apiClient";
 import type { TopologyPayload } from "./types";
 import { TopBar } from "./components/TopBar";
@@ -23,25 +24,11 @@ export default function App() {
 
   const lastCompute = useAppStore((s) => s.lastCompute);
   const setNeIds = useAppStore((s) => s.setNeIds);
-  const source = useAppStore((s) => s.source);
-  const destination = useAppStore((s) => s.destination);
-  const requiredBw = useAppStore((s) => s.requiredBwMbps);
-  const maxHops = useAppStore((s) => s.maxHops);
-  const mode = useAppStore((s) => s.mode);
-  const flexAlgoId = useAppStore((s) => s.flexAlgoId);
-  const flexAlgos = useAppStore((s) => s.flexAlgos);
-  const enforceSrlgDiversity = useAppStore((s) => s.enforceSrlgDiversity);
-  const enforceRoles = useAppStore((s) => s.enforceRoles);
-  const tradeoffMode = useAppStore((s) => s.tradeoffMode);
   const tradeoffValue = useAppStore((s) => s.tradeoffValue);
-  const backupTradeoffEnabled = useAppStore((s) => s.backupTradeoffEnabled);
-  const timeHour = useAppStore((s) => s.timeHour);
-  const failedNeIds = useAppStore((s) => s.failedNeIds);
-  const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
   const setLastImportSummary = useAppStore((s) => s.setLastImportSummary);
-  const nokiaCliStyle = useAppStore((s) => s.nokiaCliStyle);
   const lspName = useAppStore((s) => s.lspName);
   const lsps = useAppStore((s) => s.lsps);
+  const flexAlgos = useAppStore((s) => s.flexAlgos);
   const setReservations = useAppStore((s) => s.setReservations);
   const setMode = useAppStore((s) => s.setMode);
   const setRequiredBw = useAppStore((s) => s.setRequiredBw);
@@ -60,8 +47,6 @@ export default function App() {
   const setNokiaRsvpLabelXReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelXReverseRevert);
   const setNokiaRsvpLabelYReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelYReverseRevert);
   const setNokiaRsvpLabelZReverseRevert = useAppStore((s) => s.setNokiaRsvpLabelZReverseRevert);
-  const setSource = useAppStore((s) => s.setSource);
-  const setDestination = useAppStore((s) => s.setDestination);
   const setFlexAlgoId = useAppStore((s) => s.setFlexAlgoId);
   const upsertFlexAlgo = useAppStore((s) => s.upsertFlexAlgo);
   const setEnforceSrlgDiversity = useAppStore((s) => s.setEnforceSrlgDiversity);
@@ -72,6 +57,8 @@ export default function App() {
   const setFloatingPanelOpen = useAppStore((s) => s.setFloatingPanelOpen);
   const setActivePanelTab = useAppStore((s) => s.setActivePanelTab);
   const heatmapEnabled = useAppStore((s) => s.heatmapEnabled);
+  const failedNeIds = useAppStore((s) => s.failedNeIds);
+  const failedLinkKeys = useAppStore((s) => s.failedLinkKeys);
   const { runCompute } = useLspCompute({
     onGlobalLoading: setGlobalBusy,
   });
@@ -87,13 +74,14 @@ export default function App() {
     setNeIds(ids);
     const st = useAppStore.getState();
     st.clearFailures();
+    st.clearLspComputeState();
     const inGraph = new Set(ids);
     if (ids.length === 0) {
       st.setSource("");
       st.setDestination("");
       return;
     }
-    let nextSource = inGraph.has(st.source) && st.source ? st.source : ids[0]!;
+    const nextSource = inGraph.has(st.source) && st.source ? st.source : ids[0]!;
     let nextDest =
       inGraph.has(st.destination) && st.destination && st.destination !== nextSource
         ? st.destination
@@ -104,6 +92,12 @@ export default function App() {
     st.setSource(nextSource);
     st.setDestination(nextDest);
   }, [setNeIds]);
+
+  useEffect(() => {
+    void reloadTopology().catch(() => {
+      /* Backend may be offline on first launch; import/open will load topology later. */
+    });
+  }, [reloadTopology]);
 
   const focusPaths = Boolean(lastCompute?.primary);
 
@@ -129,9 +123,15 @@ export default function App() {
   // Auto recompute: only when the backup availability *slider* value changes (not on source/dest or other settings).
   const prevTradeoff = useRef(tradeoffValue);
   const tradeoffSliderInit = useRef(true);
+  const skipTradeoffCompute = useRef(false);
   useEffect(() => {
     if (tradeoffSliderInit.current) {
       tradeoffSliderInit.current = false;
+      prevTradeoff.current = tradeoffValue;
+      return;
+    }
+    if (skipTradeoffCompute.current) {
+      skipTradeoffCompute.current = false;
       prevTradeoff.current = tradeoffValue;
       return;
     }
@@ -140,7 +140,7 @@ export default function App() {
     }
     prevTradeoff.current = tradeoffValue;
     const s = useAppStore.getState();
-    if (!s.source || !s.destination) {
+    if (!canComputeLsp(s.source, s.destination)) {
       return;
     }
     if (!s.backupTradeoffEnabled) {
@@ -148,11 +148,25 @@ export default function App() {
     }
     const t = window.setTimeout(() => {
       void runCompute();
-    }, 300);
+    }, 200);
     return () => {
       window.clearTimeout(t);
     };
   }, [tradeoffValue, runCompute]);
+
+  // Debounced recompute when simulating failures (only if paths were already computed).
+  useEffect(() => {
+    const s = useAppStore.getState();
+    if (!canComputeLsp(s.source, s.destination) || !s.lastCompute?.primary) {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void runCompute();
+    }, 200);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [failedNeIds, failedLinkKeys, runCompute]);
 
   const onDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -253,23 +267,30 @@ export default function App() {
           return;
         }
         const project = parsed as ProjectFileV1;
+        const ui = project.ui;
+        useAppStore.getState().setSource(ui.source ?? "");
+        useAppStore.getState().setDestination(ui.destination ?? "");
         await openProjectTopology(topologyToProjectPayload(project.topology));
         await reloadTopology();
         if (project.layoutPositions) {
           saveLayoutPositions(project.topology, project.layoutPositions);
         }
-        const ui = project.ui;
+        const st = useAppStore.getState();
+        st.clearLsps();
+        for (const lsp of project.lsps ?? []) {
+          st.upsertLsp(lsp);
+        }
         setMode(ui.mode);
-        setRequiredBw(ui.requiredBwMbps);
-        setMaxHops(Math.min(50, ui.maxHops));
-        setNokiaCliStyle(ui.nokiaCliStyle);
+        setRequiredBw(typeof ui.requiredBwMbps === "number" ? ui.requiredBwMbps : 0);
+        const maxHopsRaw = typeof ui.maxHops === "number" && !Number.isNaN(ui.maxHops) ? ui.maxHops : 25;
+        setMaxHops(Math.min(50, Math.max(1, maxHopsRaw)));
+        setNokiaCliStyle(ui.nokiaCliStyle ?? "classic");
         setLspName(ui.lspName);
-        setSource(ui.source);
-        setDestination(ui.destination);
         if (ui.tradeoffMode === "percent" || ui.tradeoffMode === "absolute") {
           setTradeoffMode(ui.tradeoffMode);
         }
         if (typeof ui.tradeoffValue === "number" && !Number.isNaN(ui.tradeoffValue)) {
+          skipTradeoffCompute.current = true;
           setTradeoffValue(ui.tradeoffValue);
         }
         if (typeof ui.backupTradeoffEnabled === "boolean") {
@@ -308,6 +329,18 @@ export default function App() {
         setNokiaRsvpLabelYReverseRevert(typeof ui.nokiaRsvpLabelYReverseRevert === "string" ? ui.nokiaRsvpLabelYReverseRevert : "");
         setNokiaRsvpLabelZReverseRevert(typeof ui.nokiaRsvpLabelZReverseRevert === "string" ? ui.nokiaRsvpLabelZReverseRevert : "");
         setFlexAlgoId(ui.flexAlgoId ?? null);
+        const stAfter = useAppStore.getState();
+        const restored = findRestoredLsp(project.lsps ?? [], ui.lspName, stAfter.source, stAfter.destination);
+        if (restored?.primary) {
+          stAfter.setLastCompute({
+            primary: restored.primary,
+            backup: restored.backup,
+            rejected_paths: [],
+            pruned_edges: [],
+            warnings: [],
+            mode: restored.mode,
+          });
+        }
         toast.success("Project opened");
       } catch (err) {
         toast.error(errorDetail(err));
@@ -317,7 +350,6 @@ export default function App() {
     },
     [
       reloadTopology,
-      setDestination,
       setEnforceRoles,
       setEnforceSrlgDiversity,
       setFlexAlgoId,
@@ -326,7 +358,6 @@ export default function App() {
       setMode,
       setNokiaCliStyle,
       setRequiredBw,
-      setSource,
       upsertFlexAlgo,
       setBackupTradeoffEnabled,
       setTradeoffMode,
@@ -361,7 +392,10 @@ export default function App() {
           el?.focus();
         } else if (e.key === "Enter") {
           e.preventDefault();
-          window.dispatchEvent(new Event("lsp:compute"));
+          const s = useAppStore.getState();
+          if (canComputeLsp(s.source, s.destination)) {
+            window.dispatchEvent(new Event("lsp:compute"));
+          }
         }
       }
     };

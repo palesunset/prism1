@@ -1,14 +1,15 @@
 import type { Stylesheet } from "cytoscape";
+import { graphColors, odysseusDark } from "../theme/odysseus";
 
 export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.site",
     style: {
-      "background-color": "#0f172a",
-      "border-color": "#334155",
+      "background-color": graphColors.siteBg,
+      "border-color": graphColors.siteBorder,
       "border-width": 1,
       label: "data(label)",
-      color: "#cbd5e1",
+      color: graphColors.siteLabel,
       "text-valign": "top",
       "text-halign": "center",
       "font-size": 11,
@@ -19,22 +20,22 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne",
     style: {
-      "background-color": "#475569",
+      "background-color": graphColors.neDefault,
       width: 20,
       height: 20,
       label: "data(shortLabel)",
-      color: "#e2e8f0",
+      color: graphColors.neLabel,
       "text-valign": "center",
       "text-halign": "center",
       "font-size": 10,
       "border-width": 1,
-      "border-color": "#1e293b",
+      "border-color": odysseusDark.panel,
     },
   },
   {
     selector: "node.ne[role = 'core']",
     style: {
-      "background-color": "#3b82f6",
+      "background-color": odysseusDark.hlFunction,
       width: 28,
       height: 28,
     },
@@ -42,7 +43,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[role = 'edge']",
     style: {
-      "background-color": "#10b981",
+      "background-color": odysseusDark.colorSuccess,
       width: 24,
       height: 24,
     },
@@ -50,7 +51,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[role = 'P_RTR']",
     style: {
-      "background-color": "#64748b",
+      "background-color": odysseusDark.colorSubheader,
       width: 24,
       height: 24,
     },
@@ -58,7 +59,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[role = 'DRRTR']",
     style: {
-      "background-color": "#0ea5e9",
+      "background-color": "#56b6c2",
       width: 28,
       height: 28,
     },
@@ -66,7 +67,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[role = 'PERTR']",
     style: {
-      "background-color": "#22c55e",
+      "background-color": odysseusDark.colorSuccess,
       width: 24,
       height: 24,
     },
@@ -74,7 +75,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[role = 'PECRT']",
     style: {
-      "background-color": "#a3e635",
+      "background-color": "#56b6c2",
       width: 22,
       height: 22,
     },
@@ -82,25 +83,25 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.ne[vendor = 'nokia']",
     style: {
-      "background-color": "#2563eb",
+      "background-color": odysseusDark.hlFunction,
     },
   },
   {
     selector: "node.ne[vendor = 'huawei']",
     style: {
-      "background-color": "#ef4444",
+      "background-color": odysseusDark.accent,
     },
   },
   {
     selector: "node.ne[vendor = 'cisco_xr']",
     style: {
-      "background-color": "#f97316",
+      "background-color": odysseusDark.accentWarm,
     },
   },
   {
     selector: "node.ne[vendor = 'juniper']",
     style: {
-      "background-color": "#a855f7",
+      "background-color": "#c678dd",
     },
   },
   {
@@ -108,7 +109,7 @@ export const baseStylesheet: Stylesheet[] = [
     style: {
       width: 1,
       "curve-style": "unbundled-bezier",
-      "line-color": "#334155",
+      "line-color": graphColors.edgeIdle,
       opacity: 0.4,
       "target-arrow-shape": "none",
     },
@@ -138,7 +139,7 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.primary",
     style: {
       width: 5,
-      "line-color": "#22d3ee",
+      "line-color": graphColors.primary,
       "target-arrow-shape": "none",
       "source-arrow-shape": "none",
       opacity: 1,
@@ -153,21 +154,21 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.primaryF",
     style: {
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#22d3ee",
+      "target-arrow-color": graphColors.primary,
     },
   },
   {
     selector: "edge.primaryR",
     style: {
       "source-arrow-shape": "triangle",
-      "source-arrow-color": "#22d3ee",
+      "source-arrow-color": graphColors.primary,
     },
   },
   {
     selector: "edge.backup",
     style: {
       width: 4,
-      "line-color": "#fb923c",
+      "line-color": graphColors.backup,
       "target-arrow-shape": "none",
       "source-arrow-shape": "none",
       opacity: 1,
@@ -181,21 +182,21 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.backupF",
     style: {
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#fb923c",
+      "target-arrow-color": graphColors.backup,
     },
   },
   {
     selector: "edge.backupR",
     style: {
       "source-arrow-shape": "triangle",
-      "source-arrow-color": "#fb923c",
+      "source-arrow-color": graphColors.backup,
     },
   },
   {
     selector: "edge.ecmpAlt",
     style: {
       width: 2,
-      "line-color": "#a855f7",
+      "line-color": "#c678dd",
       opacity: 0.9,
       "curve-style": "straight",
       "line-style": "dotted",
@@ -220,9 +221,9 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.site.dim",
     style: {
-      "background-color": "#0b1222",
-      "border-color": "#1f2a3a",
-      color: "#475569",
+      "background-color": odysseusDark.panel,
+      "border-color": odysseusDark.border,
+      color: odysseusDark.colorMuted,
     },
   },
   {
@@ -234,14 +235,14 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.failed",
     style: {
-      "background-color": "#64748b",
+      "background-color": odysseusDark.colorSubheader,
       opacity: 0.35,
     },
   },
   {
     selector: "edge.failed",
     style: {
-      "line-color": "#94a3b8",
+      "line-color": odysseusDark.colorSubheader,
       opacity: 0.25,
       "line-style": "dotted",
     },
@@ -251,22 +252,22 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.traffic-failed",
     style: {
       width: 3,
-      "line-color": "#ef4444",
+      "line-color": odysseusDark.colorError,
       opacity: 0.9,
       "line-style": "dashed",
       "line-dash-pattern": [6, 6],
       label: "data(trafficFailedLabel)",
-      color: "#fecaca",
+      color: odysseusDark.accent,
       "font-size": 10,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "z-index": 1200,
     },
   },
   {
     selector: "node.traffic-failed",
     style: {
-      "border-color": "#ef4444",
+      "border-color": odysseusDark.colorError,
       "border-width": 3,
       opacity: 0.5,
     },
@@ -275,18 +276,18 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.traffic-flow",
     style: {
       width: 2,
-      "line-color": "#38bdf8",
+      "line-color": odysseusDark.colorAccent,
       opacity: 0.9,
       "curve-style": "bezier",
       "line-style": "dashed",
       "line-dash-pattern": [4, 6],
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#38bdf8",
+      "target-arrow-color": odysseusDark.colorAccent,
       label: "data(label)",
-      color: "#bae6fd",
+      color: odysseusDark.fg,
       "font-size": 9,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "text-rotation": "autorotate",
       "z-index": 1100,
     },
@@ -295,18 +296,18 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.traffic-flow-original",
     style: {
       width: 2,
-      "line-color": "#94a3b8",
+      "line-color": odysseusDark.colorSubheader,
       opacity: 0.55,
       "curve-style": "bezier",
       "line-style": "dashed",
       "line-dash-pattern": [2, 8],
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#94a3b8",
+      "target-arrow-color": odysseusDark.colorSubheader,
       label: "data(label)",
-      color: "#cbd5e1",
+      color: odysseusDark.fg,
       "font-size": 9,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "text-rotation": "autorotate",
       "z-index": 1080,
     },
@@ -315,17 +316,17 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.traffic-flow-applied",
     style: {
       width: 2.5,
-      "line-color": "#22c55e",
+      "line-color": odysseusDark.colorSuccess,
       opacity: 0.95,
       "curve-style": "bezier",
       "line-style": "solid",
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#22c55e",
+      "target-arrow-color": odysseusDark.colorSuccess,
       label: "data(label)",
-      color: "#bbf7d0",
+      color: odysseusDark.colorSuccess,
       "font-size": 9,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "text-rotation": "autorotate",
       "z-index": 1120,
     },
@@ -334,17 +335,17 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.injected-flow",
     style: {
       width: 4,
-      "line-color": "#22c55e",
+      "line-color": odysseusDark.colorSuccess,
       opacity: 0.95,
       "curve-style": "bezier",
       "line-style": "solid",
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#22c55e",
+      "target-arrow-color": odysseusDark.colorSuccess,
       label: "data(label)",
-      color: "#bbf7d0",
+      color: odysseusDark.colorSuccess,
       "font-size": 10,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "text-rotation": "autorotate",
       "z-index": 1130,
     },
@@ -353,17 +354,17 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.scenario-path-preview",
     style: {
       width: 4,
-      "line-color": "#22c55e",
+      "line-color": odysseusDark.colorSuccess,
       opacity: 0.95,
       "curve-style": "bezier",
       "line-style": "solid",
       "target-arrow-shape": "triangle",
-      "target-arrow-color": "#22c55e",
+      "target-arrow-color": odysseusDark.colorSuccess,
       label: "data(label)",
-      color: "#bbf7d0",
+      color: odysseusDark.colorSuccess,
       "font-size": 9,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "text-rotation": "autorotate",
       "z-index": 1140,
     },
@@ -372,13 +373,13 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.traffic-congested",
     style: {
       width: 4,
-      "line-color": "#ef4444",
+      "line-color": odysseusDark.colorError,
       opacity: 1,
       label: "data(trafficAfterLabel)",
-      color: "#fecaca",
+      color: odysseusDark.accent,
       "font-size": 10,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "z-index": 1150,
     },
   },
@@ -386,10 +387,10 @@ export const baseStylesheet: Stylesheet[] = [
     selector: "edge.injected-impact",
     style: {
       label: "data(trafficAfterLabel)",
-      color: "#bbf7d0",
+      color: odysseusDark.colorSuccess,
       "font-size": 9,
       "text-outline-width": 2,
-      "text-outline-color": "#0b1222",
+      "text-outline-color": odysseusDark.panel,
       "z-index": 1145,
     },
   },
@@ -411,7 +412,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.path",
     style: {
-      "border-color": "#22d3ee",
+      "border-color": graphColors.primary,
       "border-width": 4,
       opacity: 1,
     },
@@ -419,7 +420,7 @@ export const baseStylesheet: Stylesheet[] = [
   {
     selector: "node.pathBackup",
     style: {
-      "border-color": "#fb923c",
+      "border-color": graphColors.backup,
       "border-width": 4,
       opacity: 1,
     },
@@ -432,7 +433,7 @@ export const baseStylesheet: Stylesheet[] = [
       height: 32,
       "font-size": 12,
       "text-outline-width": 2,
-      "text-outline-color": "#020617",
+      "text-outline-color": odysseusDark.panel,
     },
   },
 ];

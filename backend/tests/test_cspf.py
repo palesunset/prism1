@@ -94,3 +94,110 @@ def test_cspf_max_hops_rejects() -> None:
     )
     assert primary is None
     assert any("max hops" in r.reason.lower() for r in rejected)
+
+
+def test_cspf_rejects_same_source_dest() -> None:
+    g, nes = build_triangle_topology()
+    primary, backup, _ecmp, _r, _p, warnings, _o, _t = compute_paths(
+        g,
+        nes,
+        source="A",
+        destination="A",
+        required_bw_mbps=None,
+        max_hops=32,
+        mode="rsvp_te",
+        enforce_srlg_diversity=True,
+        time_hour=None,
+        failed_ne_ids=set(),
+        failed_link_keys=set(),
+    )
+    assert primary is None
+    assert backup is None
+    assert any("must differ" in w.lower() for w in warnings)
+
+
+def test_cspf_rejects_unknown_ne() -> None:
+    g, nes = build_triangle_topology()
+    primary, _b, _ecmp, _r, _p, warnings, _o, _t = compute_paths(
+        g,
+        nes,
+        source="Z",
+        destination="C",
+        required_bw_mbps=None,
+        max_hops=32,
+        mode="rsvp_te",
+        enforce_srlg_diversity=True,
+        time_hour=None,
+        failed_ne_ids=set(),
+        failed_link_keys=set(),
+    )
+    assert primary is None
+    assert any("unknown" in w.lower() for w in warnings)
+
+
+def test_cspf_failed_ne_reroutes() -> None:
+    g, nes = build_triangle_topology()
+    primary, _b, _ecmp, _r, _p, _w, _o, _t = compute_paths(
+        g,
+        nes,
+        source="A",
+        destination="C",
+        required_bw_mbps=None,
+        max_hops=32,
+        mode="rsvp_te",
+        enforce_srlg_diversity=True,
+        time_hour=None,
+        failed_ne_ids={"B"},
+        failed_link_keys=set(),
+    )
+    assert primary is not None
+    assert "B" not in primary.nodes
+
+
+def test_tradeoff_infinite_latency() -> None:
+    assert tradeoff_max_latency_ms(float("inf"), "percent", 50) == float("inf")
+
+
+def test_cspf_enforce_roles_can_be_disabled() -> None:
+    g, nes = build_triangle_topology()
+    primary, backup, _ecmp, _r, _p, _w, _o, _t = compute_paths(
+        g,
+        nes,
+        source="A",
+        destination="C",
+        required_bw_mbps=None,
+        max_hops=32,
+        mode="rsvp_te",
+        enforce_srlg_diversity=True,
+        time_hour=None,
+        failed_ne_ids=set(),
+        failed_link_keys=set(),
+        enforce_roles=False,
+    )
+    assert primary is not None
+    assert backup is not None
+
+
+def test_tradeoff_nan_latency() -> None:
+    import math
+
+    assert math.isnan(tradeoff_max_latency_ms(float("nan"), "percent", 50))
+
+
+def test_cspf_sr_mpls_mode() -> None:
+    g, nes = build_triangle_topology()
+    primary, backup, _ecmp, _r, _p, _w, _o, _t = compute_paths(
+        g,
+        nes,
+        source="A",
+        destination="C",
+        required_bw_mbps=None,
+        max_hops=32,
+        mode="sr_mpls",
+        enforce_srlg_diversity=False,
+        time_hour=None,
+        failed_ne_ids=set(),
+        failed_link_keys=set(),
+    )
+    assert primary is not None
+    assert len(primary.hops) >= 1

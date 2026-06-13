@@ -6,7 +6,6 @@ import {
   exportClipboard,
   exportMonolithic,
   nokiaRsvpNamesForDirection,
-  nokiaRsvpNamesForRevertDirection,
 } from "../services/apiClient";
 import { useAppStore } from "../store/useAppStore";
 
@@ -38,8 +37,8 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
       reservations,
     } = s;
 
-    if (!source || !destination) {
-      toast.error("Select source and destination NEs");
+    if (!source || !destination || source === destination) {
+      toast.error("Select distinct source and destination NEs");
       return;
     }
 
@@ -92,18 +91,6 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
             s2.nokiaRsvpLabelYReverse,
             s2.nokiaRsvpLabelZReverse,
           );
-          const forwardRevertNames = nokiaRsvpNamesForRevertDirection(
-            "forward_revert",
-            s2.nokiaRsvpLabelXForwardRevert,
-            s2.nokiaRsvpLabelYForwardRevert,
-            s2.nokiaRsvpLabelZForwardRevert,
-          );
-          const reverseRevertNames = nokiaRsvpNamesForRevertDirection(
-            "reverse_revert",
-            s2.nokiaRsvpLabelXReverseRevert,
-            s2.nokiaRsvpLabelYReverseRevert,
-            s2.nokiaRsvpLabelZReverseRevert,
-          );
           const txt = await exportMonolithic({
             lsp_name: lspName,
             mode,
@@ -114,8 +101,6 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
             nokia_cli_style: nokiaCliStyle,
             ...forwardNames,
             ...reverseNames,
-            ...forwardRevertNames,
-            ...reverseRevertNames,
           });
           s.setMonolithicConfig(txt);
         } catch (err) {

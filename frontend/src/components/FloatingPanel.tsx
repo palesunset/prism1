@@ -44,6 +44,7 @@ export function FloatingPanel(props: {
   const timeHour = useAppStore((s) => s.timeHour);
   const setTimeHour = useAppStore((s) => s.setTimeHour);
   const lastCompute = useAppStore((s) => s.lastCompute);
+  const clearLspComputeState = useAppStore((s) => s.clearLspComputeState);
   const clearFailures = useAppStore((s) => s.clearFailures);
   const setBaselinePrimary = useAppStore((s) => s.setBaselinePrimary);
   const setImpact = useAppStore((s) => s.setImpact);
@@ -53,6 +54,14 @@ export function FloatingPanel(props: {
   const nokiaOptions: NokiaCliStyle[] = ["classic", "md"];
   const presetValue =
     flexAlgoId != null && PRESET_ALGO.has(flexAlgoId) ? String(flexAlgoId) : flexAlgoId == null ? "igp" : "custom";
+
+  /** CSPF inputs changed — drop stale paths (tradeoff slider auto-recomputes instead). */
+  function invalidatePaths(apply: () => void) {
+    if (useAppStore.getState().lastCompute?.primary) {
+      clearLspComputeState();
+    }
+    apply();
+  }
 
   async function onPickCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
@@ -80,6 +89,7 @@ export function FloatingPanel(props: {
   }
 
   function resetDefaults() {
+    clearLspComputeState();
     setRequiredBw(0);
     setMaxHops(50);
     setEnforceRoles(true);
@@ -106,8 +116,8 @@ export function FloatingPanel(props: {
   }
 
   return (
-    <div className="absolute left-2 top-2 z-30 w-[280px] max-h-[calc(100dvh-6.5rem)] overflow-hidden rounded-md border border-white/10 bg-gray-900/80 shadow-2xl backdrop-blur-xl transition-all duration-300">
-      <div className="flex min-h-0 max-h-[calc(100dvh-6.5rem)] flex-col">
+    <div className="absolute bottom-2 left-2 top-2 z-30 flex w-[280px] flex-col overflow-hidden rounded-md border border-white/10 bg-gray-900/80 shadow-2xl backdrop-blur-xl transition-all duration-300">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-stretch border-b border-white/5">
           <div className="flex min-w-0 flex-1 text-xs font-medium">
             {workspaceMode === "lsp" ? (
@@ -237,7 +247,7 @@ export function FloatingPanel(props: {
                 max={100000}
                 step={100}
                 value={requiredBw}
-                onChange={(e) => setRequiredBw(Number(e.target.value))}
+                onChange={(e) => invalidatePaths(() => setRequiredBw(Number(e.target.value)))}
                 className="w-full accent-cyan-500"
               />
             </div>
@@ -252,7 +262,7 @@ export function FloatingPanel(props: {
                 max={23}
                 step={1}
                 value={timeHour}
-                onChange={(e) => setTimeHour(Number(e.target.value))}
+                onChange={(e) => invalidatePaths(() => setTimeHour(Number(e.target.value)))}
                 className="w-full accent-cyan-500"
               />
             </div>
@@ -267,7 +277,7 @@ export function FloatingPanel(props: {
                 max={50}
                 step={1}
                 value={Math.min(50, maxHops)}
-                onChange={(e) => setMaxHops(Number(e.target.value))}
+                onChange={(e) => invalidatePaths(() => setMaxHops(Number(e.target.value)))}
                 className="w-full accent-cyan-500"
               />
             </div>
@@ -277,7 +287,7 @@ export function FloatingPanel(props: {
                 type="checkbox"
                 className="h-4 w-4 accent-cyan-500"
                 checked={enforceRoles}
-                onChange={(e) => setEnforceRoles(e.target.checked)}
+                onChange={(e) => invalidatePaths(() => setEnforceRoles(e.target.checked))}
               />
             </div>
             <div className="space-y-2">
@@ -320,7 +330,7 @@ export function FloatingPanel(props: {
                 type="checkbox"
                 className="h-4 w-4 accent-cyan-500"
                 checked={enforceSrlgDiversity}
-                onChange={(e) => setEnforceSrlgDiversity(e.target.checked)}
+                onChange={(e) => invalidatePaths(() => setEnforceSrlgDiversity(e.target.checked))}
               />
             </label>
             <label className="block text-xs">
@@ -330,18 +340,20 @@ export function FloatingPanel(props: {
                 value={presetValue}
                 onChange={(e) => {
                   const v = e.target.value;
-                  if (v === "igp") {
-                    setFlexAlgoId(null);
-                    return;
-                  }
-                  if (v === "custom") {
-                    const first = Object.values(flexAlgos).sort((a, b) => a.id - b.id)[0];
-                    if (first) {
-                      setFlexAlgoId(first.id);
+                  invalidatePaths(() => {
+                    if (v === "igp") {
+                      setFlexAlgoId(null);
+                      return;
                     }
-                    return;
-                  }
-                  setFlexAlgoId(Number(v));
+                    if (v === "custom") {
+                      const first = Object.values(flexAlgos).sort((a, b) => a.id - b.id)[0];
+                      if (first) {
+                        setFlexAlgoId(first.id);
+                      }
+                      return;
+                    }
+                    setFlexAlgoId(Number(v));
+                  });
                 }}
               >
                 {[
@@ -368,7 +380,7 @@ export function FloatingPanel(props: {
                 <select
                   className="floating-native-select mt-1 w-full rounded-lg px-2 py-1.5 text-sm"
                   value={String(flexAlgoId)}
-                  onChange={(e) => setFlexAlgoId(Number(e.target.value))}
+                  onChange={(e) => invalidatePaths(() => setFlexAlgoId(Number(e.target.value)))}
                 >
                   {Object.values(flexAlgos)
                     .sort((a, b) => a.id - b.id)
