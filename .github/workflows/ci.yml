@@ -45,6 +45,8 @@ jobs:
 
   inventory:
     runs-on: ubuntu-latest
+    env:
+      SKIP_OZ_MODEL_DOWNLOAD: "1"
     defaults:
       run:
         working-directory: inventory/backend
@@ -53,8 +55,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: inventory/backend/package-lock.json
       - name: Install
-        run: npm install
+        run: npm ci
       - name: Test
         run: node scripts/test-all.js
 

@@ -38,6 +38,10 @@ async function downloadModel() {
   if (!res.ok) {
     console.error('Download failed:', res.status, res.statusText);
     console.error('Run manually: npm run download-model');
+    if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') {
+      console.warn('Continuing without model in CI (Oz local inference disabled for this install).');
+      return;
+    }
     process.exitCode = 1;
     return;
   }
