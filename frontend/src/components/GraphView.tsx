@@ -2,7 +2,6 @@ import cytoscape, {
   type CollectionReturnValue,
   type Core,
   type ElementDefinition,
-  type EventObject,
 } from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
