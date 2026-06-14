@@ -51,6 +51,56 @@ For dev, the Vite proxy targets `http://localhost:3001` by default.
 
 Note: `VITE_API_URL` should be the server root (example: `http://localhost:3001`) and should **not** include `/api`.
 
+## Oz AI — Llama model
+
+The **Oz** chat assistant uses a local **GGUF** model loaded with `node-llama-cpp`. Inventory runs without it; Oz chat is disabled until the file exists.
+
+**Default path:** `backend/models/llama-3.2-3b-instruct-q4_k_m.gguf` (~2 GB)
+
+### Use your own model (`OZ_MODEL_PATH`)
+
+In `backend/.env` (copy from `.env.example`), point to any compatible instruct GGUF:
+
+```env
+# Relative to backend/
+OZ_MODEL_PATH=models/llama-3.2-1b-instruct-q4_k_m.gguf
+
+# Absolute path
+OZ_MODEL_PATH=/opt/models/my-model.gguf
+```
+
+| Machine | Suggested starting point |
+| --- | --- |
+| Low RAM / older CPU | 1B class, Q4 (~1 GB) |
+| Typical laptop | 3B Q4_K_M (default) |
+| Workstation | 3B+ Q8 or larger |
+
+When `OZ_MODEL_PATH` is set, place your `.gguf` at that location and restart the backend. The default Hugging Face download is skipped.
+
+### Download the default model
+
+Runs on `npm install` when `OZ_MODEL_PATH` is unset:
+
+```bash
+cd backend
+npm install
+```
+
+Manual download:
+
+```bash
+cd backend
+npm run download-model
+```
+
+Skip download when Oz is not needed:
+
+```bash
+SKIP_OZ_MODEL_DOWNLOAD=1 npm install
+```
+
+After the model is present, restart the backend and open Oz from the Inventory UI. Logs should show `Oz: loading model from ...`.
+
 ## Deploy to the network
 
 Use this when other people on your LAN (or a server) need to open the app in a browser — not just on the machine where it runs.

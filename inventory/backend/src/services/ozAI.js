@@ -8,9 +8,13 @@ import {
   formatOzHelp,
 } from './ozInventoryIntents.js';
 import { orderEquipmentDisplayColumns } from './ozEquipmentDetail.js';
+import { resolveOzModelPath } from '../utils/ozModelPath.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MODEL_PATH = path.join(__dirname, '..', '..', 'models', 'llama-3.2-3b-instruct-q4_k_m.gguf');
+
+function modelPath() {
+  return resolveOzModelPath();
+}
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -1076,7 +1080,7 @@ function conversationToChatHistory(conversationHistory) {
 
 export async function initializeOz() {
   if (loadedModel) return { model: loadedModel };
-  if (!fs.existsSync(MODEL_PATH)) {
+  if (!fs.existsSync(modelPath())) {
     return null;
   }
   modelLoadError = null;
@@ -1086,7 +1090,7 @@ export async function initializeOz() {
     const { getLlama } = mod;
     const llama = await getLlama();
     loadedModel = await llama.loadModel({
-      modelPath: MODEL_PATH,
+      modelPath: modelPath(),
       defaultContextFlashAttention: false,
     });
     modelLoadError = null;
@@ -1105,10 +1109,10 @@ export async function initializeOz() {
  * staying "offline" until the first chat message.
  */
 export function ensureOzWarmup() {
-  if (!fs.existsSync(MODEL_PATH)) return;
+  if (!fs.existsSync(modelPath())) return;
   if (loadedModel) return;
   if (ozInitInFlight) return;
-  console.log('Oz: loading model from', MODEL_PATH);
+  console.log('Oz: loading model from', modelPath());
   ozInitInFlight = initializeOz().finally(() => {
     ozInitInFlight = null;
   });
@@ -1122,10 +1126,10 @@ export function getOzStatus() {
   if (loadedModel) {
     return { status: 'ready', message: 'Oz model loaded' };
   }
-  if (!fs.existsSync(MODEL_PATH)) {
+  if (!fs.existsSync(modelPath())) {
     return {
       status: 'unavailable',
-      message: 'Model file missing. Run npm run download-model in backend.',
+      message: `Model file missing at ${modelPath()}. Set OZ_MODEL_PATH in backend/.env or run npm run download-model.`,
     };
   }
   if (modelLoadError) {
@@ -1217,8 +1221,8 @@ export async function processOzQuery(userMessage, conversationHistory = []) {
   const intentAnswer = runIntentOrSql(trimmed);
   if (intentAnswer) return intentAnswer;
 
-  if (!fs.existsSync(MODEL_PATH)) {
-    return 'Oz model is not installed yet. From the `backend` folder run `npm run download-model` (large one-time download), then restart the server.';
+  if (!fs.existsSync(modelPath())) {
+    return `Oz model is not installed yet. Set OZ_MODEL_PATH in backend/.env to your GGUF file, or run npm run download-model for the default model, then restart the server.`;
   }
 
   const init = await initializeOz();

@@ -33,6 +33,73 @@ Open **http://localhost:5173** — pick **Inventory** or **LSP Design** on the h
 
 If ports are stuck from a previous session, run `npm run dev:kill` before `npm run dev`.
 
+## Inventory — Oz AI (Llama model)
+
+The **Oz** assistant in Inventory runs a **local Llama** GGUF model via `node-llama-cpp` (offline, no cloud API). Inventory works without it, but Oz chat stays disabled until the model file is present.
+
+| Item | Detail |
+| --- | --- |
+| Default model | `inventory/backend/models/llama-3.2-3b-instruct-q4_k_m.gguf` (~2 GB) |
+| Custom model | Set `OZ_MODEL_PATH` in `inventory/backend/.env` |
+| Node | **22.5+** required (same as the inventory API) |
+
+### Choose a model for your machine
+
+Pick any **GGUF instruct** model your PC can run, download it, then point Oz at the file with `OZ_MODEL_PATH` in `inventory/backend/.env`:
+
+```env
+# Relative to inventory/backend/
+OZ_MODEL_PATH=models/llama-3.2-1b-instruct-q4_k_m.gguf
+
+# Or an absolute path anywhere on disk
+OZ_MODEL_PATH=D:/AI/llama-3.2-3b-instruct-q8_0.gguf
+```
+
+| Machine | Suggested starting point |
+| --- | --- |
+| Low RAM / older CPU | **1B** class, Q4 quant (~1 GB) |
+| Typical laptop | **3B** Q4_K_M (default, ~2 GB) |
+| Workstation / GPU | **3B+** Q8 or larger quant |
+
+Copy `inventory/backend/.env.example` to `.env`, set `OZ_MODEL_PATH`, place your `.gguf` file at that path, and restart the inventory API.
+
+When `OZ_MODEL_PATH` is set, the automatic default download is skipped — you supply your own file.
+
+### Automatic download (default model only)
+
+From the repo root after `npm run install:all`, or from `inventory/backend` (only when `OZ_MODEL_PATH` is **not** set):
+
+```powershell
+cd inventory/backend
+npm install
+```
+
+The `postinstall` script downloads the default 3B model once from Hugging Face. Expect a few minutes on first install.
+
+### Manual download (default model)
+
+If the automatic download fails (rate limit, offline prep, or CI):
+
+```powershell
+cd inventory/backend
+npm run download-model
+```
+
+Skip the download when you do not need Oz yet:
+
+```powershell
+$env:SKIP_OZ_MODEL_DOWNLOAD = "1"
+npm install
+```
+
+### Verify Oz is ready
+
+1. Start the platform: `npm run dev` (or inventory-only: `cd inventory && npm run dev`).
+2. Open **Inventory** → use the **Oz** floating chat button.
+3. On backend startup you should see `Oz: loading model from ...` with your configured path.
+
+If chat says the model is missing, confirm the `.gguf` file exists at `OZ_MODEL_PATH` (or the default path) and restart the inventory API on port **3001**.
+
 ## Quick start — LSP only
 
 ```powershell
@@ -59,6 +126,16 @@ npm run dev
 ```
 
 Inventory UI: **http://localhost:5173** (standalone) · API: **http://localhost:3001**
+
+### Oz AI — Llama model (optional)
+
+Oz uses a local **GGUF** model (default: Llama 3.2 3B ~2 GB). Configure a different file in `backend/.env`:
+
+```env
+OZ_MODEL_PATH=models/your-model.gguf
+```
+
+See **Inventory — Oz AI (Llama model)** above for download steps and hardware guidance.
 
 ## LSP features
 

@@ -1,24 +1,32 @@
 /**
- * Downloads Llama 3.2 3B Instruct Q4_K_M (~2GB) into backend/models/.
- * Skipped when SKIP_OZ_MODEL_DOWNLOAD=1 or model file already exists.
+ * Downloads the default Llama 3.2 3B Instruct Q4_K_M (~2GB) into backend/models/.
+ * Skipped when SKIP_OZ_MODEL_DOWNLOAD=1, a custom OZ_MODEL_PATH is set, or the file exists.
  */
+import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
+import {
+  resolveOzModelPath,
+  usesDefaultOzModelPath,
+} from '../src/utils/ozModelPath.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
-const MODEL_DIR = path.join(ROOT, 'models');
-const MODEL_PATH = path.join(MODEL_DIR, 'llama-3.2-3b-instruct-q4_k_m.gguf');
+const MODEL_PATH = resolveOzModelPath();
+const MODEL_DIR = path.dirname(MODEL_PATH);
 const MODEL_URL =
   'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf';
 
 async function downloadModel() {
   if (process.env.SKIP_OZ_MODEL_DOWNLOAD === '1' || process.env.SKIP_OZ_MODEL_DOWNLOAD === 'true') {
     console.log('Skipping Oz model download (SKIP_OZ_MODEL_DOWNLOAD).');
+    return;
+  }
+
+  if (!usesDefaultOzModelPath(MODEL_PATH)) {
+    console.log('OZ_MODEL_PATH is set to a custom model file. Skipping default download.');
+    console.log('Place your GGUF at:', MODEL_PATH);
     return;
   }
 
@@ -32,7 +40,8 @@ async function downloadModel() {
   }
 
   console.log('Downloading Llama 3.2 3B Instruct (Q4_K_M, ~2GB)…');
-  console.log('Set SKIP_OZ_MODEL_DOWNLOAD=1 to skip. One-time download.\n');
+  console.log('Set SKIP_OZ_MODEL_DOWNLOAD=1 to skip. One-time download.');
+  console.log('For a different model, set OZ_MODEL_PATH in backend/.env and add your own GGUF.\n');
 
   const res = await fetch(MODEL_URL, { redirect: 'follow' });
   if (!res.ok) {
