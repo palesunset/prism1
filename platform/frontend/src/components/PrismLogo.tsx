@@ -1,5 +1,6 @@
 type Props = {
   className?: string;
+  /** Show spectrum rays (inventory / LSP / IPAM). Off for very small sizes if needed. */
   showRays?: boolean;
 };
 

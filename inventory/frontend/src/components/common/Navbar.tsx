@@ -3,6 +3,7 @@ import { Map, Building2, LayoutDashboard, Moon, Sun, LogOut } from 'lucide-react
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { invPath, useInventoryRoot } from '@/utils/inventoryPaths';
+import { PrismLogo } from '@/components/common/PrismLogo';
 import clsx from 'clsx';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -22,12 +23,15 @@ export function Navbar() {
       style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}
     >
       <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-3">
-        <span
-          className="text-lg font-semibold tracking-tight"
-          style={{ color: 'var(--brand-color)' }}
-        >
-          Network Equipment Inventory
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <PrismLogo className="h-9 w-9 shrink-0 text-cyan-400" />
+          <span
+            className="text-lg font-semibold tracking-tight"
+            style={{ color: 'var(--brand-color)' }}
+          >
+            Network Equipment Inventory
+          </span>
+        </div>
         <nav className="flex flex-wrap items-center gap-1">
           <NavLink to={invPath(root)} className={linkClass} end>
             <Map className="h-4 w-4" strokeWidth={2} />

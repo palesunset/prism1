@@ -1,6 +1,6 @@
-# PRISM Platform
+# Prism Platform
 
-Unified offline-first toolkit for **network equipment inventory** and **LSP design** (CSPF paths, failure simulation, multi-vendor MPLS/SRv6 config generation).
+Unified offline-first toolkit for **network equipment inventory**, **LSP design** (CSPF paths, failure simulation, multi-vendor MPLS/SRv6 config generation), and **Mini IPAM** (IP registry, VLSM, conflict detection).
 
 **Repository:** [github.com/palesunset/PrismPlatform](https://github.com/palesunset/PrismPlatform)
 
@@ -8,9 +8,13 @@ Unified offline-first toolkit for **network equipment inventory** and **LSP desi
 
 | Module | Description |
 | --- | --- |
-| **Inventory** | Sites, equipment, slots/ports, map, dashboard, CSV import/export, Oz AI assistant |
+| **Equipment Inventory** | Sites, equipment, slots/ports, map, dashboard, CSV import/export, Oz AI assistant |
 | **LSP Design** | Topology import, CSPF primary/backup paths, failure simulation, vendor config export |
-| **Quick Notes** | Draggable floating notes window from the PRISM menu while using Inventory or LSP |
+| **Mini IPAM** | IP registry, search, VLSM import, utilization analytics, integrity audit, **IP Workflow** (approval lifecycle) |
+| **Quick Notes** | Draggable floating notes window from the PRISM menu |
+| **IP Calculator** | Network engineering IP/subnet diagnostic tool from the PRISM menu |
+| **VLSM Planner** | Variable-length subnet planning with dry-run and **Save to IPAM** |
+| **NetLens** | Floating IP validation engine — parse IP/CIDR/VLSM, cross-check IPAM, dry-run imports (read-only); **Submit to Workflow** |
 | **Traffic Simulation** | Available inside LSP workspace (failure scenarios, relief advisor) |
 
 ## Quick start — unified platform (recommended)
@@ -24,7 +28,7 @@ pip install -r backend/requirements.txt
 npm run dev
 ```
 
-Open **http://localhost:5173** — pick **Inventory** or **LSP Design** on the home screen. Use the floating PRISM menu to switch modules or open **Notes** while you work.
+Open **http://localhost:5173** — pick a module on the home screen. Use the floating PRISM menu for modules, **Notes**, **IP Calculator**, **VLSM Planner**, and **NetLens** while you work.
 
 | Service | URL (dev) |
 | --- | --- |
@@ -32,8 +36,23 @@ Open **http://localhost:5173** — pick **Inventory** or **LSP Design** on the h
 | LSP API | http://localhost:5000 (`/api/lsp/*`) |
 | Inventory API | http://localhost:3001 (`/api/inventory/*`) |
 | Notes API | http://localhost:3002 (`/api/notes/*`) |
+| IPAM API | http://localhost:3003 (`/api/ipam/*`) |
 
 If ports are stuck from a previous session, run `npm run dev:kill` before `npm run dev`.
+
+## Hosting on a local network (LAN)
+
+Share Prism Platform with colleagues on the same Wi‑Fi or office LAN (e.g. `http://192.168.1.50:5173`).
+
+**Recommended for beginners:** keep using `npm run dev`, add `host: true` to `platform/frontend/vite.config.ts`, open firewall port **5173**, and give clients the server PC’s LAN IP.
+
+Full step-by-step instructions (firewall, IP lookup, security, production reverse proxy) are in **`USER_MANUAL.md` → [Hosting on a local network (LAN)](USER_MANUAL.md#hosting-on-a-local-network-lan)**.
+
+| Approach | Best for | Client URL |
+| --- | --- | --- |
+| **Dev mode + Vite `--host`** | Teams testing on a trusted LAN; all modules | `http://SERVER_IP:5173` |
+| **LSP-only desktop** | Path design only, no Inventory/IPAM | `http://SERVER_IP:5000/lsp` |
+| **nginx / Caddy reverse proxy** | Always-on server, single port | `http://SERVER_IP:8080` |
 
 ## Quick Notes
 
@@ -43,6 +62,92 @@ Notes open as a **draggable floating window** from the PRISM menu while you are 
 - **To-do lists** with checkboxes — add tasks, mark complete, track progress
 - Data stored locally in `notes/backend/notes.db` via `/api/notes`
 - Requires the Notes API (started automatically with `npm run dev`)
+
+## IP Calculator
+
+Network engineering **decision-support tool** — draggable floating window from the PRISM menu for ISP, enterprise, and telecom work.
+
+- **Input** — CIDR (`192.168.1.10/27`), combined IP+mask, or split IP + mask/CIDR fields
+- **Smart validation** — detects host, network, or broadcast input; explains context and suggests assignable IPs (never just “not assignable”)
+- **Overview** — network, broadcast, mask, block size, totals
+- **Hosts** — first/last usable, range, position in subnet
+- **Binary** — IP and mask with network vs host bits highlighted
+- **Router view** — Cisco `ip route` and wildcard mask
+- **Classification** — RFC1918, public, loopback, link-local, CGNAT with descriptions
+- One-line engineering summary, copy/export JSON or CSV
+- Runs entirely in the browser (no backend)
+
+## Mini IPAM
+
+Full **local IP address management** module — home tile #3 or `/ipam`. Data stored in `ipam/backend/ipam.db` via the IPAM API (port **3003**, started with `npm run dev`).
+
+| Phase | Scope |
+| --- | --- |
+| **1 — Basic IP database** | Subnet/host registry, instant search, IPv4 validation, pre-save validate |
+| **2 — VLSM & conflicts** | VLSM JSON import (from VLSM Planner), overlap/duplicate detection, subnet tracking, free-space finder, next-IP suggestion |
+| **3 — Analytics & reporting** | Utilization dashboard, project breakdown, high-util alerts, downloadable utilization report |
+| **4 — Enterprise foundation** | Audit log, bulk CSV import, JSON export with analytics |
+| **5 — IP Workflow Manager** | Allocation lifecycle (request → validate → approve → registry), NetLens attachment, change log |
+
+NetLens validates; **IP Workflow** controls approvals and state; the **Registry** is the system of record (written only when a workflow is approved, reserved, or activated).
+
+### Integrity and audit
+
+- **Pre-save validation** and **post-save integrity scan** on every change
+- **Audit tab** — health score, conflicts, warnings, orphan IPs, re-scan, downloadable report; shows **“IP integrity is all good”** when clean
+- **VLSM dry run** — simulate imports before writing (VLSM Planner, NetLens, or IPAM System Control)
+- **Duplicate prevention** — allocating or registering an IP that already exists is blocked with a clear error (client + server)
+
+### UI tabs
+
+| Tab | Purpose |
+| --- | --- |
+| **Dashboard** | Per-subnet utilization cards + summary KPIs |
+| **Registry** | Source-of-truth CRUD; expandable subnet rows with nested hosts (Address, Type, Status, Project, Location, VLAN) |
+| **Subnets** | Subnet list with metadata preview; detail panel with project/location/VLAN, free ranges, host allocation |
+| **Search** | Query any IP/CIDR/project — membership, calculated context, conflict hints |
+| **IP Workflow** | Allocation pipeline — requests queue, approvals, blocked items, lifecycle history (NetLens → approve → registry) |
+| **Analytics** | Project breakdown, utilization table, report download |
+| **Audit** | Integrity health score, conflict/warning list, orphan IPs, report download |
+| **System Control** | Bulk CSV import, VLSM JSON import, JSON/CSV export, activity log |
+
+### VLSM integration
+
+The **VLSM Planner** (PRISM menu) includes **Save to IPAM** on its Export tab. Use **Dry run** first; subnets import as `reserved` records under a project name and IPAM refreshes automatically. You can also import VLSM JSON from **System Control**.
+
+For controlled allocations (approval trail, conflict gates), use **IP Workflow** instead of writing directly to the Registry.
+
+### IP Workflow Manager
+
+State machine for IP/subnet allocations — does **not** calculate addresses (NetLens) and does **not** replace the Registry; it manages **state transitions**, **approvals**, and **audit**.
+
+**Lifecycle:** `REQUESTED` → `VALIDATED` → `PENDING_APPROVAL` → `APPROVED` → `RESERVED` → `ACTIVE` (also `MODIFIED`, `DECOMMISSIONED`)
+
+| Area | What you see |
+| --- | --- |
+| **Requests queue** | New and in-review allocations |
+| **Active workflows** | Approved, reserved, or active items |
+| **Blocked requests** | Invalid NetLens result or conflicts (needs fix or admin override) |
+| **History log** | Every transition with actor, reason, and timestamp |
+
+**Actions:** submit for approval, approve, reject, apply NetLens suggestion, override (with reason), reserve, activate, decommission.
+
+**Registry writes** happen only when a workflow is **approved** (creates `reserved`), **reserved**, or **activated** (updates to `used`). Decommission removes the linked registry record.
+
+Create requests on the **IP Workflow** tab (auto-runs NetLens) or from **NetLens → Submit to Workflow** (opens the IP Workflow tab when you are already in Mini IPAM).
+
+## NetLens
+
+Stateless **IP validation engine** — draggable floating panel from the PRISM menu. NetLens does **not** store records; it validates input and optionally reads IPAM for cross-checks.
+
+- **Input** — single IP, CIDR, or VLSM-style host list (`hosts: 50, 20, 10`)
+- **Validation** — format, role (host/network/broadcast), RFC1918 classification
+- **Network analysis** — mask, usable range, block size, position in subnet
+- **Intelligence insights** — IPAM lookup, conflict hints, VLSM import dry-run against live registry
+- **Submit to Workflow** — after analysis, send the address and NetLens result to **Mini IPAM → IP Workflow** (validation only; no registry write from NetLens)
+- Runs analysis in the browser; IPAM checks use read-only API calls when the IPAM service is running
+
+**Integration flow:** NetLens (validate) → IP Workflow (approve) → Registry (persist)
 
 ## Inventory — Oz AI (Llama model)
 
@@ -244,30 +349,20 @@ The executable is written to `dist/prism.exe` (Windows). First launch may be a f
 From repository root:
 
 ```powershell
-npm test          # LSP backend + frontend + inventory + platform build
-npm run smoke     # live API smoke tests (start APIs first: npm run dev:lsp-api & npm run dev:inv-api)
+npm test          # LSP, inventory, notes, IPAM, platform build
+npm run smoke     # live API smoke tests (start APIs first: npm run dev)
 ```
 
-### Backend
-
-```powershell
-cd backend
-$env:PYTHONPATH = "."
-python -m pytest
-```
-
-Coverage is enforced for CSPF and role-validation modules (see `backend/pytest.ini`).
-
-### Frontend
-
-```powershell
-cd frontend
-npm run lint
-npm run test
-npm run build
-```
-
-Vitest covers the NE picker combobox (`NeSearchInput`, `nePicker`) and project-file validation.
+| Suite | Command | What it covers |
+| --- | --- | --- |
+| **All** | `npm test` | LSP pytest + lint + Vitest, inventory, notes, IPAM, platform build |
+| **LSP backend** | `cd backend && python -m pytest` | CSPF, role validation, import, API |
+| **LSP frontend** | `cd frontend && npm run lint && npm run test` | NE picker, project file validation |
+| **Inventory** | `cd inventory/backend && node scripts/test-all.js` | Schema, Oz, HTTP API |
+| **Notes** | `cd notes/backend && npm run test` | Notes CRUD API |
+| **IPAM** | `cd ipam/backend && npm run test` | Registry, search, VLSM import, duplicate host (409), integrity |
+| **Platform UI** | `cd platform/frontend && npm run build` | Production build of unified shell |
+| **Smoke** | `npm run smoke` | Live LSP + inventory endpoints (requires `npm run dev`) |
 
 ## API overview
 
@@ -286,4 +381,14 @@ Inventory API routes are under `/api/inventory/*` (see `inventory/README.md`).
 
 ## Documentation
 
-See `USER_MANUAL.md` for CSV schemas, UI walkthrough, and vendor notes.
+| Document | Contents |
+| --- | --- |
+| **`USER_MANUAL.md`** | Platform overview, all modules, LSP CSV schemas, UI walkthrough, vendor notes, **LAN hosting guide** |
+| **`inventory/README.md`** | Inventory API routes and standalone run instructions |
+
+## Credits
+
+**Developers**
+
+Ruel Saria  
+John Carlo Emberga

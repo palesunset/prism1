@@ -5,7 +5,7 @@
  */
 import { execSync } from 'node:child_process';
 
-const PORTS = [5000, 3001, 3002, 5173, 5174, 5175];
+const PORTS = [5000, 3001, 3002, 3003, 5173, 5174, 5175];
 const isWin = process.platform === 'win32';
 
 function killOnPort(port) {

@@ -2,10 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 html,
 body,
 #root {
   height: 100%;
   min-height: 100%;
+  overflow: hidden;
+}
+
+body {
   margin: 0;
 }

@@ -1,15 +1,35 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { Boxes, ChevronDown, GripVertical, Home, Layers, Network, StickyNote } from "lucide-react";
+import { Boxes, Calculator, ChevronDown, Database, GripVertical, Home, LayoutGrid, Network, ScanEye, StickyNote, Waypoints } from "lucide-react";
 import { useNotesStore } from "../store/useNotesStore";
+import { useIpCalculatorStore } from "../store/useIpCalculatorStore";
+import { useVlsmPlannerStore } from "../store/useVlsmPlannerStore";
+import { useNetLensStore } from "../store/useNetLensStore";
 
 const STORAGE_KEY = "prism-platform-switcher-v1";
-const ICON_SIZE = 44;
+const FAB_SIZE = 48;
+
+/** Indigo/violet halo — visible on maps without clashing with LSP path cyan. */
+const PANEL_GLOW =
+  "shadow-[0_0_0_1px_rgba(129,140,248,0.18),0_0_22px_rgba(99,102,241,0.22),0_10px_32px_rgba(0,0,0,0.42)]";
+const FAB_GLOW =
+  "shadow-[0_0_0_1px_rgba(167,139,250,0.35),0_0_18px_rgba(99,102,241,0.45),0_6px_20px_rgba(0,0,0,0.5)]";
+const FAB_GLOW_HOVER =
+  "hover:shadow-[0_0_0_1px_rgba(196,181,253,0.45),0_0_24px_rgba(124,58,237,0.55),0_8px_24px_rgba(0,0,0,0.55)]";
+
+function FabIcon(props: { className?: string; strokeWidth?: number }) {
+  return <LayoutGrid className={props.className} strokeWidth={props.strokeWidth ?? 2.25} aria-hidden />;
+}
+
+function PanelHeaderIcon() {
+  return <FabIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" strokeWidth={1.75} />;
+}
 
 const modules = [
-  { to: "/inventory", label: "Inventory", short: "Inv", Icon: Boxes },
+  { to: "/inventory", label: "Equipment Inventory", short: "Inv", Icon: Boxes },
   { to: "/lsp", label: "LSP Design", short: "LSP", Icon: Network },
+  { to: "/ipam", label: "Mini IPAM", short: "IPAM", Icon: Database },
 ] as const;
 
 const homeLink = { to: "/", label: "Home", Icon: Home } as const;
@@ -42,9 +62,9 @@ function defaultPosition(onLsp: boolean): Point {
   const m = 20;
   if (typeof window === "undefined") return { x: m, y: m };
   if (onLsp) {
-    return clampToViewport(Math.max(m, window.innerWidth - ICON_SIZE - m), 84, ICON_SIZE, ICON_SIZE);
+    return clampToViewport(Math.max(m, window.innerWidth - FAB_SIZE - m), 84, FAB_SIZE, FAB_SIZE);
   }
-  return clampToViewport(m, Math.max(m, window.innerHeight - ICON_SIZE - m), ICON_SIZE, ICON_SIZE);
+  return clampToViewport(m, Math.max(m, window.innerHeight - FAB_SIZE - m), FAB_SIZE, FAB_SIZE);
 }
 
 function clampToViewport(x: number, y: number, w: number, h: number): Point {
@@ -59,9 +79,9 @@ function clampToViewport(x: number, y: number, w: number, h: number): Point {
 
 function tabClass({ isActive }: { isActive: boolean }) {
   return clsx(
-    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+    "flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
     isActive
-      ? "bg-cyan-500/25 text-cyan-200 ring-1 ring-cyan-500/40"
+      ? "bg-indigo-500/25 text-indigo-100 ring-1 ring-indigo-400/45"
       : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
   );
 }
@@ -71,8 +91,15 @@ export function PlatformSwitcher() {
   const { pathname } = useLocation();
   const onInventory = pathname.startsWith("/inventory");
   const onLsp = pathname.startsWith("/lsp");
+  const onIpam = pathname.startsWith("/ipam");
   const notesOpen = useNotesStore((s) => s.panelOpen);
   const toggleNotes = useNotesStore((s) => s.togglePanel);
+  const ipCalcOpen = useIpCalculatorStore((s) => s.panelOpen);
+  const toggleIpCalc = useIpCalculatorStore((s) => s.togglePanel);
+  const vlsmOpen = useVlsmPlannerStore((s) => s.panelOpen);
+  const toggleVlsm = useVlsmPlannerStore((s) => s.togglePanel);
+  const netLensOpen = useNetLensStore((s) => s.panelOpen);
+  const toggleNetLens = useNetLensStore((s) => s.togglePanel);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
@@ -96,12 +123,12 @@ export function PlatformSwitcher() {
   const syncDisplayPos = useCallback(() => {
     const el = rootRef.current;
     if (!el) return;
-    const w = el.offsetWidth || (expanded ? 272 : ICON_SIZE);
-    const h = el.offsetHeight || (expanded ? 200 : ICON_SIZE);
+    const w = el.offsetWidth || (expanded ? 248 : FAB_SIZE);
+    const h = el.offsetHeight || (expanded ? 200 : FAB_SIZE);
     if (expanded) {
       setDisplayPos(clampToViewport(anchor.x, anchor.y, w, h));
     } else {
-      setDisplayPos(clampToViewport(anchor.x, anchor.y, ICON_SIZE, ICON_SIZE));
+      setDisplayPos(clampToViewport(anchor.x, anchor.y, FAB_SIZE, FAB_SIZE));
     }
   }, [anchor, expanded]);
 
@@ -138,8 +165,8 @@ export function PlatformSwitcher() {
       const dy = e.clientY - drag.startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
       const el = rootRef.current;
-      const w = el?.offsetWidth ?? (expanded ? 272 : ICON_SIZE);
-      const h = el?.offsetHeight ?? (expanded ? 200 : ICON_SIZE);
+      const w = el?.offsetWidth ?? (expanded ? 248 : FAB_SIZE);
+      const h = el?.offsetHeight ?? (expanded ? 200 : FAB_SIZE);
       const next = clampToViewport(drag.originX + dx, drag.originY + dy, w, h);
       setDisplayPos(next);
       setAnchor(next);
@@ -158,8 +185,8 @@ export function PlatformSwitcher() {
         /* ignore */
       }
       const el = rootRef.current;
-      const w = el?.offsetWidth ?? ICON_SIZE;
-      const h = el?.offsetHeight ?? ICON_SIZE;
+      const w = el?.offsetWidth ?? FAB_SIZE;
+      const h = el?.offsetHeight ?? FAB_SIZE;
       const next = clampToViewport(
         drag.originX + (e.clientX - drag.startX),
         drag.originY + (e.clientY - drag.startY),
@@ -196,10 +223,10 @@ export function PlatformSwitcher() {
       aria-label="PRISM module switcher"
     >
       {expanded ? (
-        <div className="w-[min(17rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-xl backdrop-blur-md">
+        <div className={clsx("w-[min(15.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-indigo-500/25 bg-gray-950/95 backdrop-blur-md", PANEL_GLOW)}>
           <div className="flex items-center gap-1 border-b border-white/10 px-2 py-1.5">
             <div
-              className="flex min-w-0 flex-1 cursor-grab items-center gap-1 active:cursor-grabbing"
+              className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 active:cursor-grabbing"
               onPointerDown={onDragStart}
               onPointerMove={onDragMove}
               onPointerUp={(e) => finishDrag(e, false)}
@@ -207,8 +234,9 @@ export function PlatformSwitcher() {
               title="Drag to move"
             >
               <GripVertical className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />
-              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                PRISM
+              <PanelHeaderIcon />
+              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Modules
               </span>
             </div>
             <button
@@ -221,9 +249,9 @@ export function PlatformSwitcher() {
               <ChevronDown className="h-4 w-4" strokeWidth={2} />
             </button>
           </div>
-          {(onInventory || onLsp) && (
+          {(onInventory || onLsp || onIpam) && (
             <p className="px-3 pt-2 text-[10px] text-slate-500">
-              {onInventory ? "Equipment inventory" : "LSP & traffic simulation"}
+              {onInventory ? "Equipment inventory" : onIpam ? "IP address management" : "LSP & traffic simulation"}
             </p>
           )}
           <nav className="flex flex-col gap-0.5 p-2">
@@ -235,7 +263,7 @@ export function PlatformSwitcher() {
               onClick={() => persistState(anchor, true)}
             >
               <homeLink.Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-              {homeLink.label}
+              <span className="truncate">{homeLink.label}</span>
             </NavLink>
             {modules.map(({ to, label, Icon }) => (
               <NavLink
@@ -247,9 +275,60 @@ export function PlatformSwitcher() {
                 onClick={() => persistState(anchor, true)}
               >
                 <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                {label}
+                <span className="truncate">{label}</span>
               </NavLink>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                toggleIpCalc();
+                persistState(anchor, true);
+              }}
+              className={clsx(
+                "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                ipCalcOpen
+                  ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40"
+                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+              )}
+              title="IP Calculator"
+            >
+              <Calculator className="h-4 w-4 shrink-0" strokeWidth={2} />
+              IP Calculator
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toggleVlsm();
+                persistState(anchor, true);
+              }}
+              className={clsx(
+                "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                vlsmOpen
+                  ? "bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40"
+                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+              )}
+              title="VLSM Planner"
+            >
+              <Waypoints className="h-4 w-4 shrink-0" strokeWidth={2} />
+              VLSM Planner
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toggleNetLens();
+                persistState(anchor, true);
+              }}
+              className={clsx(
+                "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                netLensOpen
+                  ? "bg-teal-500/20 text-teal-200 ring-1 ring-teal-500/40"
+                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+              )}
+              title="NetLens — IP validation engine"
+            >
+              <ScanEye className="h-4 w-4 shrink-0" strokeWidth={2} />
+              NetLens
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -272,7 +351,15 @@ export function PlatformSwitcher() {
       ) : (
         <button
           type="button"
-          className="flex h-11 w-11 cursor-grab items-center justify-center rounded-full border border-cyan-500/40 bg-gray-950/95 text-cyan-300 shadow-lg backdrop-blur-md transition hover:border-cyan-400/60 hover:bg-gray-900 active:cursor-grabbing"
+          className={clsx(
+            "flex h-12 w-12 cursor-grab items-center justify-center rounded-2xl",
+            "border border-violet-400/35 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600",
+            "text-white backdrop-blur-sm transition",
+            "hover:border-violet-300/50 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500",
+            "active:scale-[0.97] active:cursor-grabbing",
+            FAB_GLOW,
+            FAB_GLOW_HOVER,
+          )}
           onPointerDown={onDragStart}
           onPointerMove={onDragMove}
           onPointerUp={(e) => finishDrag(e, true)}
@@ -281,7 +368,7 @@ export function PlatformSwitcher() {
           aria-label="Open PRISM module switcher"
           title="Drag to move · click to expand · double-click to expand"
         >
-          <Layers className="h-5 w-5" strokeWidth={2} />
+          <FabIcon className="h-5 w-5" />
         </button>
       )}
     </div>
