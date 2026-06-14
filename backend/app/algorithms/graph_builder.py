@@ -9,6 +9,7 @@ from typing import Any
 
 import networkx as nx
 
+from app.algorithms.role_utils import resolve_ne_role
 from app.core.exceptions import ImportValidationError
 from app.core.models import LinkRecord, NERecord, Vendor
 
@@ -64,9 +65,9 @@ def parse_nes_csv(content: str) -> dict[str, NERecord]:
         vendor = _parse_vendor(row.get(fields.get("vendor", ""), "") if "vendor" in fields else None)
         if has_role_column:
             raw_role = row.get(fields["role"], "")
-            role = str(raw_role).strip()
+            role = resolve_ne_role(str(raw_role), ne_id)
         else:
-            role = "P_RTR"
+            role = resolve_ne_role("", ne_id)
         lb6_raw = row.get(fields["loopback_ipv6"], "") if "loopback_ipv6" in fields else ""
         lb6 = str(lb6_raw).strip() or None
         node_sid_raw = row.get(fields["node_sid"], "") if "node_sid" in fields else ""
@@ -263,6 +264,82 @@ def build_expanded_graph(
         h.add_edge(u, ln, weight=0.0, kind="ne_to_ln")
         h.add_edge(ln, v, weight=lat, kind="ln_to_ne", latency_ms=lat)
     return h, ln_map
+
+
+def _edge_latency_ms(data: dict[str, Any], time_hour: int | None) -> float:
+    lat = float(data.get("latency_ms", 0.0))
+    if time_hour is not None:
+        series = data.get("latency_24h")
+        if isinstance(series, list) and len(series) == 24:
+            try:
+                lat = float(series[int(time_hour)])
+            except Exception:
+                pass
+    return lat
+
+
+def build_ne_cspf_graph(
+    mg: nx.MultiGraph,
+    *,
+    required_bw: int | None,
+    failed_ne_ids: set[str],
+    failed_link_keys: set[tuple[str, str, int]],
+    excluded_srlgs: set[str] | None = None,
+    time_hour: int | None = None,
+) -> nx.Graph:
+    """
+    Collapsed NE-level graph for fast CSPF/Yen.
+
+    Each NE adjacency uses the minimum-latency parallel link that satisfies
+    bandwidth, failure, and SRLG constraints.
+    """
+
+    h = nx.Graph()
+    for ne in mg.nodes:
+        if ne not in failed_ne_ids:
+            h.add_node(ne)
+    best: dict[tuple[str, str], tuple[float, str, str, int]] = {}
+    for u, v, key, data in mg.edges(keys=True, data=True):
+        if u in failed_ne_ids or v in failed_ne_ids:
+            continue
+        if (u, v, key) in failed_link_keys or (v, u, key) in failed_link_keys:
+            continue
+        req = int(required_bw or 0)
+        avail = int(data.get("reservable_bw_mbps", 0))
+        if req > 0 and avail < req:
+            continue
+        if excluded_srlgs:
+            edge_srlg = set(data.get("srlg") or [])
+            if edge_srlg & excluded_srlgs:
+                continue
+        lat = _edge_latency_ms(data, time_hour)
+        pair = (u, v) if u <= v else (v, u)
+        prev = best.get(pair)
+        if prev is None or lat < prev[0]:
+            best[pair] = (lat, u, v, int(key))
+    for _pair, (lat, u, v, key) in best.items():
+        h.add_edge(u, v, weight=lat, latency_ms=lat, u=u, v=v, key=key)
+    return h
+
+
+def ne_path_to_edge_sequence(h: nx.Graph, ne_path: list[str]) -> list[tuple[str, str, int]]:
+    """Map an NE-level path to directed MultiGraph edges using best parallel link metadata."""
+
+    edges: list[tuple[str, str, int]] = []
+    for i in range(len(ne_path) - 1):
+        a = ne_path[i]
+        b = ne_path[i + 1]
+        data = h[a][b]
+        eu = str(data["u"])
+        ev = str(data["v"])
+        ek = int(data["key"])
+        if a == eu and b == ev:
+            edges.append((eu, ev, ek))
+        elif a == ev and b == eu:
+            edges.append((ev, eu, ek))
+        else:
+            edges.append((a, b, ek))
+    return edges
 
 
 def expanded_path_to_ne_path(path: list[str]) -> list[str]:

@@ -31,6 +31,25 @@ class RoleValidationResult:
         self.reason = reason
 
 
+def _access_suffix_to_dest(
+    path_nodes: list[str],
+    start_idx: int,
+    role_map: dict[str, str],
+    dest_role: str,
+    dest_node: str,
+) -> bool:
+    """True when every node from ``start_idx`` through destination stays in ``dest_role``."""
+
+    for j in range(start_idx, len(path_nodes)):
+        node = path_nodes[j]
+        role = str(role_map.get(node, "")).strip().upper()
+        if node == dest_node:
+            return role == dest_role
+        if role != dest_role:
+            return False
+    return False
+
+
 def validate_path_roles(path_nodes: list[str], role_map: dict[str, str], dest_node: str) -> RoleValidationResult:
     """Return whether ``path_nodes`` satisfies hierarchy rules toward ``dest_node``."""
 
@@ -67,10 +86,14 @@ def validate_path_roles(path_nodes: list[str], role_map: dict[str, str], dest_no
                 return RoleValidationResult(False, f"Invalid transition: {current_role} → {next_role}")
             continue
 
-        # Exiting P_RTR core into access is allowed only when entering the destination access layer,
-        # and then the remainder of the path must stay within that role until the destination node.
+        # Exiting P_RTR into access is allowed only when the remainder of the path stays in the
+        # destination access role (blocks transit DRRTR/PERTR/PECRT hops such as MARAMAG-DRRTR).
         if in_core and current_role == "P_RTR" and next_role in ACCESS_ROLES:
             if next_role != dest_role:
+                return RoleValidationResult(
+                    False, f"Invalid transition: P_RTR → {next_role} (must enter destination access role)"
+                )
+            if not _access_suffix_to_dest(path_nodes, i + 1, role_map, dest_role, dest_node):
                 return RoleValidationResult(
                     False, f"Invalid transition: P_RTR → {next_role} (must enter destination access role)"
                 )

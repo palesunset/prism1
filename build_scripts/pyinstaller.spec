@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Single-file Windows build (see README). Run from repo root after: cd frontend && npm run build
+# Single-file Windows build (see README). Run from repo root after: npm run build:platform
 import os
 from pathlib import Path
 
@@ -7,11 +7,15 @@ spec_dir = Path(os.path.abspath(SPEC)).resolve().parent
 repo = spec_dir.parent
 backend = repo / "backend"
 
+platform_dist = repo / "platform" / "frontend" / "dist"
+lsp_dist = repo / "frontend" / "dist"
+frontend_dist = platform_dist if platform_dist.is_dir() else lsp_dist
+
 block_cipher = None
 
 datas = [
     (str(backend / "app" / "templates"), "app/templates"),
-    (str(repo / "frontend" / "dist"), "frontend_dist"),
+    (str(frontend_dist), "frontend_dist"),
     (str(repo / "sample_data"), "sample_data"),
 ]
 

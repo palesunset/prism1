@@ -23,6 +23,16 @@ body,
   box-shadow: var(--ody-shadow-panel, 0 4px 16px rgba(0, 0, 0, 0.35));
 }
 
+/* Cytoscape canvas — isolate from backdrop-blur panels; stable hit-testing while panning */
+.graph-view-cy {
+  isolation: isolate;
+  touch-action: none;
+}
+
+.graph-view-cy canvas {
+  outline: none;
+}
+
 /* Panel scroll areas — Odysseus thumb on dark track */
 .panel-scroll {
   scrollbar-width: thin;

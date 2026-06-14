@@ -1,0 +1,32 @@
+{
+  "name": "prism-platform",
+  "private": true,
+  "version": "0.2.0",
+  "description": "PRISM platform — unified inventory and LSP design",
+  "scripts": {
+    "dev": "concurrently -n lsp-api,inv-api,web -c cyan,magenta,green \"npm run dev:lsp-api\" \"npm run dev:inv-api\" \"npm run dev:platform\"",
+    "dev:kill": "node scripts/kill-dev-ports.mjs",
+    "dev:lsp-api": "node scripts/run-lsp-api.mjs",
+    "dev:inv-api": "cd inventory/backend && npm run dev",
+    "dev:platform": "cd platform/frontend && npm run dev",
+    "dev:lsp-only": "concurrently -n lsp-api,lsp-web -c cyan,green \"npm run dev:lsp-api\" \"cd frontend && npm run dev\"",
+    "dev:inventory-only": "cd inventory && npm run dev",
+    "start": "concurrently -n lsp-api,inv-api -c cyan,magenta \"npm run dev:lsp-api\" \"cd inventory/backend && npm start\"",
+    "build": "npm run build:platform",
+    "build:platform": "cd platform/frontend && npm run build",
+    "build:lsp": "cd frontend && npm run build",
+    "install:all": "npm install && cd platform/frontend && npm install && cd ../../frontend && npm install && cd ../inventory/frontend && npm install && cd ../backend && npm install",
+    "test": "npm run test:lsp && npm run test:inventory && npm run test:platform",
+    "test:lsp": "cd backend && python -m pytest && cd ../frontend && npm run lint && npm run test",
+    "test:inventory": "cd inventory/backend && node scripts/test-all.js",
+    "test:platform": "cd platform/frontend && npm run build",
+    "smoke": "node scripts/smoke-test.mjs",
+    "lint": "cd frontend && npm run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

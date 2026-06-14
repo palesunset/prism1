@@ -11,7 +11,7 @@ from app.core.exceptions import ImportValidationError
 from app.core.models import ErrorResponse, ImportSummary, ProjectImportRequest
 from app.state import topology
 
-router = APIRouter(prefix="/api/project", tags=["project"])
+router = APIRouter(prefix="/api/lsp/project", tags=["project"])
 log = logging.getLogger(__name__)
 
 

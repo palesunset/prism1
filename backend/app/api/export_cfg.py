@@ -14,7 +14,7 @@ from app.core.models import Mode
 from app.services.config_generator import ConfigGenerator
 from app.state import topology
 
-router = APIRouter(prefix="/api", tags=["export"])
+router = APIRouter(prefix="/api/lsp", tags=["export"])
 log = logging.getLogger(__name__)
 
 

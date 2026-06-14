@@ -11,7 +11,7 @@ from app.algorithms.traffic_simulator import FailedElement, suggest_relief_paths
 from app.core.exceptions import TopologyNotLoadedError
 from app.state import topology
 
-router = APIRouter(prefix="/api", tags=["traffic-relief"])
+router = APIRouter(prefix="/api/lsp", tags=["traffic-relief"])
 
 
 class FailedElementIn(BaseModel):

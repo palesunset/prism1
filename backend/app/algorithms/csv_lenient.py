@@ -9,6 +9,7 @@ from typing import Any
 
 import networkx as nx
 
+from app.algorithms.role_utils import resolve_ne_role
 from app.core.models import CsvRowIssue, LinkRecord, NERecord, Vendor
 
 
@@ -102,9 +103,9 @@ def parse_nes_csv_lenient(content: str) -> tuple[dict[str, NERecord], list[CsvRo
             vendor = Vendor.nokia
         if has_role_column:
             raw_role = row.get(fields["role"], "")
-            role = str(raw_role).strip()
+            role = resolve_ne_role(str(raw_role), ne_id)
         else:
-            role = "P_RTR"
+            role = resolve_ne_role("", ne_id)
         lb6_raw = row.get(fields["loopback_ipv6"], "") if "loopback_ipv6" in fields else ""
         lb6 = str(lb6_raw).strip() or None
         node_sid_raw = row.get(fields["node_sid"], "") if "node_sid" in fields else ""

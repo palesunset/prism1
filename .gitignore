@@ -17,6 +17,13 @@ venv/
 # Node / frontend
 node_modules/
 frontend/dist/
+platform/frontend/dist/
+inventory/frontend/dist/
+inventory/backend/node_modules/
+inventory/frontend/node_modules/
+inventory/backend/inventory.db
+inventory/backend/models/
+platform/frontend/node_modules/
 
 # OS/editor
 .DS_Store

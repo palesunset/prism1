@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import heapq
 from collections.abc import Iterable
+from itertools import islice
 
 import networkx as nx
+from networkx import shortest_simple_paths
 
 
 def cumulative_latency(latencies: Iterable[float]) -> float:
@@ -56,6 +58,30 @@ def dijkstra_shortest_path(
                 pred[v] = u
                 heapq.heappush(pq, (nd, v))
     return None
+
+
+def k_shortest_paths(
+    graph: nx.Graph,
+    source: str,
+    target: str,
+    weight: str = "weight",
+    max_paths: int = 16,
+) -> list[tuple[list[str], float]]:
+    """Return up to ``max_paths`` loopless shortest paths (NetworkX Yen iterator)."""
+
+    if source not in graph or target not in graph:
+        return []
+    results: list[tuple[list[str], float]] = []
+    try:
+        path_iter = shortest_simple_paths(graph, source, target, weight=weight)
+        for path in islice(path_iter, max_paths):
+            cost = 0.0
+            for u, v in zip(path[:-1], path[1:], strict=True):
+                cost += float(graph[u][v][weight])
+            results.append((path, cost))
+    except nx.NetworkXNoPath:
+        pass
+    return results
 
 
 def yen_k_shortest_paths_simple(

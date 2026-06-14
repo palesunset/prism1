@@ -11,7 +11,7 @@ from app.core.exceptions import TopologyNotLoadedError
 from app.core.models import ComputeRequest, ComputeResponse, ErrorResponse
 from app.state import topology
 
-router = APIRouter(prefix="/api", tags=["compute"])
+router = APIRouter(prefix="/api/lsp", tags=["compute"])
 log = logging.getLogger(__name__)
 
 

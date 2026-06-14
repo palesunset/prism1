@@ -70,6 +70,15 @@ export default function App() {
     const t = await fetchTopology();
     setTopology(t);
     setTopologyRevision((r) => r + 1);
+    if (!t) {
+      setNeIds([]);
+      const st = useAppStore.getState();
+      st.clearFailures();
+      st.clearLspComputeState();
+      st.setSource("");
+      st.setDestination("");
+      return;
+    }
     const ids = t.nodes.map((n) => String(n.data.id)).sort();
     setNeIds(ids);
     const st = useAppStore.getState();

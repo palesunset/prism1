@@ -1,0 +1,4 @@
+Site Name,PLAID,Region,Territory,Address,Latitude,Longitude,Vendor,Network Element,Model,Serial Number,Router Type,IP Address,Software Version,Descriptor Version,End of Life (YYYY-MM-DD),Status,Total Chassis Slot
+VALERO,NCR222,NCR,Territory 1,Address 22121,14.559,121.0238,NOKIA,NE-VAL-01,7750 SR-7,SN-VAL-001,P,10.0.0.1,V800R021C00,NE5000E-V800R021C00,2028-12-31,Active,8
+VALERO,NCR222,NCR,Territory 1,Address 22121,14.559,121.0238,HUAWEI,NE-VAL-02,NE40E,SN-VAL-002,DR,10.0.0.2,,,,Active,4
+CEBU,VIS1212,VIS,Territory 1,Address 13412,10.3114,123.9178,NOKIA,NE-CEB-01,7750 SR-12,SN-CEB-001,P,10.1.0.1,,,,Active,

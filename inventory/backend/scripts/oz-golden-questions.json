@@ -1,0 +1,145 @@
+[
+  {
+    "id": "help",
+    "q": "help",
+    "expectIntent": "direct",
+    "expectContains": ["Oz", "inventory"]
+  },
+  {
+    "id": "overview",
+    "q": "Inventory overview",
+    "expectIntent": "direct",
+    "expectContains": ["Sites", "Equipment", "Ports"]
+  },
+  {
+    "id": "how-many-sites",
+    "q": "How many sites?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["COUNT", "sites"],
+    "expectColumns": ["site_count"]
+  },
+  {
+    "id": "how-many-equipment",
+    "q": "How many equipment?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["COUNT", "equipment"],
+    "expectColumns": ["equipment_count"]
+  },
+  {
+    "id": "list-all-sites",
+    "q": "List all sites",
+    "expectIntent": "sql",
+    "expectSqlContains": ["sites", "plaid"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "router-type-counts",
+    "q": "Router type counts",
+    "expectIntent": "sql",
+    "expectSqlContains": ["router_type", "GROUP BY"],
+    "expectColumns": ["router_type", "equipment_count"]
+  },
+  {
+    "id": "vendor-distribution",
+    "q": "Vendor distribution",
+    "expectIntent": "sql",
+    "expectSqlContains": ["vendor", "GROUP BY"],
+    "expectColumns": ["vendor", "equipment_count"]
+  },
+  {
+    "id": "show-p-routers",
+    "q": "Show P routers",
+    "expectIntent": "sql",
+    "expectSqlContains": ["router_type", "'P'", "equipment", "site_name"],
+    "expectColumns": ["site_name", "equipment", "router_type"]
+  },
+  {
+    "id": "port-utilization-by-site",
+    "q": "Port utilization by site",
+    "expectIntent": "sql",
+    "expectSqlContains": ["total_ports", "utilized_ports"],
+    "expectContains": ["utilization"]
+  },
+  {
+    "id": "eol-this-year",
+    "q": "EOL this year",
+    "expectIntent": "sql",
+    "expectSqlContains": ["end_of_life", "equipment", "site_name"],
+    "expectColumns": ["site_name", "equipment", "end_of_life"]
+  },
+  {
+    "id": "empty-sites",
+    "q": "Sites with no equipment",
+    "expectIntent": "sql",
+    "expectSqlContains": ["IS NULL"],
+    "expectMinRows": 1,
+    "expectContains": ["no equipment"]
+  },
+  {
+    "id": "nokia-per-site",
+    "q": "How many Nokia equipment in each site?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["site_name", "NOKIA", "GROUP BY"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "dr-free-ports",
+    "q": "What DR routers have available ports?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["'DR'", "is_utilized = 0"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "equipment-at-seeded-site",
+    "q": "List equipment at Oz Golden Site Alpha",
+    "expectIntent": "sql",
+    "expectSqlContains": ["site_name"],
+    "expectMinRows": 1,
+    "expectContains": ["Oz Golden Site Alpha"]
+  },
+  {
+    "id": "how-many-p-routers",
+    "q": "How many P routers?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["COUNT", "'P'"],
+    "expectContains": ["P (Provider/Core) router"]
+  },
+  {
+    "id": "list-ip-address",
+    "q": "List IP address for equipment at Oz Golden Site Alpha",
+    "expectIntent": "sql",
+    "expectSqlContains": ["ip_address", "site_name"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "mixed-fields-active",
+    "q": "Show model, serial number, and status for Active equipment at Oz Golden Site Alpha",
+    "expectIntent": "sql",
+    "expectSqlContains": ["model", "serial_number", "status", "active"],
+    "expectColumns": ["model", "serial_number", "status", "site_name"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "network-element-and-eol",
+    "q": "List network element and end of life for Nokia equipment",
+    "expectIntent": "sql",
+    "expectSqlContains": ["network_element", "end_of_life", "NOKIA"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "router-type-and-software",
+    "q": "Show router type and software version for P routers",
+    "expectIntent": "sql",
+    "expectSqlContains": ["router_type", "software_version", "'P'"],
+    "expectColumns": ["site_name", "equipment", "router_type", "software_version"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "p-router-eol",
+    "q": "Can you show P router End of life?",
+    "expectIntent": "sql",
+    "expectSqlContains": ["site_name", "equipment", "end_of_life", "'P'"],
+    "expectColumns": ["site_name", "equipment", "router_type", "end_of_life"],
+    "expectMinRows": 1
+  }
+]

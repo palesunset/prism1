@@ -10,9 +10,12 @@ import type {
 import type { Mode, PathResult, LspReservation } from "../types";
 
 const client = axios.create({
-  baseURL: "/api",
+  baseURL: "/api/lsp",
   timeout: 30_000,
 });
+
+/** Heavy CSPF / config generation on large topologies may exceed the default timeout. */
+const LONG_TIMEOUT_MS = 120_000;
 
 export async function importTopology(files: { nes: File; links: File }): Promise<ImportSummary> {
   const fd = new FormData();
@@ -44,9 +47,16 @@ export function errorDetail(err: unknown): string {
   return err instanceof Error ? err.message : "Unexpected error";
 }
 
-export async function fetchTopology(): Promise<TopologyPayload> {
-  const res = await client.get<TopologyPayload>("/topology");
-  return res.data;
+export async function fetchTopology(): Promise<TopologyPayload | null> {
+  try {
+    const res = await client.get<TopologyPayload>("/topology");
+    return res.data;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 409) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function computePaths(body: {
@@ -64,7 +74,7 @@ export async function computePaths(body: {
   tradeoff_mode?: "percent" | "absolute";
   tradeoff_value?: number;
 }): Promise<ComputeResponse> {
-  const res = await client.post<ComputeResponse>("/compute", body);
+  const res = await client.post<ComputeResponse>("/compute", body, { timeout: LONG_TIMEOUT_MS });
   return res.data;
 }
 
@@ -143,6 +153,7 @@ export type ExportMonolithicPayload = {
 
 export async function exportClipboard(payload: ExportMonolithicPayload): Promise<string> {
   const res = await client.post<string>("/export/clipboard", payload, {
+    timeout: LONG_TIMEOUT_MS,
     responseType: "text",
     transformResponse: (r) => r,
   });
@@ -151,6 +162,7 @@ export async function exportClipboard(payload: ExportMonolithicPayload): Promise
 
 export async function exportMonolithic(payload: ExportMonolithicPayload): Promise<string> {
   const res = await client.post<string>("/export/monolithic", payload, {
+    timeout: LONG_TIMEOUT_MS,
     responseType: "text",
     transformResponse: (r) => r,
   });
@@ -162,6 +174,7 @@ export async function exportMonolithicSection(
   payload: ExportMonolithicPayload,
 ): Promise<string> {
   const res = await client.post<string>(`/export/monolithic/section?section=${section}`, payload, {
+    timeout: LONG_TIMEOUT_MS,
     responseType: "text",
     transformResponse: (r) => r,
   });

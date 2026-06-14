@@ -42,3 +42,33 @@ jobs:
         run: npm run test
       - name: Build
         run: npm run build
+
+  inventory:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inventory/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: npm install
+      - name: Test
+        run: node scripts/test-all.js
+
+  platform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run build

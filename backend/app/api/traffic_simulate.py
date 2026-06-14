@@ -11,7 +11,7 @@ from app.algorithms.traffic_simulator import FailedElement, InjectedFlow, Manual
 from app.core.exceptions import TopologyNotLoadedError
 from app.state import topology
 
-router = APIRouter(prefix="/api", tags=["traffic-sim"])
+router = APIRouter(prefix="/api/lsp", tags=["traffic-sim"])
 
 
 class FailedElementIn(BaseModel):

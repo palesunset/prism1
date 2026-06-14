@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ip-only",
+    "q": "Show IP address for P routers",
+    "expectColumns": ["site_name", "equipment", "ip_address"],
+    "expectSqlContains": ["ip_address", "'P'"]
+  },
+  {
+    "id": "status-only",
+    "q": "List status for Active equipment at Oz Golden Site Alpha",
+    "expectColumns": ["site_name", "equipment", "status"],
+    "expectSqlContains": ["status", "active"]
+  },
+  {
+    "id": "software-model",
+    "q": "Show software version and model for Nokia equipment",
+    "expectColumns": ["site_name", "equipment", "software_version", "model"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "ne-ip-rt",
+    "q": "List network element, IP address, and router type for DR routers",
+    "expectColumns": ["site_name", "equipment", "network_element", "ip_address", "router_type"],
+    "expectSqlContains": ["'DR'"]
+  },
+  {
+    "id": "eol-status-mix",
+    "q": "Show end of life and status for P routers",
+    "expectColumns": ["site_name", "equipment", "end_of_life", "status"],
+    "expectSqlContains": ["end_of_life", "status", "'P'"]
+  },
+  {
+    "id": "serial-explicit",
+    "q": "Show serial number for equipment at Oz Golden Site Alpha",
+    "expectColumns": ["site_name", "equipment", "serial_number"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "full-details",
+    "q": "Show equipment details at Oz Golden Site Alpha",
+    "expectColumns": ["site_name", "equipment", "network_element", "ip_address", "router_type"],
+    "expectMinRows": 1
+  },
+  {
+    "id": "descriptor-sw",
+    "q": "List software version and descriptor version for P routers",
+    "expectColumns": ["site_name", "equipment", "software_version", "descriptor_version"],
+    "expectSqlContains": ["descriptor_version", "'P'"]
+  }
+]

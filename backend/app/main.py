@@ -6,11 +6,10 @@ import logging
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from app.api.compute import router as compute_router
 from app.api.export_cfg import router as export_router
@@ -45,10 +44,58 @@ def _static_dir() -> Path | None:
             return dist
         return None
     here = Path(__file__).resolve().parent.parent.parent
-    dist = here / "frontend" / "dist"
-    if dist.is_dir():
-        return dist
+    for candidate in (
+        here / "platform" / "frontend" / "dist",
+        here / "frontend" / "dist",
+    ):
+        if candidate.is_dir():
+            return candidate
     return None
+
+
+def _register_spa_routes(app: FastAPI, log: logging.Logger) -> None:
+    """Serve built UI with index.html fallback so /lsp and /inventory survive refresh."""
+
+    static = _static_dir()
+    dev_ui_html = """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PRISM — dev UI</title></head>
+<body style="font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:2rem">
+  <h1>PRISM API only</h1>
+  <p>The web UI is not built on this server. For development, run from the repo root:</p>
+  <pre style="background:#1e293b;padding:1rem;border-radius:8px">npm run dev</pre>
+  <p>Then open <a href="http://localhost:5173/lsp" style="color:#38bdf8">http://localhost:5173/lsp</a>
+  (not port 5000).</p>
+</body>
+</html>"""
+
+    if static is None:
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def dev_ui_hint(full_path: str = "") -> HTMLResponse:
+            if full_path.startswith("api") or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not Found")
+            return HTMLResponse(content=dev_ui_html, status_code=503)
+
+        log.warning("Static frontend not found; API-only mode (use http://localhost:5173 in dev)")
+        return
+
+    index_html = static / "index.html"
+    if not index_html.is_file():
+        log.warning("Static dir %s missing index.html", static)
+        return
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = "") -> FileResponse:
+        if full_path.startswith("api") or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if full_path:
+            asset = static / full_path
+            if asset.is_file():
+                return FileResponse(asset)
+        return FileResponse(index_html)
+
+    log.info("Serving static frontend from %s (SPA fallback enabled)", static)
 
 
 def create_app() -> FastAPI:
@@ -86,16 +133,11 @@ def create_app() -> FastAPI:
     app.include_router(traffic_relief_router)
     app.include_router(traffic_paths_router)
 
-    @app.get("/api/health")
+    @app.get("/api/lsp/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    static = _static_dir()
-    if static is not None:
-        app.mount("/", StaticFiles(directory=str(static), html=True), name="static")
-        log.info("Serving static frontend from %s", static)
-    else:
-        log.warning("Static frontend not found; API-only mode")
+    _register_spa_routes(app, log)
 
     return app
 

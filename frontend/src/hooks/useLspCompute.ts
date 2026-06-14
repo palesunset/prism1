@@ -77,42 +77,6 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
         }
       }
       if (res.primary) {
-        try {
-          const s2 = useAppStore.getState();
-          const forwardNames = nokiaRsvpNamesForDirection(
-            "forward",
-            s2.nokiaRsvpLabelXForward,
-            s2.nokiaRsvpLabelYForward,
-            s2.nokiaRsvpLabelZForward,
-          );
-          const reverseNames = nokiaRsvpNamesForDirection(
-            "reverse",
-            s2.nokiaRsvpLabelXReverse,
-            s2.nokiaRsvpLabelYReverse,
-            s2.nokiaRsvpLabelZReverse,
-          );
-          const txt = await exportMonolithic({
-            lsp_name: lspName,
-            mode,
-            flex_algo_id: flexAlgoId,
-            primary: res.primary,
-            backup: res.backup,
-            reservations,
-            nokia_cli_style: nokiaCliStyle,
-            ...forwardNames,
-            ...reverseNames,
-          });
-          s.setMonolithicConfig(txt);
-        } catch (err) {
-          s.setMonolithicConfig(null);
-          s.setConfigOverlayOpen(false);
-          toast.error(errorDetail(err) || "Configuration export failed (check that the API is running and reachable).");
-        }
-      } else {
-        s.setMonolithicConfig(null);
-        s.setConfigOverlayOpen(false);
-      }
-      if (res.primary) {
         const next = [
           ...reservations.filter((r) => r.name !== lspName),
           {
@@ -135,9 +99,48 @@ export function useLspCompute(context: { onGlobalLoading: (v: boolean) => void; 
         createdAt: new Date().toISOString(),
       });
       onAfterCompute?.();
+      onGlobalLoading(false);
+
+      if (res.primary) {
+        void (async () => {
+          try {
+            const s2 = useAppStore.getState();
+            const forwardNames = nokiaRsvpNamesForDirection(
+              "forward",
+              s2.nokiaRsvpLabelXForward,
+              s2.nokiaRsvpLabelYForward,
+              s2.nokiaRsvpLabelZForward,
+            );
+            const reverseNames = nokiaRsvpNamesForDirection(
+              "reverse",
+              s2.nokiaRsvpLabelXReverse,
+              s2.nokiaRsvpLabelYReverse,
+              s2.nokiaRsvpLabelZReverse,
+            );
+            const txt = await exportMonolithic({
+              lsp_name: lspName,
+              mode,
+              flex_algo_id: flexAlgoId,
+              primary: res.primary!,
+              backup: res.backup,
+              reservations: s2.reservations,
+              nokia_cli_style: nokiaCliStyle,
+              ...forwardNames,
+              ...reverseNames,
+            });
+            useAppStore.getState().setMonolithicConfig(txt);
+          } catch (err) {
+            useAppStore.getState().setMonolithicConfig(null);
+            useAppStore.getState().setConfigOverlayOpen(false);
+            toast.error(errorDetail(err) || "Configuration export failed (check that the API is running and reachable).");
+          }
+        })();
+      } else {
+        s.setMonolithicConfig(null);
+        s.setConfigOverlayOpen(false);
+      }
     } catch (err) {
       toast.error(errorDetail(err));
-    } finally {
       onGlobalLoading(false);
     }
   }, [onGlobalLoading, onAfterCompute]);

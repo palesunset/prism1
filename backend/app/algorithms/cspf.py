@@ -4,25 +4,51 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Literal
 
 import networkx as nx
 
 from app.algorithms.graph_builder import (
-    build_expanded_graph,
-    expanded_path_to_edge_sequence,
-    expanded_path_to_ne_path,
+    build_ne_cspf_graph,
+    ne_path_to_edge_sequence,
 )
+from app.algorithms.role_utils import resolve_ne_role, role_aware_allowed_ne_ids
 from app.algorithms.role_validator import validate_path_roles
-from app.algorithms.utils import yen_k_shortest_paths_simple
+from app.algorithms.utils import dijkstra_shortest_path, k_shortest_paths
 from app.core.models import HopDetail, NERecord, PathResult, PrunedEdge, RejectedPath
 
 log = logging.getLogger(__name__)
 
-K_SHORTEST_MAX_PATHS = 50
-"""Upper bound for Yen K paths (primary candidates and trade-off search)."""
+K_SHORTEST_MAX_PATHS = 16
+"""K-shortest candidates for backup / trade-off scans."""
+
+K_SHORTEST_PRIMARY_SCAN = 32
+"""K-shortest candidates for primary selection (role-filtered)."""
+
+MAX_REJECTED_PATHS = 30
+"""Cap rejected-path payload size returned to the UI."""
 
 TradeoffMode = Literal["percent", "absolute"]
+
+
+def _apply_role_graph_prune(
+    h: nx.Graph,
+    *,
+    nes: dict[str, NERecord],
+    role_map: dict[str, str],
+    source: str,
+    destination: str,
+    enforce_roles: bool,
+) -> nx.Graph:
+    """Drop transit access NEs so Dijkstra prefers valid core routes (e.g. ORMOC not MARAMAG)."""
+
+    if not enforce_roles:
+        return h
+    allowed = role_aware_allowed_ne_ids(nes, role_map, source, destination)
+    allowed.add(source)
+    allowed.add(destination)
+    keep = [n for n in h.nodes if n in allowed]
+    return h.subgraph(keep).copy()
 
 
 def tradeoff_max_latency_ms(
@@ -171,6 +197,7 @@ def _node_disjoint_backup(
     failed_link_keys: set[tuple[str, str, int]],
     time_hour: int | None,
     enforce_srlg_diversity: bool,
+    enforce_roles: bool = True,
     quiet: bool = False,
 ) -> tuple[PathResult | None, list[str], list[RejectedPath], list[str]]:
     """
@@ -180,7 +207,7 @@ def _node_disjoint_backup(
     messages: list[str] = []
     rejected: list[RejectedPath] = []
     extra_div: list[str] = []
-    role_map: dict[str, str] = {nid: str(rec.role) for nid, rec in nes.items()}
+    role_map: dict[str, str] = {nid: resolve_ne_role(rec.role, nid) for nid, rec in nes.items()}
 
     interior = set(ne_primary[1:-1])
     failed2 = set(failed_ne_ids) | interior
@@ -191,7 +218,7 @@ def _node_disjoint_backup(
             d = edge_lookup.get((a, b, k)) or edge_lookup.get((b, a, k)) or {}
             primary_srlgs |= set(d.get("srlg") or [])
 
-    h2, ln_map2 = build_expanded_graph(
+    h2 = build_ne_cspf_graph(
         mg,
         required_bw=required_bw_mbps,
         failed_ne_ids=failed2,
@@ -199,21 +226,23 @@ def _node_disjoint_backup(
         excluded_srlgs=primary_srlgs if primary_srlgs else None,
         time_hour=time_hour,
     )
+    h2 = _apply_role_graph_prune(
+        h2,
+        nes=nes,
+        role_map=role_map,
+        source=source,
+        destination=destination,
+        enforce_roles=enforce_roles,
+    )
     # Important: the single shortest node-disjoint backup can violate role rules even though
     # a slightly longer valid backup exists. Scan multiple backup candidates.
-    k_backups = yen_k_shortest_paths_simple(
-        h2, source, destination, weight="weight", max_paths=K_SHORTEST_MAX_PATHS
-    )
-    if not k_backups:
-        if not quiet:
-            if primary_srlgs and enforce_srlg_diversity:
-                messages.append("No SRLG-diverse backup path exists for the chosen primary.")
-            messages.append("No strict node-disjoint backup path exists for the chosen primary.")
-        return None, messages, rejected, extra_div
+    backup_candidates: list[tuple[list[str], float]] = []
+    first_backup = dijkstra_shortest_path(h2, source, destination, weight="weight")
+    if first_backup is not None:
+        backup_candidates.append(first_backup)
 
     backup: PathResult | None = None
-    for backup_exp, backup_cost in k_backups:
-        ne_backup = expanded_path_to_ne_path(backup_exp)
+    for ne_backup, backup_cost in backup_candidates:
         hops_count = len(ne_backup) - 1
         if hops_count > max_hops:
             rejected.append(
@@ -236,9 +265,9 @@ def _node_disjoint_backup(
                 )
             )
             continue
-        edge_backup = expanded_path_to_edge_sequence(backup_exp, ln_map2)
+        edge_backup = ne_path_to_edge_sequence(h2, ne_backup)
         backup = PathResult(
-            nodes=ne_backup,
+            nodes=list(ne_backup),
             edges=edge_backup,
             hops=_build_hops(edge_backup, edge_lookup, nes, mode),
             total_latency_ms=float(backup_cost),
@@ -247,10 +276,56 @@ def _node_disjoint_backup(
         break
 
     if backup is None:
-        reas = ["Backup path rejected by role-based constraints." if not quiet else "role"]
-        if quiet:
-            return None, [], rejected, extra_div
-        return None, reas, rejected, extra_div
+        k_backups = k_shortest_paths(
+            h2, source, destination, weight="weight", max_paths=K_SHORTEST_MAX_PATHS
+        )
+        seen_backup: set[tuple[str, ...]] = {tuple(p) for p, _ in backup_candidates}
+        for path, cost in k_backups:
+            key = tuple(path)
+            if key in seen_backup:
+                continue
+            seen_backup.add(key)
+            ne_backup = path
+            backup_cost = cost
+            hops_count = len(ne_backup) - 1
+            if hops_count > max_hops:
+                rejected.append(
+                    RejectedPath(
+                        nodes=list(ne_backup),
+                        reason=f"Exceeds max hops: {hops_count} > {max_hops}",
+                        total_latency_ms=float(backup_cost),
+                        hop_count=hops_count,
+                    )
+                )
+                continue
+            br = validate_path_roles(ne_backup, role_map, destination)
+            if not br.is_valid:
+                rejected.append(
+                    RejectedPath(
+                        nodes=list(ne_backup),
+                        reason=br.reason,
+                        total_latency_ms=float(backup_cost),
+                        hop_count=hops_count,
+                    )
+                )
+                continue
+            edge_backup = ne_path_to_edge_sequence(h2, ne_backup)
+            backup = PathResult(
+                nodes=list(ne_backup),
+                edges=edge_backup,
+                hops=_build_hops(edge_backup, edge_lookup, nes, mode),
+                total_latency_ms=float(backup_cost),
+                hop_count=hops_count,
+            )
+            break
+
+    if backup is None:
+        if not quiet:
+            if primary_srlgs and enforce_srlg_diversity:
+                messages.append("No SRLG-diverse backup path exists for the chosen primary.")
+            messages.append("No strict node-disjoint backup path exists for the chosen primary.")
+            return None, messages, rejected, extra_div
+        return None, ["role"], rejected, extra_div
 
     sites_p = {nes[n].site for n in ne_primary[1:-1] if n in nes}
     sites_b = {nes[n].site for n in backup.nodes[1:-1] if n in nes}
@@ -268,23 +343,22 @@ def _node_disjoint_backup(
     return backup, [], rejected, extra_div
 
 
-def _primary_from_expanded(
-    primary_exp: list[str],
+def _primary_from_ne_path(
+    ne_path: list[str],
     cost: float,
+    h: nx.Graph,
     edge_lookup: dict[tuple[str, str, int], dict],
     nes: dict[str, NERecord],
     mode: str,
-    ln_map: dict[str, Any],
 ) -> PathResult:
-    ne_primary = expanded_path_to_ne_path(primary_exp)
-    edge_primary = expanded_path_to_edge_sequence(primary_exp, ln_map)
+    edge_primary = ne_path_to_edge_sequence(h, ne_path)
     hop_details = _build_hops(edge_primary, edge_lookup, nes, mode)
     return PathResult(
-        nodes=ne_primary,
+        nodes=list(ne_path),
         edges=edge_primary,
         hops=hop_details,
         total_latency_ms=float(cost or 0.0),
-        hop_count=len(ne_primary) - 1,
+        hop_count=len(ne_path) - 1,
     )
 
 
@@ -306,7 +380,7 @@ def _scan_tradeoff(
     for path, cost in k_paths:
         if cost > cap_ms + 1e-9:
             break
-        ne_path = expanded_path_to_ne_path(path)
+        ne_path = path
         hops_count = len(ne_path) - 1
         if hops_count > max_hops:
             continue
@@ -363,52 +437,73 @@ def compute_paths(
     if source == destination:
         return None, None, [], [], pruned, ["Source and destination must differ"], None, None
 
-    h, ln_map = build_expanded_graph(
+    h = build_ne_cspf_graph(
         mg,
         required_bw=required_bw_mbps,
         failed_ne_ids=failed_ne_ids,
         failed_link_keys=failed_link_keys,
         time_hour=time_hour,
     )
-    role_map: dict[str, str] = {nid: str(rec.role) for nid, rec in nes.items()}
-    target = destination
-    k_paths = yen_k_shortest_paths_simple(
-        h, source, destination, weight="weight", max_paths=K_SHORTEST_MAX_PATHS
+    role_map: dict[str, str] = {nid: resolve_ne_role(rec.role, nid) for nid, rec in nes.items()}
+    h = _apply_role_graph_prune(
+        h,
+        nes=nes,
+        role_map=role_map,
+        source=source,
+        destination=destination,
+        enforce_roles=enforce_roles,
     )
-    primary_exp: list[str] | None = None
+    target = destination
+    primary_ne: list[str] | None = None
     primary_cost: float | None = None
     rejected: list[RejectedPath] = []
-    for path, cost in k_paths:
-        ne_path = expanded_path_to_ne_path(path)
-        hops_count = len(ne_path) - 1
-        if hops_count > max_hops:
-            rejected.append(
-                RejectedPath(
-                    nodes=ne_path,
-                    reason=f"Exceeds max hops: {hops_count} > {max_hops}",
-                    total_latency_ms=float(cost),
-                    hop_count=hops_count,
-                )
-            )
-            continue
-        if enforce_roles:
-            role_res = validate_path_roles(ne_path, role_map, target)
-            if not role_res.is_valid:
-                rejected.append(
-                    RejectedPath(
-                        nodes=ne_path,
-                        reason=role_res.reason,
-                        total_latency_ms=float(cost),
-                        hop_count=hops_count,
-                    )
-                )
-                continue
-        primary_exp = path
-        primary_cost = cost
-        break
+    k_paths: list[tuple[list[str], float]] = []
 
-    if primary_exp is None:
-        if not k_paths:
+    first = dijkstra_shortest_path(h, source, destination, weight="weight")
+    if first is not None:
+        ne_path, cost = first
+        hops_count = len(ne_path) - 1
+        role_ok = not enforce_roles or validate_path_roles(ne_path, role_map, target).is_valid
+        if hops_count <= max_hops and role_ok:
+            primary_ne = ne_path
+            primary_cost = cost
+
+    if primary_ne is None:
+        k_paths = k_shortest_paths(
+            h, source, destination, weight="weight", max_paths=K_SHORTEST_PRIMARY_SCAN
+        )
+        for ne_path, cost in k_paths:
+            hops_count = len(ne_path) - 1
+            if hops_count > max_hops:
+                if len(rejected) < MAX_REJECTED_PATHS:
+                    rejected.append(
+                        RejectedPath(
+                            nodes=ne_path,
+                            reason=f"Exceeds max hops: {hops_count} > {max_hops}",
+                            total_latency_ms=float(cost),
+                            hop_count=hops_count,
+                        )
+                    )
+                continue
+            if enforce_roles:
+                role_res = validate_path_roles(ne_path, role_map, target)
+                if not role_res.is_valid:
+                    if len(rejected) < MAX_REJECTED_PATHS:
+                        rejected.append(
+                            RejectedPath(
+                                nodes=ne_path,
+                                reason=role_res.reason,
+                                total_latency_ms=float(cost),
+                                hop_count=hops_count,
+                            )
+                        )
+                    continue
+            primary_ne = ne_path
+            primary_cost = cost
+            break
+
+    if primary_ne is None:
+        if not k_paths and first is None:
             warnings.append("No feasible path after pruning failures and bandwidth constraints.")
         else:
             warnings.append(
@@ -420,16 +515,7 @@ def compute_paths(
 
     assert primary_cost is not None
     optimal_ref_ms = float(primary_cost)
-    ne_primary0 = expanded_path_to_ne_path(primary_exp)
-    edge_primary0 = expanded_path_to_edge_sequence(primary_exp, ln_map)
-    hop_details0 = _build_hops(edge_primary0, edge_lookup, nes, mode)
-    first_primary = PathResult(
-        nodes=ne_primary0,
-        edges=edge_primary0,
-        hops=hop_details0,
-        total_latency_ms=float(primary_cost or 0.0),
-        hop_count=len(ne_primary0) - 1,
-    )
+    first_primary = _primary_from_ne_path(primary_ne, float(primary_cost), h, edge_lookup, nes, mode)
 
     def try_one_backup(
         p_res: PathResult, quiet: bool
@@ -449,6 +535,7 @@ def compute_paths(
             failed_link_keys=failed_link_keys,
             time_hour=time_hour,
             enforce_srlg_diversity=enforce_srlg_diversity,
+            enforce_roles=enforce_roles,
             quiet=quiet,
         )
         if not quiet and b is None and m:
@@ -474,6 +561,7 @@ def compute_paths(
         failed_link_keys=failed_link_keys,
         time_hour=time_hour,
         enforce_srlg_diversity=enforce_srlg_diversity,
+        enforce_roles=enforce_roles,
         quiet=False,
     )
     rejected.extend(r0)
@@ -487,7 +575,9 @@ def compute_paths(
     if b0 is None and not use_tradeout and m0:
         warnings.extend(m0)
 
-    if b0 is None and use_tradeout and k_paths:
+    if b0 is None and use_tradeout and (k_paths or first is not None):
+        if not k_paths and first is not None:
+            k_paths = [first]
         cap = tradeoff_max_latency_ms(optimal_ref_ms, tradeoff_mode, float(tradeoff_value))
         p2, b2, delta, more_rej = find_primary_with_backup_tradeoff(
             mg,
@@ -498,7 +588,7 @@ def compute_paths(
             role_map,
             optimal_ref_ms,
             cap,
-            build_primary=lambda pth, c: _primary_from_expanded(pth, c, edge_lookup, nes, mode, ln_map),
+            build_primary=lambda pth, c: _primary_from_ne_path(pth, c, h, edge_lookup, nes, mode),
             try_backup=try_one_backup,
         )
         rejected.extend(more_rej)
@@ -512,8 +602,7 @@ def compute_paths(
     p_cost = primary.total_latency_ms
     eps = 1e-6
     ecmp_paths: list[PathResult] = [primary] if primary else []
-    for path, cost in k_paths:
-        ne_path = expanded_path_to_ne_path(path)
+    for ne_path, cost in k_paths:
         if len(ne_path) - 1 > max_hops:
             continue
         if enforce_roles and not validate_path_roles(ne_path, role_map, target).is_valid:
@@ -522,7 +611,7 @@ def compute_paths(
             continue
         if ne_path == primary.nodes:
             continue
-        e = expanded_path_to_edge_sequence(path, ln_map)
+        e = ne_path_to_edge_sequence(h, ne_path)
         ecmp_paths.append(
             PathResult(
                 nodes=ne_path,

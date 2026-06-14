@@ -1,0 +1,4 @@
+Vendor,Network Element,Model,Serial Number,Router Type,IP Address,Software Version,Descriptor Version,End of Life (YYYY-MM-DD),Status,Rack Position,Total Chassis Slot,Utilized Chassis Count,Utilized Chassis Slot,Chassis Bays In Use,Slot Name,Total Port Slot,Utilized Port Count,Utilized Port Slot,Ports In Use,Port Descriptions
+NOKIA,NE-DEMO-001,3310,SN-DEMO-001,P,10.0.0.50,V800R021C00,NE5000E-V800R021C00,12/31/2028,Active,"Rack A12, U20-22",,,,,,,,,
+HUAWEI,NE-DEMO-002,PSS122,SN-DEMO-002,AGG,192.168.1.100,,,,Maintenance,"Rack B03 U10",8,,,1-3,Main,4,,,1-2,"Core uplink|Dept LAN||"
+HUAWEI,NE-048,GW-48,SN-PORT-48,P,10.1.1.1,,,,Active,,,,,,Main,48,,,1-22,

@@ -233,6 +233,12 @@ export const baseStylesheet: Stylesheet[] = [
     },
   },
   {
+    selector: "edge.drag-hide",
+    style: {
+      display: "none",
+    },
+  },
+  {
     selector: "node.failed",
     style: {
       "background-color": odysseusDark.colorSubheader,

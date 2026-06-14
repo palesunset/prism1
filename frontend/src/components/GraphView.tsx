@@ -1,4 +1,9 @@
-import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
+import cytoscape, {
+  type CollectionReturnValue,
+  type Core,
+  type ElementDefinition,
+  type EventObject,
+} from "cytoscape";
 import coseBilkent from "cytoscape-cose-bilkent";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { PathResult, SimulationResult, TopologyPayload } from "../types";
@@ -108,6 +113,98 @@ function buildElements(topology: TopologyPayload): ElementDefinition[] {
   return elements;
 }
 
+/** Tune Cytoscape for small lab graphs vs production-sized topologies. */
+function graphRenderProfile(nodeCount: number, edgeCount: number) {
+  const scale = nodeCount + edgeCount;
+  const medium = scale > 150;
+  const large = scale > 400;
+  return {
+    hideEdgesOnViewport: medium,
+    hideLabelsOnViewport: medium,
+    textureOnViewport: large,
+    pixelRatio: Math.min(window.devicePixelRatio || 1, large ? 1 : medium ? 1.25 : 2),
+    simplifyEdgeCurves: medium,
+  };
+}
+
+type RenderProfile = ReturnType<typeof graphRenderProfile>;
+
+function incidentEdgesFor(cy: Core, dragged: CollectionReturnValue) {
+  let incident = cy.collection();
+  dragged.forEach((n) => {
+    incident = incident.union(n.connectedEdges());
+    const id = n.id();
+    incident = incident.union(
+      cy.edges().filter((e) => e.source().id() === id || e.target().id() === id),
+    );
+  });
+  return incident;
+}
+
+/** Lightweight render profile while repositioning NEs (especially when zoomed in). */
+function applyNodeDragPerfMode(
+  cy: Core,
+  dragged: CollectionReturnValue,
+) {
+  const incident = incidentEdgesFor(cy, dragged);
+  cy.options({
+    hideEdgesOnViewport: false,
+    hideLabelsOnViewport: true,
+    pixelRatio: 1,
+    textureOnViewport: false,
+  });
+  cy.batch(() => {
+    cy.edges().forEach((e) => {
+      if (incident.has(e)) {
+        e.removeClass("drag-hide");
+      } else {
+        e.addClass("drag-hide");
+      }
+    });
+    cy.nodes(".ne").not(dragged).style("text-opacity", 0);
+    cy.nodes(".site").style("text-opacity", 0);
+  });
+}
+
+function clearNodeDragPerfMode(
+  cy: Core,
+  profile: RenderProfile,
+  applyLabels: (cy: Core, force?: boolean) => void,
+) {
+  // Restore edges while viewport edge-hiding is off so nothing stays suppressed.
+  cy.options({
+    hideEdgesOnViewport: false,
+    hideLabelsOnViewport: profile.hideLabelsOnViewport,
+    pixelRatio: profile.pixelRatio,
+    textureOnViewport: profile.textureOnViewport,
+  });
+  cy.batch(() => {
+    cy.edges().removeClass("drag-hide");
+    cy.nodes(".ne").removeStyle("text-opacity");
+    cy.nodes(".site").removeStyle("text-opacity");
+  });
+  cy.options({
+    hideEdgesOnViewport: profile.hideEdgesOnViewport,
+  });
+  applyLabels(cy, true);
+  requestAnimationFrame(() => {
+    cy.resize();
+  });
+}
+
+function debounce<T extends (...args: never[]) => void>(
+  fn: T,
+  ms: number,
+): T & { cancel: () => void } {
+  let timer = 0;
+  const debounced = ((...args: Parameters<T>) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), ms);
+  }) as T & { cancel: () => void };
+  debounced.cancel = () => window.clearTimeout(timer);
+  return debounced;
+}
+
 export type GraphViewHandle = {
   fit: () => void;
 };
@@ -126,6 +223,7 @@ export const GraphView = forwardRef<
 >(function GraphView(props, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
+  const zoomLabelKeyRef = useRef<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; kind: "node" | "edge"; id: string } | null>(
     null,
   );
@@ -169,10 +267,15 @@ export const GraphView = forwardRef<
   }, [activeTrafficFailed]);
 
   const applyZoomLabels = useCallback(
-    (cy: Core) => {
+    (cy: Core, force = false) => {
       const z = cy.zoom();
       const showFull = z > 1.5;
       const hide = !mapLabelsEnabled;
+      const nextKey = `${showFull}|${hide}|${heatmapEnabled}`;
+      if (!force && zoomLabelKeyRef.current === nextKey) {
+        return;
+      }
+      zoomLabelKeyRef.current = nextKey;
       cy.batch(() => {
         cy.nodes(".ne").forEach((n) => {
           if (heatmapEnabled) {
@@ -205,16 +308,33 @@ export const GraphView = forwardRef<
     }
     const elements = buildElements(props.topology);
     const cached = loadLayoutPositions(props.topology);
+    const nodeCount = props.topology.nodes.length;
+    const edgeCount = props.topology.edges.length;
+    const profile = graphRenderProfile(nodeCount, edgeCount);
+    const styles =
+      profile.simplifyEdgeCurves
+        ? ([
+            ...baseStylesheet,
+            {
+              selector: "edge",
+              style: {
+                "curve-style": "bezier",
+              },
+            },
+          ] as typeof baseStylesheet)
+        : baseStylesheet;
     const cy = cytoscape({
       container: containerRef.current,
       elements,
-      style: baseStylesheet,
+      style: styles,
       minZoom: 0.05,
       maxZoom: 4,
-      // Keep edges/labels visible while panning (heatmap + path modes need readable NEs and links)
-      hideEdgesOnViewport: false,
-      hideLabelsOnViewport: false,
-      textureOnViewport: true,
+      hideEdgesOnViewport: profile.hideEdgesOnViewport,
+      hideLabelsOnViewport: profile.hideLabelsOnViewport,
+      textureOnViewport: profile.textureOnViewport,
+      motionBlur: false,
+      pixelRatio: profile.pixelRatio,
+      wheelSensitivity: 0.2,
     });
     const topoRef = props.topology;
     if (cached) {
@@ -243,10 +363,106 @@ export const GraphView = forwardRef<
       } as cytoscape.LayoutOptions).run();
       cy.fit(undefined, 48);
     }
-    cy.on("zoom", () => applyZoomLabels(cy));
-    applyZoomLabels(cy);
+    let nodeDragActive = false;
+    let dragPerfRaf = 0;
+    const scheduleZoomLabels = debounce(() => {
+      if (nodeDragActive) {
+        return;
+      }
+      applyZoomLabels(cy);
+    }, 160);
+    const restoreAfterZoom = debounce(() => {
+      if (nodeDragActive) {
+        return;
+      }
+      cy.options({
+        pixelRatio: profile.pixelRatio,
+        hideLabelsOnViewport: profile.hideLabelsOnViewport,
+      });
+      applyZoomLabels(cy, true);
+    }, 160);
+    const onZoomPerf = () => {
+      if (nodeDragActive) {
+        return;
+      }
+      cy.options({ pixelRatio: 1 });
+      restoreAfterZoom();
+    };
+    cy.on("zoom", onZoomPerf);
+    cy.on("pan", scheduleZoomLabels);
+    applyZoomLabels(cy, true);
+
+    const syncNodeDragPerf = () => {
+      if (!nodeDragActive) {
+        return;
+      }
+      const nodes = cy.nodes("node.ne:grabbed");
+      if (nodes.empty()) {
+        return;
+      }
+      if (dragPerfRaf) {
+        cancelAnimationFrame(dragPerfRaf);
+      }
+      dragPerfRaf = requestAnimationFrame(() => {
+        dragPerfRaf = 0;
+        if (!nodeDragActive) {
+          return;
+        }
+        const live = cy.nodes("node.ne:grabbed");
+        if (live.empty()) {
+          return;
+        }
+        applyNodeDragPerfMode(cy, live);
+      });
+    };
+    const onNeDragFree = () => {
+      nodeDragActive = false;
+      if (dragPerfRaf) {
+        cancelAnimationFrame(dragPerfRaf);
+        dragPerfRaf = 0;
+      }
+      const pos: Record<string, { x: number; y: number }> = {};
+      cy.nodes(".ne").forEach((n) => {
+        const p = n.position();
+        pos[n.id()] = { x: p.x, y: p.y };
+      });
+      saveLayoutPositions(topoRef, pos);
+      clearNodeDragPerfMode(cy, profile, applyZoomLabels);
+    };
+    const onNeGrab = () => {
+      nodeDragActive = true;
+      setTooltip(null);
+      const nodes = cy.nodes("node.ne:grabbed");
+      if (!nodes.empty()) {
+        applyNodeDragPerfMode(cy, nodes);
+      }
+    };
+    cy.on("grab", "node.ne", onNeGrab);
+    cy.on("drag", "node.ne", syncNodeDragPerf);
+    cy.on("free", "node.ne", onNeDragFree);
+
+    cyRef.current = cy;
+    const syncViewportSize = debounce(() => {
+      cy.resize();
+    }, 80);
+    // Flex layout may settle after mount; ensure canvas matches the node area.
+    requestAnimationFrame(() => {
+      syncViewportSize();
+      requestAnimationFrame(syncViewportSize);
+    });
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            syncViewportSize();
+          })
+        : null;
+    resizeObserver?.observe(containerRef.current);
+    window.addEventListener("resize", syncViewportSize);
 
     cy.on("mouseover", "node.ne, edge", (evt) => {
+      if (evt.originalEvent instanceof MouseEvent && evt.originalEvent.buttons !== 0) {
+        return;
+      }
       const t = evt.target;
       const p = evt.originalEvent as MouseEvent;
       if (t.group() === "nodes" && t.hasClass("ne")) {
@@ -321,16 +537,26 @@ export const GraphView = forwardRef<
       setMenu({ x: p.clientX, y: p.clientY, kind: "edge", id: e.id() });
     });
 
-    cyRef.current = cy;
-    const onResize = () => {
-      cy.resize();
-      cy.fit(undefined, 48);
-    };
-    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("resize", onResize);
+      scheduleZoomLabels.cancel();
+      restoreAfterZoom.cancel();
+      syncViewportSize.cancel();
+      if (dragPerfRaf) {
+        cancelAnimationFrame(dragPerfRaf);
+      }
+      cy.off("pan", scheduleZoomLabels);
+      cy.off("zoom", onZoomPerf);
+      cy.off("grab", "node.ne", onNeGrab);
+      cy.off("drag", "node.ne", syncNodeDragPerf);
+      cy.off("free", "node.ne", onNeDragFree);
+      cy.edges().removeClass("drag-hide");
+      cy.nodes(".ne").removeStyle("text-opacity");
+      cy.nodes(".site").removeStyle("text-opacity");
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncViewportSize);
       cy.destroy();
       cyRef.current = null;
+      zoomLabelKeyRef.current = null;
     };
   }, [props.topology, props.topologyRevision, applyZoomLabels]);
 
@@ -339,7 +565,7 @@ export const GraphView = forwardRef<
     if (!cy) {
       return;
     }
-    applyZoomLabels(cy);
+    applyZoomLabels(cy, true);
   }, [mapLabelsEnabled, heatmapEnabled, applyZoomLabels]);
 
   // Traffic selection mode: click to add failures.
@@ -786,16 +1012,33 @@ export const GraphView = forwardRef<
     }
     let raf = 0;
     let start = 0;
+    let paused = false;
+    let resumeTimer = 0;
     const tick = (ts: number) => {
-      if (!start) {
-        start = ts;
+      if (!paused) {
+        if (!start) {
+          start = ts;
+        }
+        const offset = -((ts - start) / 40) % 16;
+        cy.edges(".primary").style("line-dash-offset", offset);
       }
-      const offset = -((ts - start) / 40) % 16;
-      cy.edges(".primary").style("line-dash-offset", offset);
       raf = requestAnimationFrame(tick);
     };
+    const pauseAnim = () => {
+      paused = true;
+      start = 0;
+      window.clearTimeout(resumeTimer);
+      resumeTimer = window.setTimeout(() => {
+        paused = false;
+      }, 150);
+    };
+    cy.on("pan zoom drag grab free grabboxselect", pauseAnim);
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(resumeTimer);
+      cy.off("pan zoom drag grab free grabboxselect", pauseAnim);
+    };
   }, [props.primary]);
 
   return (
@@ -826,7 +1069,7 @@ export const GraphView = forwardRef<
           <div className="text-sm text-slate-200">Working…</div>
         </div>
       ) : null}
-      <div ref={containerRef} className="absolute inset-0 bg-prism-bg" />
+      <div ref={containerRef} className="graph-view-cy absolute inset-0 bg-prism-bg" />
       {tooltip ? (
         <div
           className="cy-tooltip fixed"
