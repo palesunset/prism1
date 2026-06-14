@@ -10,6 +10,7 @@ Unified offline-first toolkit for **network equipment inventory** and **LSP desi
 | --- | --- |
 | **Inventory** | Sites, equipment, slots/ports, map, dashboard, CSV import/export, Oz AI assistant |
 | **LSP Design** | Topology import, CSPF primary/backup paths, failure simulation, vendor config export |
+| **Quick Notes** | Draggable floating notes window from the PRISM menu while using Inventory or LSP |
 | **Traffic Simulation** | Available inside LSP workspace (failure scenarios, relief advisor) |
 
 ## Quick start — unified platform (recommended)
@@ -23,15 +24,25 @@ pip install -r backend/requirements.txt
 npm run dev
 ```
 
-Open **http://localhost:5173** — pick **Inventory** or **LSP Design** on the home screen. Use the floating PRISM switcher to change modules anytime.
+Open **http://localhost:5173** — pick **Inventory** or **LSP Design** on the home screen. Use the floating PRISM menu to switch modules or open **Notes** while you work.
 
 | Service | URL (dev) |
 | --- | --- |
 | Platform UI | http://localhost:5173 |
 | LSP API | http://localhost:5000 (`/api/lsp/*`) |
 | Inventory API | http://localhost:3001 (`/api/inventory/*`) |
+| Notes API | http://localhost:3002 (`/api/notes/*`) |
 
 If ports are stuck from a previous session, run `npm run dev:kill` before `npm run dev`.
+
+## Quick Notes
+
+Notes open as a **draggable floating window** from the PRISM menu while you are in Inventory or LSP — drag it anywhere and keep working behind it.
+
+- Create, edit, pin, color, archive, and delete notes
+- **To-do lists** with checkboxes — add tasks, mark complete, track progress
+- Data stored locally in `notes/backend/notes.db` via `/api/notes`
+- Requires the Notes API (started automatically with `npm run dev`)
 
 ## Inventory — Oz AI (Llama model)
 

@@ -1,4 +1,5 @@
 import { Route, Routes, useLocation } from "react-router-dom";
+import { NotesPanel } from "./components/NotesPanel";
 import { PlatformSwitcher } from "./components/PlatformSwitcher";
 import { InventoryModule } from "./modules/InventoryModule";
 import { LspModule } from "./modules/LspModule";
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/lsp/*" element={<LspModule />} />
         </Routes>
       </div>
+      <NotesPanel />
     </div>
   );
 }

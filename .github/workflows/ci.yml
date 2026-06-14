@@ -78,3 +78,24 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+
+  notes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: notes/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: notes/backend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Start API
+        run: node src/index.js &
+      - name: Wait for API
+        run: sleep 2
+      - name: Test
+        run: node scripts/test-notes-api.js

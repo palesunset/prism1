@@ -109,7 +109,7 @@ export function HomePage() {
           transition={{ delay: 0.15, duration: 0.4 }}
           className="mb-10 max-w-lg text-sm text-slate-400 sm:text-base"
         >
-          Choose a module to get started. You can switch anytime from the floating PRISM menu.
+          Choose a module to get started. Use the floating PRISM menu for modules and quick notes.
         </motion.p>
 
         <div className="grid w-full gap-4 sm:grid-cols-2 sm:gap-5">

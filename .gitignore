@@ -22,6 +22,8 @@ inventory/frontend/dist/
 inventory/backend/node_modules/
 inventory/frontend/node_modules/
 inventory/backend/inventory.db
+notes/backend/notes.db
+notes/backend/node_modules/
 inventory/backend/models/
 platform/frontend/node_modules/
 

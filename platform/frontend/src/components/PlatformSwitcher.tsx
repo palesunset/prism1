@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import clsx from "clsx";
-import { Boxes, ChevronDown, GripVertical, Home, Layers, Network } from "lucide-react";
+import { Boxes, ChevronDown, GripVertical, Home, Layers, Network, StickyNote } from "lucide-react";
+import { useNotesStore } from "../store/useNotesStore";
 
 const STORAGE_KEY = "prism-platform-switcher-v1";
 const ICON_SIZE = 44;
@@ -70,6 +71,8 @@ export function PlatformSwitcher() {
   const { pathname } = useLocation();
   const onInventory = pathname.startsWith("/inventory");
   const onLsp = pathname.startsWith("/lsp");
+  const notesOpen = useNotesStore((s) => s.panelOpen);
+  const toggleNotes = useNotesStore((s) => s.togglePanel);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
@@ -94,7 +97,7 @@ export function PlatformSwitcher() {
     const el = rootRef.current;
     if (!el) return;
     const w = el.offsetWidth || (expanded ? 272 : ICON_SIZE);
-    const h = el.offsetHeight || (expanded ? 160 : ICON_SIZE);
+    const h = el.offsetHeight || (expanded ? 200 : ICON_SIZE);
     if (expanded) {
       setDisplayPos(clampToViewport(anchor.x, anchor.y, w, h));
     } else {
@@ -136,7 +139,7 @@ export function PlatformSwitcher() {
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
       const el = rootRef.current;
       const w = el?.offsetWidth ?? (expanded ? 272 : ICON_SIZE);
-      const h = el?.offsetHeight ?? (expanded ? 160 : ICON_SIZE);
+      const h = el?.offsetHeight ?? (expanded ? 200 : ICON_SIZE);
       const next = clampToViewport(drag.originX + dx, drag.originY + dy, w, h);
       setDisplayPos(next);
       setAnchor(next);
@@ -247,6 +250,23 @@ export function PlatformSwitcher() {
                 {label}
               </NavLink>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                toggleNotes();
+                persistState(anchor, true);
+              }}
+              className={clsx(
+                "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                notesOpen
+                  ? "bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40"
+                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+              )}
+              title="Quick Notes"
+            >
+              <StickyNote className="h-4 w-4 shrink-0" strokeWidth={2} />
+              Notes
+            </button>
           </nav>
         </div>
       ) : (
