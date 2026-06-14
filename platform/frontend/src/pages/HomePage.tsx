@@ -71,7 +71,7 @@ export function HomePage() {
 
   return (
     <motion.div
-      className="relative flex h-full min-h-0 flex-col items-center justify-center overflow-auto px-4 py-10 sm:px-8"
+      className="relative flex h-full min-h-0 flex-col items-center overflow-auto px-4 py-10 sm:px-8"
       initial="initial"
       animate={leaving ? "exit" : "animate"}
       variants={pageVariants}
@@ -86,7 +86,7 @@ export function HomePage() {
         aria-hidden
       />
 
-      <div className="relative z-10 flex w-full max-w-3xl flex-col items-center text-center">
+      <div className="relative z-10 flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -166,6 +166,16 @@ export function HomePage() {
           LSP Design
         </motion.p>
       </div>
+
+      <motion.footer
+        initial={reduceMotion ? false : { opacity: 0 }}
+        animate={{ opacity: leaving ? 0 : 1 }}
+        transition={{ delay: 0.55, duration: 0.35 }}
+        className="relative z-10 w-full shrink-0 pb-6 pt-4 text-center"
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-600">Developer</p>
+        <p className="mt-1.5 text-sm text-slate-500">Ruel Saria | John Carlo Emberga</p>
+      </motion.footer>
     </motion.div>
   );
 }
