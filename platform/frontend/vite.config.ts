@@ -2,10 +2,35 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const inventorySrc = path.resolve(__dirname, "../../inventory/frontend/src");
-const inventoryFonts = path.resolve(__dirname, "../../inventory/frontend/public/fonts");
-const lspSrc = path.resolve(__dirname, "../../frontend/src");
+const platformDir = path.dirname(fileURLToPath(import.meta.url));
+const platformEntry = path.resolve(platformDir, "src/main.tsx");
+const inventorySrc = path.resolve(platformDir, "../../inventory/frontend/src");
+const inventoryFonts = path.resolve(platformDir, "../../inventory/frontend/public/fonts");
+const lspSrc = path.resolve(platformDir, "../../frontend/src");
+
+/** Bare imports from aliased workspace src must resolve via platform/node_modules on CI. */
+function resolveWorkspaceDepsPlugin(workspaceRoots: string[]): Plugin {
+  const normalizedRoots = workspaceRoots.map((root) => path.normalize(root).toLowerCase());
+  return {
+    name: "prism-resolve-workspace-deps",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      if (!importer) return null;
+      if (source.startsWith(".") || source.startsWith("/") || source.startsWith("\0")) return null;
+      if (source.startsWith("@/")) return null;
+      if (source === "@lsp" || source.startsWith("@lsp/")) return null;
+      if (source.startsWith("@inventory")) return null;
+
+      const normImporter = path.normalize(importer).toLowerCase();
+      const fromWorkspace = normalizedRoots.some((root) => normImporter.startsWith(root));
+      if (!fromWorkspace) return null;
+
+      return this.resolve(source, platformEntry, { ...options, skipSelf: true });
+    },
+  };
+}
 
 function inventoryFontsPlugin(): Plugin {
   return {
@@ -20,7 +45,7 @@ function inventoryFontsPlugin(): Plugin {
       });
     },
     writeBundle() {
-      const outFonts = path.resolve(__dirname, "dist/fonts");
+      const outFonts = path.resolve(platformDir, "dist/fonts");
       fs.mkdirSync(outFonts, { recursive: true });
       for (const name of fs.readdirSync(inventoryFonts)) {
         fs.copyFileSync(path.join(inventoryFonts, name), path.join(outFonts, name));
@@ -31,9 +56,20 @@ function inventoryFontsPlugin(): Plugin {
 
 export default defineConfig({
   appType: "spa",
-  plugins: [react(), inventoryFontsPlugin()],
+  plugins: [react(), resolveWorkspaceDepsPlugin([lspSrc, inventorySrc]), inventoryFontsPlugin()],
   resolve: {
-    dedupe: ["react", "react-dom", "react-router-dom", "@tanstack/react-query", "zustand", "axios"],
+    dedupe: [
+      "react",
+      "react-dom",
+      "react-router-dom",
+      "@tanstack/react-query",
+      "zustand",
+      "axios",
+      "react-hot-toast",
+      "cytoscape",
+      "cytoscape-cose-bilkent",
+      "lucide-react",
+    ],
     alias: [
       { find: /^@\/(.*)/, replacement: `${inventorySrc}/$1` },
       { find: "@lsp", replacement: lspSrc },
