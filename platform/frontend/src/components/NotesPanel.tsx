@@ -29,6 +29,7 @@ import {
   saveFloatingPosition,
   type FloatingPoint,
 } from '../utils/floatingPanel';
+import { FLOATING_CHROME, FLOATING_PANEL_SHELL } from '../utils/floatingPanelTheme';
 
 type ComposeMode = 'note' | 'todo';
 
@@ -630,7 +631,7 @@ export function NotesPanel() {
       {panelOpen ? (
         <motion.div
           ref={rootRef}
-          className="fixed z-[198] flex w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-md"
+          className={clsx('fixed z-[198] flex w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden', FLOATING_CHROME, FLOATING_PANEL_SHELL)}
           style={{
             left: position.x,
             top: position.y,

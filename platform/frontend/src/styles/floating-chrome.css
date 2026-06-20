@@ -1,0 +1,51 @@
+/**
+ * Platform floating UI — fixed indigo/violet chrome.
+ * Loaded globally; immune to LSP Odysseus / Inventory theme overrides.
+ */
+
+.prism-floating-chrome,
+.prism-floating-chrome * {
+  --prism-float-bg: rgba(3, 7, 18, 0.95);
+  --prism-float-border: rgba(129, 140, 248, 0.25);
+  --prism-float-muted: #94a3b8;
+  --prism-float-text: #f1f5f9;
+  --prism-float-active-bg: rgba(99, 102, 241, 0.25);
+  --prism-float-active-text: #e0e7ff;
+  --prism-float-active-ring: rgba(129, 140, 248, 0.45);
+}
+
+.prism-floating-chrome [class*='backdrop-blur'] {
+  background: var(--prism-float-bg) !important;
+  border-color: var(--prism-float-border) !important;
+}
+
+.prism-floating-chrome button[class*='bg-white/'],
+.prism-floating-chrome button[class*='border-white'] {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: var(--prism-float-muted) !important;
+}
+
+.prism-floating-chrome button[class*='bg-white/']:hover,
+.prism-floating-chrome button[class*='border-white']:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: transparent !important;
+  color: var(--prism-float-text) !important;
+}
+
+.prism-floating-chrome .prism-float-active {
+  background-color: var(--prism-float-active-bg) !important;
+  color: var(--prism-float-active-text) !important;
+  box-shadow: 0 0 0 1px var(--prism-float-active-ring) !important;
+}
+
+.prism-floating-chrome .prism-float-fab {
+  background: linear-gradient(to bottom right, #4f46e5, #7c3aed, #c026d3) !important;
+  border-color: rgba(167, 139, 250, 0.35) !important;
+  color: #fff !important;
+}
+
+.prism-floating-chrome .prism-float-fab:hover {
+  background: linear-gradient(to bottom right, #4338ca, #6d28d9, #a21caf) !important;
+  border-color: rgba(196, 181, 253, 0.5) !important;
+}

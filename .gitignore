@@ -16,33 +16,30 @@ venv/
 
 # Node / frontend
 node_modules/
-frontend/dist/
 platform/frontend/dist/
-inventory/frontend/dist/
-inventory/backend/node_modules/
-inventory/frontend/node_modules/
-inventory/backend/inventory.db
-notes/backend/notes.db
-ipam/backend/ipam.db
-notes/backend/node_modules/
-inventory/backend/models/
 platform/frontend/node_modules/
+modules/lsp/frontend/dist/
+modules/lsp/frontend/node_modules/
+modules/inventory/frontend/dist/
+modules/inventory/frontend/node_modules/
+modules/inventory/backend/node_modules/
+modules/inventory/backend/inventory.db
+modules/inventory/backend/models/
+modules/notes/backend/notes.db
+modules/notes/backend/node_modules/
+modules/ipam/backend/ipam.db
+modules/ipam/backend/ipam.db-wal
+modules/ipam/backend/ipam.db-shm
+modules/ipam/backend/node_modules/
 
 # OS/editor
 .DS_Store
 Thumbs.db
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+
+# Build output
 dist/
 build/
 *.spec.bak
-
-frontend/node_modules/
-frontend/dist/
 
 .idea/
 .vscode/

@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const backend = path.join(__dirname, "..", "backend");
+const backend = path.join(__dirname, "..", "modules", "lsp", "backend");
 const py = process.platform === "win32" ? "python" : "python3";
 
 const child = spawn(

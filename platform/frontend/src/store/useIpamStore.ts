@@ -4,27 +4,36 @@ import type {
   IpamAuditEntry,
   IpamConflictScan,
   IpamIntegrityAudit,
+  IpamPicklists,
   IpamRecord,
   IpamSearchResult,
   IpamSubnetDetail,
   IpamValidateResult,
+  IpamWorkflowLogEntry,
   SubnetDashboard,
 } from '../services/ipamApi';
 import * as api from '../services/ipamApi';
 
 type IpamState = {
   records: IpamRecord[];
+  recordsTotal: number;
+  picklists: IpamPicklists | null;
   dashboard: SubnetDashboard[];
   analytics: IpamAnalytics | null;
   integrityAudit: IpamIntegrityAudit | null;
   conflictScan: IpamConflictScan | null;
   subnetDetail: IpamSubnetDetail | null;
+  subnetDetailError: string | null;
   auditLog: IpamAuditEntry[];
+  auditWorkflowLog: IpamWorkflowLogEntry[];
   loading: boolean;
+  recordsLoading: boolean;
   error: string | null;
   searchResult: IpamSearchResult | null;
   searchLoading: boolean;
-  loadAll: () => Promise<void>;
+  loadInitial: () => Promise<void>;
+  loadRecords: (opts?: { q?: string; page?: number }) => Promise<void>;
+  loadPicklists: () => Promise<void>;
   loadDashboard: () => Promise<void>;
   loadAnalytics: () => Promise<void>;
   loadIntegrity: () => Promise<void>;
@@ -35,9 +44,9 @@ type IpamState = {
   search: (query: string) => Promise<void>;
   addRecord: (payload: Partial<IpamRecord>) => Promise<IpamRecord>;
   editRecord: (id: string, payload: Partial<IpamRecord>) => Promise<IpamRecord>;
-  removeRecord: (id: string) => Promise<void>;
-  importVlsm: (plan: unknown, project?: string) => Promise<{ created: number; errors: number }>;
-  bulkImportCsv: (csv: string) => Promise<{ created: number; errors: number }>;
+  removeRecord: (id: string, opts?: { cascade?: boolean }) => Promise<void>;
+  importVlsm: (plan: unknown, project?: string) => Promise<{ created: number; errors: { address: string; error: string }[]; createdList: IpamRecord[] }>;
+  bulkImportCsv: (csv: string) => Promise<{ created: IpamRecord[]; errors: { row?: number; address: string; error: string }[] }>;
   clearSearch: () => void;
   clearSubnetDetail: () => void;
   openWorkflowTabRequest: number;
@@ -46,32 +55,54 @@ type IpamState = {
 
 export const useIpamStore = create<IpamState>((set, get) => ({
   records: [],
+  recordsTotal: 0,
+  picklists: null,
   dashboard: [],
   analytics: null,
   integrityAudit: null,
   conflictScan: null,
   subnetDetail: null,
+  subnetDetailError: null,
   auditLog: [],
+  auditWorkflowLog: [],
   loading: false,
+  recordsLoading: false,
   error: null,
   searchResult: null,
   searchLoading: false,
 
-  loadAll: async () => {
+  loadInitial: async () => {
     set({ loading: true, error: null });
     try {
-      const [records, dashboard, analytics, integrityAudit] = await Promise.all([
-        api.fetchRecords(),
-        api.fetchDashboard(),
-        api.fetchAnalytics(),
-        api.fetchIntegrityAudit(),
-      ]);
-      set({ records, dashboard, analytics, integrityAudit, loading: false });
+      const [dashboard, analytics] = await Promise.all([api.fetchDashboard(), api.fetchAnalytics()]);
+      set({ dashboard, analytics, loading: false });
     } catch (e) {
       set({
         loading: false,
         error: e instanceof Error ? e.message : 'Could not load IPAM. Is the IPAM API running on port 3003?',
       });
+    }
+  },
+
+  loadRecords: async (opts) => {
+    set({ recordsLoading: true, error: null });
+    try {
+      const data = await api.fetchAllRecords({ q: opts?.q });
+      set({ records: data.records, recordsTotal: data.total, recordsLoading: false });
+    } catch (e) {
+      set({
+        recordsLoading: false,
+        error: e instanceof Error ? e.message : 'Could not load registry records.',
+      });
+    }
+  },
+
+  loadPicklists: async () => {
+    try {
+      const picklists = await api.fetchPicklists();
+      set({ picklists });
+    } catch {
+      /* optional */
     }
   },
 
@@ -88,8 +119,8 @@ export const useIpamStore = create<IpamState>((set, get) => ({
     try {
       const analytics = await api.fetchAnalytics();
       set({ analytics });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : 'Analytics load failed' });
+    } catch {
+      /* ignore */
     }
   },
 
@@ -97,17 +128,17 @@ export const useIpamStore = create<IpamState>((set, get) => ({
     try {
       const integrityAudit = await api.fetchIntegrityAudit();
       set({ integrityAudit });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : 'Integrity audit failed' });
+    } catch {
+      /* ignore */
     }
   },
 
   loadAudit: async () => {
     try {
-      const auditLog = await api.fetchAudit(150);
-      set({ auditLog });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : 'Audit log load failed' });
+      const data = await api.fetchAudit(200);
+      set({ auditLog: data.entries, auditWorkflowLog: data.workflowEntries ?? [] });
+    } catch {
+      /* ignore */
     }
   },
 
@@ -117,86 +148,86 @@ export const useIpamStore = create<IpamState>((set, get) => ({
     return conflictScan;
   },
 
-  loadSubnetDetail: async (id) => {
+  loadSubnetDetail: async (id: string) => {
+    set({ subnetDetailError: null });
     try {
       const subnetDetail = await api.fetchSubnetDetail(id);
-      set({ subnetDetail });
+      set({ subnetDetail, subnetDetailError: null });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Subnet detail failed';
-      set({ subnetDetail: null });
-      // Stale selection after delete/type change — handled in UI; don't block the whole page.
-      if (!msg.toLowerCase().includes('subnet not found')) {
-        set({ error: msg });
-      }
+      set({
+        subnetDetail: null,
+        subnetDetailError: e instanceof Error ? e.message : 'Could not load subnet detail',
+      });
     }
   },
 
-  validateInput: async (payload) => api.validateRecord(payload),
+  validateInput: (payload) => api.validateRecord(payload),
 
-  search: async (query) => {
-    if (!query.trim()) {
-      set({ searchResult: null });
-      return;
-    }
+  search: async (query: string) => {
     set({ searchLoading: true });
     try {
       const searchResult = await api.searchIp(query);
-      set({ searchResult, searchLoading: false, error: null });
+      set({ searchResult, searchLoading: false });
     } catch (e) {
       set({
         searchLoading: false,
-        searchResult: null,
         error: e instanceof Error ? e.message : 'Search failed',
       });
     }
   },
 
   addRecord: async (payload) => {
-    try {
-      const { record } = await api.createRecord(payload);
-      await get().loadAll();
-      const selectedId = get().subnetDetail?.subnet.id;
-      if (selectedId) {
-        await get().loadSubnetDetail(selectedId);
-      }
-      return record;
-    } catch (e) {
-      throw e instanceof Error ? e : new Error('Could not save record');
+    const { record } = await api.createRecord(payload);
+    await get().loadRecords();
+    await get().loadDashboard();
+    await get().loadAnalytics();
+    const openSubnetId = get().subnetDetail?.subnet.id;
+    if (openSubnetId) {
+      await get().loadSubnetDetail(openSubnetId);
     }
+    return record;
   },
 
   editRecord: async (id, payload) => {
     const { record } = await api.updateRecord(id, payload);
-    await get().loadAll();
+    await get().loadRecords();
+    await get().loadDashboard();
+    if (get().subnetDetail?.subnet.id === id) {
+      await get().loadSubnetDetail(id);
+    }
     return record;
   },
 
-  removeRecord: async (id) => {
-    await api.deleteRecord(id);
-    set((s) => ({
-      records: s.records.filter((r) => r.id !== id),
-      subnetDetail: s.subnetDetail?.subnet.id === id ? null : s.subnetDetail,
-      error: s.subnetDetail?.subnet.id === id && s.error === 'Subnet not found' ? null : s.error,
-    }));
+  removeRecord: async (id, opts) => {
+    await api.deleteRecord(id, opts);
+    await get().loadRecords();
     await get().loadDashboard();
-    await get().loadAnalytics();
+    if (get().subnetDetail?.subnet.id === id) {
+      set({ subnetDetail: null });
+    } else if (get().subnetDetail) {
+      await get().loadSubnetDetail(get().subnetDetail!.subnet.id);
+    }
   },
 
   importVlsm: async (plan, project) => {
     const result = await api.importVlsmPlan(plan, project);
-    await get().loadAll();
-    set({ conflictScan: null, subnetDetail: null });
-    return { created: result.created.length, errors: result.errors.length };
+    await get().loadRecords();
+    await get().loadDashboard();
+    await get().loadAnalytics();
+    return { created: result.created.length, errors: result.errors, createdList: result.created };
   },
 
   bulkImportCsv: async (csv) => {
     const result = await api.bulkImportCsv(csv);
-    await get().loadAll();
-    return { created: result.created.length, errors: result.errors.length };
+    await get().loadRecords();
+    await get().loadDashboard();
+    await get().loadAnalytics();
+    return result;
   },
 
   clearSearch: () => set({ searchResult: null }),
-  clearSubnetDetail: () => set({ subnetDetail: null }),
+  clearSubnetDetail: () => set({ subnetDetail: null, subnetDetailError: null }),
+
   openWorkflowTabRequest: 0,
   requestWorkflowTab: () => set((s) => ({ openWorkflowTabRequest: s.openWorkflowTabRequest + 1 })),
 }));

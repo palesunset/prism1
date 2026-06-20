@@ -5,16 +5,23 @@ import {
   prefixToMask,
   type IpOctets,
 } from './ipCalculator';
+import { isIpv6Input } from './ipMathV6';
+import { planVlsmV6 } from './vlsmPlannerV6';
+
+export { planVlsmV6, parseV6RequirementValue, isV6Plan, isV6Subnet, type VlsmSubnetV6 } from './vlsmPlannerV6';
 
 export type HostRequirementInput = {
   id: string;
-  hosts: number;
+  hosts?: number;
+  /** IPv6: target prefix length (e.g. 64 for /64). */
+  targetPrefix?: number;
   siteName?: string;
   vlanId?: string;
   department?: string;
 };
 
 export type VlsmSubnet = {
+  family: 'ipv4';
   siteLabel: string;
   requiredHosts: number;
   prefix: number;
@@ -35,13 +42,17 @@ export type VlsmSubnet = {
 
 export type VlsmPlanSuccess = {
   ok: true;
+  family: 'ipv4' | 'ipv6';
   baseNetwork: string;
-  baseNetworkAddress: IpOctets;
   basePrefix: number;
-  baseBroadcast: IpOctets;
+  /** IPv4: base network octets. */
+  baseNetworkAddress?: IpOctets;
+  baseBroadcast?: IpOctets;
   totalBaseIps: number;
-  subnets: VlsmSubnet[];
+  totalBaseIpsLabel?: string;
+  subnets: import('./vlsmPlannerV6').VlsmSubnetV6[] | VlsmSubnet[];
   totalAllocatedIps: number;
+  totalAllocatedIpsLabel?: string;
   totalRequiredHosts: number;
   totalUnusedIps: number;
   efficiencyPercent: number;
@@ -55,6 +66,11 @@ export type VlsmPlanSuccess = {
 export type VlsmPlanFailure = { ok: false; error: string };
 
 export type VlsmPlanResult = VlsmPlanSuccess | VlsmPlanFailure;
+
+export function planNetwork(baseNetworkInput: string, requirements: HostRequirementInput[]): VlsmPlanResult {
+  if (isIpv6Input(baseNetworkInput)) return planVlsmV6(baseNetworkInput, requirements);
+  return planVlsm(baseNetworkInput, requirements);
+}
 
 function uint32ToIp(n: number): IpOctets {
   return [
@@ -113,14 +129,15 @@ function validateRequirements(requirements: HostRequirementInput[]): string | nu
     return 'Add at least one host requirement.';
   }
   for (const req of requirements) {
-    if (!Number.isFinite(req.hosts) || req.hosts < 1) {
+    const hosts = req.hosts ?? 0;
+    if (!Number.isFinite(hosts) || hosts < 1) {
       return `Invalid host count${req.siteName ? ` for "${req.siteName}"` : ''}: must be a positive integer.`;
     }
-    if (req.hosts > 2 ** 30) {
+    if (hosts > 2 ** 30) {
       return `Host requirement too large${req.siteName ? ` for "${req.siteName}"` : ''}.`;
     }
-    if (prefixForHostCount(Math.floor(req.hosts)) === null) {
-      return `Cannot fit ${req.hosts} hosts in a single IPv4 subnet.`;
+    if (prefixForHostCount(Math.floor(hosts)) === null) {
+      return `Cannot fit ${hosts} hosts in a single IPv4 subnet.`;
     }
   }
   return null;
@@ -143,7 +160,7 @@ export function planVlsm(
   const broadcastNum = (networkNum | (~baseMask >>> 0)) >>> 0;
   const totalBaseIps = broadcastNum - networkNum + 1;
 
-  const sorted = [...requirements].sort((a, b) => b.hosts - a.hosts);
+  const sorted = [...requirements].sort((a, b) => (b.hosts ?? 0) - (a.hosts ?? 0));
 
   const subnets: VlsmSubnet[] = [];
   let pointer = networkNum;
@@ -152,7 +169,7 @@ export function planVlsm(
 
   for (let i = 0; i < sorted.length; i += 1) {
     const req = sorted[i];
-    const required = Math.floor(req.hosts);
+    const required = Math.floor(req.hosts ?? 0);
     totalRequiredHosts += required;
 
     const subnetPrefix = prefixForHostCount(required);
@@ -189,6 +206,7 @@ export function planVlsm(
     const siteLabel = req.siteName?.trim() || siteLetter(i);
 
     subnets.push({
+      family: 'ipv4',
       siteLabel,
       requiredHosts: required,
       prefix: subnetPrefix,
@@ -250,6 +268,7 @@ export function planVlsm(
 
   return {
     ok: true,
+    family: 'ipv4',
     baseNetwork: baseLabel,
     baseNetworkAddress: uint32ToIp(networkNum),
     basePrefix,
@@ -291,33 +310,58 @@ export function parseHostRequirementLines(text: string): HostRequirementInput[] 
 }
 
 export function planToJson(result: VlsmPlanSuccess): string {
+  const subnets =
+    result.family === 'ipv6'
+      ? result.subnets.map((s) => {
+          if (!('family' in s) || s.family !== 'ipv6') return s;
+          return {
+            site: s.siteLabel,
+            targetPrefix: s.targetPrefix,
+            requiredHosts: s.requiredHosts,
+            prefix: s.prefix,
+            cidr: s.cidr,
+            networkRange: s.networkRangeLabel,
+            usableHosts: s.usableHosts,
+            network: s.network,
+            lastAddress: s.lastAddress,
+            vlanId: s.vlanId,
+            department: s.department,
+          };
+        })
+      : result.subnets.map((s) => {
+          if (!('family' in s) || s.family !== 'ipv4') return s;
+          return {
+            site: s.siteLabel,
+            requiredHosts: s.requiredHosts,
+            prefix: s.prefix,
+            cidr: `${octetsToString(s.network)}/${s.prefix}`,
+            networkRange: s.networkRangeLabel,
+            usableHosts: s.usableHosts,
+            network: octetsToString(s.network),
+            broadcast: octetsToString(s.broadcast),
+            firstUsable: s.firstUsable ? octetsToString(s.firstUsable) : null,
+            lastUsable: s.lastUsable ? octetsToString(s.lastUsable) : null,
+            subnetMask: octetsToString(s.subnetMask),
+            wildcard: s.wildcardDotted,
+            ciscoStaticRoute: s.ciscoStaticRoute,
+            vlanId: s.vlanId,
+            department: s.department,
+          };
+        });
+
   return JSON.stringify(
     {
+      family: result.family,
       baseNetwork: result.baseNetwork,
       summary: result.summary,
       totalBaseIps: result.totalBaseIps,
+      totalBaseIpsLabel: result.totalBaseIpsLabel,
       totalAllocatedIps: result.totalAllocatedIps,
       totalUnusedIps: result.totalUnusedIps,
       efficiencyPercent: result.efficiencyPercent,
       remainingRange: result.remainingRange,
       warnings: result.warnings,
-      subnets: result.subnets.map((s) => ({
-        site: s.siteLabel,
-        requiredHosts: s.requiredHosts,
-        prefix: s.prefix,
-        cidr: `${octetsToString(s.network)}/${s.prefix}`,
-        networkRange: s.networkRangeLabel,
-        usableHosts: s.usableHosts,
-        network: octetsToString(s.network),
-        broadcast: octetsToString(s.broadcast),
-        firstUsable: s.firstUsable ? octetsToString(s.firstUsable) : null,
-        lastUsable: s.lastUsable ? octetsToString(s.lastUsable) : null,
-        subnetMask: octetsToString(s.subnetMask),
-        wildcard: s.wildcardDotted,
-        ciscoStaticRoute: s.ciscoStaticRoute,
-        vlanId: s.vlanId,
-        department: s.department,
-      })),
+      subnets,
     },
     null,
     2,
@@ -325,6 +369,24 @@ export function planToJson(result: VlsmPlanSuccess): string {
 }
 
 export function planToCsv(result: VlsmPlanSuccess): string {
+  if (result.family === 'ipv6') {
+    const header = ['Site', 'Target / Prefix', 'CIDR', 'Network Range', 'Addresses', 'VLAN', 'Department'];
+    const rows = result.subnets.map((s) => {
+      if (!('family' in s) || s.family !== 'ipv6') return ['', '', '', '', '', '', ''];
+      return [
+        s.siteLabel,
+        s.targetPrefix != null ? `/${s.targetPrefix}` : s.requiredHosts != null ? String(s.requiredHosts) : '',
+        s.cidr,
+        s.networkRangeLabel,
+        s.blockSizeLabel,
+        s.vlanId ?? '',
+        s.department ?? '',
+      ];
+    });
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    return [header, ...rows].map((row) => row.map(escape).join(',')).join('\n');
+  }
+
   const header = [
     'Site',
     'Required Hosts',
@@ -341,7 +403,11 @@ export function planToCsv(result: VlsmPlanSuccess): string {
     'VLAN',
     'Department',
   ];
-  const rows = result.subnets.map((s) => [
+  const rows = result.subnets.map((s) => {
+    if (!('family' in s) || s.family !== 'ipv4') {
+      return ['', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+    }
+    return [
     s.siteLabel,
     String(s.requiredHosts),
     `/${s.prefix}`,
@@ -356,7 +422,8 @@ export function planToCsv(result: VlsmPlanSuccess): string {
     s.ciscoStaticRoute,
     s.vlanId ?? '',
     s.department ?? '',
-  ]);
+  ];
+  });
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
   return [header, ...rows].map((row) => row.map(escape).join(',')).join('\n');
 }

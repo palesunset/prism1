@@ -16,15 +16,24 @@ import { simulateVlsmImport } from '../services/ipamApi';
 import { useIpamStore } from '../store/useIpamStore';
 import { useVlsmPlannerStore } from '../store/useVlsmPlannerStore';
 import { octetsToString } from '../utils/ipCalculator';
+import { isIpv6Input } from '../utils/ipMathV6';
 import { clampToViewport, type FloatingPoint } from '../utils/floatingPanel';
 import {
+  FLOATING_INPUT_RING,
+  FLOATING_PANEL_ICON,
+  FLOATING_CHROME,
+  FLOATING_PANEL_SHELL,
+  FLOATING_PRIMARY_BTN,
+} from '../utils/floatingPanelTheme';
+import {
+  planNetwork,
   planToCsv,
   planToJson,
-  planVlsm,
+  parseV6RequirementValue,
   type HostRequirementInput,
   type VlsmPlanSuccess,
-  type VlsmSubnet,
 } from '../utils/vlsmPlanner';
+import { isV6Subnet } from '../utils/vlsmPlannerV6';
 
 const STORAGE_KEY = 'prism-vlsm-panel-v1';
 const PANEL_W = 448;
@@ -84,37 +93,67 @@ function InfoRow(props: { label: string; value: string; mono?: boolean; accent?:
   );
 }
 
-function AllocationTable(props: { subnets: VlsmSubnet[] }) {
+function AllocationTable(props: { subnets: VlsmPlanSuccess['subnets']; isV6: boolean }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[28rem] border-collapse text-left text-[10px]">
         <thead>
           <tr className="border-b border-white/10 text-slate-500">
             <th className="px-2 py-1.5 font-medium">Site</th>
-            <th className="px-2 py-1.5 font-medium">Hosts</th>
+            <th className="px-2 py-1.5 font-medium">{props.isV6 ? 'Prefix / Hosts' : 'Hosts'}</th>
             <th className="px-2 py-1.5 font-medium">Subnet</th>
-            <th className="px-2 py-1.5 font-medium">Network Range</th>
-            <th className="px-2 py-1.5 font-medium">Usable</th>
+            <th className="px-2 py-1.5 font-medium">Range</th>
+            <th className="px-2 py-1.5 font-medium">{props.isV6 ? 'Addresses' : 'Usable'}</th>
           </tr>
         </thead>
         <tbody>
-          {props.subnets.map((s) => (
-            <tr key={`${s.siteLabel}-${octetsToString(s.network)}`} className="border-b border-white/5">
-              <td className="px-2 py-1.5 font-medium text-slate-200">{s.siteLabel}</td>
-              <td className="px-2 py-1.5 tabular-nums text-slate-300">{s.requiredHosts}</td>
-              <td className="px-2 py-1.5 font-mono text-cyan-300">/{s.prefix}</td>
-              <td className="px-2 py-1.5 font-mono text-xs text-slate-300">{s.networkRangeLabel}</td>
-              <td className="px-2 py-1.5 tabular-nums text-emerald-400">{s.usableHosts}</td>
-            </tr>
-          ))}
+          {props.subnets.map((s) => {
+            if (isV6Subnet(s)) {
+              return (
+                <tr key={s.cidr} className="border-b border-white/5">
+                  <td className="px-2 py-1.5 font-medium text-slate-200">{s.siteLabel}</td>
+                  <td className="px-2 py-1.5 tabular-nums text-slate-300">
+                    {s.targetPrefix != null ? `/${s.targetPrefix}` : s.requiredHosts ?? '—'}
+                  </td>
+                  <td className="px-2 py-1.5 font-mono text-cyan-300">{s.cidr}</td>
+                  <td className="px-2 py-1.5 font-mono text-xs text-slate-300">{s.networkRangeLabel}</td>
+                  <td className="px-2 py-1.5 tabular-nums text-emerald-400">{s.blockSizeLabel}</td>
+                </tr>
+              );
+            }
+            return (
+              <tr key={`${s.siteLabel}-${octetsToString(s.network)}`} className="border-b border-white/5">
+                <td className="px-2 py-1.5 font-medium text-slate-200">{s.siteLabel}</td>
+                <td className="px-2 py-1.5 tabular-nums text-slate-300">{s.requiredHosts}</td>
+                <td className="px-2 py-1.5 font-mono text-cyan-300">/{s.prefix}</td>
+                <td className="px-2 py-1.5 font-mono text-xs text-slate-300">{s.networkRangeLabel}</td>
+                <td className="px-2 py-1.5 tabular-nums text-emerald-400">{s.usableHosts}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-function SubnetDetailCard(props: { subnet: VlsmSubnet; index: number }) {
+function SubnetDetailCard(props: { subnet: VlsmPlanSuccess['subnets'][number]; index: number }) {
   const { subnet, index } = props;
+  if (isV6Subnet(subnet)) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-gray-900/50 p-3">
+        <p className="mb-2 text-sm font-semibold text-violet-200">
+          {index + 1}. {subnet.siteLabel}
+          {subnet.vlanId ? <span className="ml-2 text-xs font-normal text-slate-500">VLAN {subnet.vlanId}</span> : null}
+        </p>
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between gap-2"><span className="text-slate-500">CIDR</span><span className="font-mono text-cyan-300">{subnet.cidr}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-slate-500">Range</span><span className="font-mono text-slate-200">{subnet.networkRangeLabel}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-slate-500">Block size</span><span className="text-slate-200">{subnet.blockSizeLabel}</span></div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-white/10 bg-gray-900/50 p-3">
       <p className="mb-2 text-sm font-semibold text-violet-200">
@@ -177,21 +216,29 @@ function VisualMap(props: { plan: VlsmPlanSuccess }) {
   const { plan } = props;
   return (
     <div className="space-y-2">
-      {plan.subnets.map((s) => (
-        <div key={`map-${octetsToString(s.network)}`} className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-2.5">
+      {plan.subnets.map((s) => {
+        const key = isV6Subnet(s) ? s.cidr : `${octetsToString(s.network)}/${s.prefix}`;
+        const label = isV6Subnet(s) ? s.cidr : s.networkRangeLabel;
+        const meta = isV6Subnet(s)
+          ? `${s.targetPrefix != null ? `/${s.targetPrefix}` : `${s.requiredHosts ?? 0} hosts`} · /${s.prefix}`
+          : `${s.requiredHosts} hosts · /${s.prefix}`;
+        const widthPct = plan.totalBaseIps > 0 ? Math.max(8, ((s.blockSize ?? 0) / plan.totalBaseIps) * 100) : 8;
+        return (
+        <div key={`map-${key}`} className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-2.5">
           <div className="mb-1 flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-violet-200">{s.siteLabel}</span>
-            <span className="text-slate-500">{s.requiredHosts} hosts · /{s.prefix}</span>
+            <span className="text-slate-500">{meta}</span>
           </div>
-          <p className="font-mono text-xs text-cyan-200">{s.networkRangeLabel}</p>
+          <p className="font-mono text-xs text-cyan-200">{label}</p>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800">
             <div
               className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-500"
-              style={{ width: `${Math.max(8, (s.blockSize / plan.totalBaseIps) * 100)}%` }}
+              style={{ width: `${widthPct}%` }}
             />
           </div>
         </div>
-      ))}
+        );
+      })}
       {plan.remainingRange ? (
         <div className="rounded-lg border border-dashed border-white/15 bg-gray-900/40 p-2.5">
           <p className="text-xs font-medium text-slate-400">Remaining space</p>
@@ -267,20 +314,27 @@ function ResultTabs(props: { plan: VlsmPlanSuccess }) {
             <InfoRow label="Base network" value={plan.baseNetwork} mono accent />
             <InfoRow label="Subnets allocated" value={String(plan.subnets.length)} />
             <InfoRow label="Total required hosts" value={String(plan.totalRequiredHosts)} />
-            <InfoRow label="Total IPs in base" value={String(plan.totalBaseIps)} />
-            <InfoRow label="Total allocated IPs" value={String(plan.totalAllocatedIps)} accent />
+            <InfoRow
+              label={plan.family === 'ipv6' ? 'Base address space' : 'Total IPs in base'}
+              value={plan.totalBaseIpsLabel ?? String(plan.totalBaseIps)}
+            />
+            <InfoRow
+              label={plan.family === 'ipv6' ? 'Allocated space' : 'Total allocated IPs'}
+              value={plan.totalAllocatedIpsLabel ?? String(plan.totalAllocatedIps)}
+              accent
+            />
             <InfoRow label="Unused IP space" value={String(plan.totalUnusedIps)} />
             <InfoRow label="Efficiency" value={`${plan.efficiencyPercent}%`} accent />
             <InfoRow label="Remaining range" value={plan.remainingRange ?? 'None (fully allocated)'} mono />
           </div>
         ) : null}
 
-        {tab === 'table' ? <AllocationTable subnets={plan.subnets} /> : null}
+        {tab === 'table' ? <AllocationTable subnets={plan.subnets} isV6={plan.family === 'ipv6'} /> : null}
 
         {tab === 'details' ? (
           <div className="space-y-3">
             {plan.subnets.map((s, i) => (
-              <SubnetDetailCard key={`detail-${octetsToString(s.network)}`} subnet={s} index={i} />
+              <SubnetDetailCard key={`detail-${isV6Subnet(s) ? s.cidr : octetsToString(s.network)}`} subnet={s} index={i} />
             ))}
           </div>
         ) : null}
@@ -389,7 +443,8 @@ export function VlsmPlannerPanel() {
     { ...newRow(), siteName: 'C', hosts: '10' },
     { ...newRow(), siteName: 'D', hosts: '5' },
   ]);
-  const [result, setResult] = useState<ReturnType<typeof planVlsm> | null>(null);
+  const [result, setResult] = useState<ReturnType<typeof planNetwork> | null>(null);
+  const isV6Base = isIpv6Input(baseNetwork);
 
   const { rootRef, position, onDragStart, onDragMove, onDragEnd } = useFloatingPanelDrag({
     storageKey: STORAGE_KEY,
@@ -400,19 +455,29 @@ export function VlsmPlannerPanel() {
   });
 
   const buildRequirements = useCallback((): HostRequirementInput[] => {
+    const v6 = isIpv6Input(baseNetwork);
     return rows
       .filter((r) => r.hosts.trim())
-      .map((r) => ({
-        id: r.id,
-        hosts: Number(r.hosts),
-        siteName: r.siteName.trim() || undefined,
-        vlanId: r.vlanId.trim() || undefined,
-        department: r.department.trim() || undefined,
-      }));
-  }, [rows]);
+      .map((r) => {
+        const base: HostRequirementInput = {
+          id: r.id,
+          siteName: r.siteName.trim() || undefined,
+          vlanId: r.vlanId.trim() || undefined,
+          department: r.department.trim() || undefined,
+        };
+        if (v6) {
+          const parsed = parseV6RequirementValue(r.hosts);
+          if (parsed?.targetPrefix != null) return { ...base, targetPrefix: parsed.targetPrefix };
+          if (parsed?.hosts != null) return { ...base, hosts: parsed.hosts };
+          return { ...base, hosts: 0 };
+        }
+        return { ...base, hosts: Number(r.hosts) };
+      })
+      .filter((r) => (r.hosts ?? 0) > 0 || r.targetPrefix != null);
+  }, [rows, baseNetwork]);
 
   const runPlan = useCallback(() => {
-    setResult(planVlsm(baseNetwork, buildRequirements()));
+    setResult(planNetwork(baseNetwork, buildRequirements()));
   }, [baseNetwork, buildRequirements]);
 
   useEffect(() => {
@@ -432,7 +497,7 @@ export function VlsmPlannerPanel() {
       {panelOpen ? (
         <motion.div
           key="vlsm-planner-panel"
-          className="fixed z-[196] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-md"
+          className={clsx('fixed z-[196] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden', FLOATING_CHROME, FLOATING_PANEL_SHELL)}
           style={{
             left: position.x,
             top: position.y,
@@ -456,10 +521,10 @@ export function VlsmPlannerPanel() {
               title="Drag to move"
             >
               <GripVertical className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />
-              <Network className="h-4 w-4 shrink-0 text-violet-400" strokeWidth={2} />
+              <Network className={clsx('h-4 w-4 shrink-0', FLOATING_PANEL_ICON)} strokeWidth={2} />
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-semibold text-slate-100">VLSM Planner</h2>
-                <p className="truncate text-[9px] text-slate-500">Network design engine</p>
+                <p className="truncate text-[9px] text-slate-500">IPv4 + IPv6 · network design · export to Mini IPAM</p>
               </div>
             </div>
             <button
@@ -478,7 +543,7 @@ export function VlsmPlannerPanel() {
             </label>
             <input
               className="mb-2 w-full rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-sm text-slate-100 outline-none ring-violet-500/40 placeholder:text-slate-600 focus:ring-2"
-              placeholder="10.0.0.0/24"
+              placeholder={isV6Base ? '2001:db8::/48' : '10.0.0.0/24'}
               value={baseNetwork}
               onChange={(e) => setBaseNetwork(e.target.value)}
               spellCheck={false}
@@ -486,7 +551,7 @@ export function VlsmPlannerPanel() {
 
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                Host requirements
+                {isV6Base ? 'Prefix (/64) or host count (/112–/128)' : 'Host requirements'}
               </span>
               <button
                 type="button"
@@ -560,7 +625,7 @@ export function VlsmPlannerPanel() {
             <button
               type="button"
               onClick={runPlan}
-              className="mb-2 shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500"
+              className={clsx('mb-2 shrink-0', FLOATING_PRIMARY_BTN, 'py-2')}
             >
               Generate plan
             </button>

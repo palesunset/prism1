@@ -1,0 +1,718 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Odysseus theme — scoped to inventory shell (do not override platform :root) ── */
+.inventory-shell {
+  --bg: #282c34;
+  --fg: #9cdef2;
+  --panel: #111;
+  --border: #355a66;
+  --red: #e06c75;
+  --green: #50fa7b;
+  --warn: #f0ad4e;
+  --color-error: #ff4444;
+  --color-success: #4caf50;
+  --color-warning: #f0ad4e;
+  --color-muted: #888;
+  --color-subheader: #6b8a94;
+  --color-accent: #00aaff;
+  --brand-color: var(--red);
+  --sidebar-w: 240px;
+
+  /* Tailwind palette — dark */
+  --tw-slate-50: #9cdef2;
+  --tw-slate-100: #1a1f26;
+  --tw-slate-200: #355a66;
+  --tw-slate-300: #4a7080;
+  --tw-slate-400: #6b8a94;
+  --tw-slate-500: #888;
+  --tw-slate-600: #9cdef2;
+  --tw-slate-700: #355a66;
+  --tw-slate-800: #1a1a1a;
+  --tw-slate-900: #111;
+  --tw-slate-950: #0a0a0a;
+
+  --tw-sky-100: color-mix(in srgb, var(--red) 12%, var(--panel));
+  --tw-sky-400: #e88890;
+  --tw-sky-500: var(--red);
+  --tw-sky-600: var(--red);
+  --tw-sky-700: #c45a63;
+  --tw-sky-900: color-mix(in srgb, var(--red) 20%, var(--panel));
+
+  --tw-emerald-50: color-mix(in srgb, var(--green) 10%, var(--panel));
+  --tw-emerald-400: var(--green);
+  --tw-emerald-500: var(--green);
+  --tw-emerald-700: #3dd66a;
+  --tw-emerald-900: color-mix(in srgb, var(--green) 15%, var(--panel));
+  --tw-emerald-950: color-mix(in srgb, var(--green) 8%, var(--panel));
+
+  --tw-orange-50: color-mix(in srgb, var(--warn) 10%, var(--panel));
+  --tw-orange-400: var(--warn);
+  --tw-orange-500: var(--warn);
+  --tw-orange-900: color-mix(in srgb, var(--warn) 15%, var(--panel));
+  --tw-orange-950: color-mix(in srgb, var(--warn) 8%, var(--panel));
+
+  --tw-red-50: color-mix(in srgb, var(--red) 10%, var(--panel));
+  --tw-red-400: #e88890;
+  --tw-red-500: var(--red);
+  --tw-red-600: var(--red);
+  --tw-red-700: #c45a63;
+  --tw-red-800: color-mix(in srgb, var(--red) 30%, var(--panel));
+  --tw-red-950: color-mix(in srgb, var(--red) 8%, var(--panel));
+
+  --tw-indigo-50: color-mix(in srgb, var(--red) 10%, var(--panel));
+  --tw-indigo-200: color-mix(in srgb, var(--red) 20%, var(--border));
+  --tw-indigo-300: #e88890;
+  --tw-indigo-600: var(--red);
+  --tw-indigo-900: color-mix(in srgb, var(--red) 15%, var(--panel));
+  --tw-indigo-950: color-mix(in srgb, var(--red) 8%, var(--panel));
+
+  --tw-amber-400: var(--warn);
+  --tw-amber-600: var(--warn);
+
+  --tw-white: #fff;
+  --tw-black: #000;
+
+  color-scheme: dark;
+}
+
+/* Light theme — when html.light is set (ThemeProvider toggles documentElement) */
+html.light .inventory-shell {
+  --bg: #f0ebe3;
+  --fg: #5a5248;
+  --panel: #faf6f0;
+  --border: #d4cdc2;
+  --red: #c47d5a;
+
+  --tw-slate-50: #f0ebe3;
+  --tw-slate-100: #eae4dc;
+  --tw-slate-200: #d4cdc2;
+  --tw-slate-300: #c4bdb2;
+  --tw-slate-400: #9a9288;
+  --tw-slate-500: #7a7268;
+  --tw-slate-600: #5a5248;
+  --tw-slate-700: #4a443c;
+  --tw-slate-800: #3a3530;
+  --tw-slate-900: #2b2b2b;
+  --tw-slate-950: #1a1816;
+
+  --tw-sky-100: color-mix(in srgb, var(--red) 12%, var(--panel));
+  --tw-sky-400: #d4957a;
+  --tw-sky-500: var(--red);
+  --tw-sky-600: var(--red);
+  --tw-sky-700: #a86850;
+  --tw-sky-900: color-mix(in srgb, var(--red) 16%, var(--panel));
+
+  --tw-emerald-50: #ecfdf5;
+  --tw-emerald-400: #34d399;
+  --tw-emerald-500: #10b981;
+  --tw-emerald-700: #047857;
+  --tw-emerald-900: #064e3b;
+  --tw-emerald-950: #022c22;
+
+  --tw-orange-50: #fff7ed;
+  --tw-orange-400: #fb923c;
+  --tw-orange-500: #f97316;
+  --tw-orange-900: #7c2d12;
+  --tw-orange-950: #431407;
+
+  --tw-red-50: #fef2f2;
+  --tw-red-400: #f87171;
+  --tw-red-500: #ef4444;
+  --tw-red-600: #dc2626;
+  --tw-red-700: #b91c1c;
+  --tw-red-800: #991b1b;
+  --tw-red-950: #450a0a;
+
+  --tw-indigo-50: #eef2ff;
+  --tw-indigo-200: #c7d2fe;
+  --tw-indigo-300: #a5b4fc;
+  --tw-indigo-600: #4f46e5;
+  --tw-indigo-900: #312e81;
+  --tw-indigo-950: #1e1b4b;
+
+  color-scheme: light;
+}
+
+/* Self-hosted fonts (from Odysseus) */
+@font-face {
+  font-family: 'Fira Code';
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/FiraCode-Light.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/FiraCode-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fira Code';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/FiraCode-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/Inter-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/Inter-SemiBold.woff2') format('woff2');
+}
+
+@layer base {
+  .inventory-shell {
+    height: 100%;
+    min-height: 100%;
+    background-color: var(--bg);
+    color: var(--fg);
+  }
+
+  .inventory-shell {
+    scrollbar-color: var(--red) var(--panel);
+    scrollbar-width: thin;
+  }
+
+  @supports selector(::-webkit-scrollbar) {
+    .inventory-shell ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .inventory-shell ::-webkit-scrollbar-track {
+      background: var(--panel);
+    }
+    .inventory-shell ::-webkit-scrollbar-thumb {
+      background-color: var(--red);
+      border-radius: 4px;
+      border: 2px solid var(--panel);
+    }
+    .inventory-shell ::-webkit-scrollbar-thumb:hover {
+      background-color: color-mix(in srgb, var(--red) 80%, white);
+    }
+  }
+
+  .inventory-shell {
+    @apply antialiased;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .inventory-shell h1,
+  .inventory-shell h2,
+  .inventory-shell h3 {
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .inventory-shell a {
+    color: var(--red);
+  }
+  .inventory-shell a:hover {
+    color: color-mix(in srgb, var(--red) 80%, white);
+  }
+}
+
+@layer components {
+  .sidebar {
+    @apply flex h-screen w-[var(--sidebar-w)] shrink-0 flex-col border-r;
+    background: var(--panel);
+    border-color: var(--border);
+  }
+
+  .sidebar-brand {
+    @apply px-4 py-4 text-base font-semibold tracking-tight;
+    color: var(--brand-color);
+  }
+
+  .nav-item {
+    @apply flex items-center gap-2 rounded px-2 py-1.5 text-[13px] transition;
+    color: var(--fg);
+    border: 1px solid transparent;
+  }
+  .nav-item:hover {
+    background: color-mix(in srgb, var(--red) 8%, transparent);
+  }
+  .nav-item-active {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    border-color: var(--red);
+    color: var(--fg);
+  }
+  .nav-item svg {
+    color: var(--red);
+    flex-shrink: 0;
+  }
+
+  .card {
+    @apply rounded-lg border p-4;
+    background: var(--panel);
+    border-color: var(--border);
+  }
+
+  .card-muted {
+    @apply rounded-lg border p-4;
+    background: color-mix(in srgb, var(--panel) 80%, var(--bg));
+    border-color: var(--border);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition;
+    height: 32px;
+  }
+  .btn-primary {
+    @apply btn text-white;
+    background: var(--red);
+  }
+  .btn-primary:hover {
+    background: color-mix(in srgb, var(--red) 85%, white);
+  }
+  .btn-secondary {
+    @apply btn;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg);
+  }
+  .btn-secondary:hover {
+    background: color-mix(in srgb, var(--red) 8%, transparent);
+  }
+  .btn-danger {
+    @apply btn text-white;
+    background: var(--color-error);
+  }
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--color-error) 85%, white);
+  }
+
+  .input-field {
+    @apply w-full rounded border px-3 py-2 text-sm transition;
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--fg);
+  }
+  .input-field::placeholder {
+    color: var(--color-muted);
+  }
+  .input-field:focus {
+    outline: none;
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 25%, transparent);
+  }
+
+  .label-text {
+    @apply mb-1 block text-xs font-medium;
+    color: var(--color-subheader);
+  }
+
+  .page-title {
+    @apply text-2xl font-bold;
+    color: var(--fg);
+  }
+
+  /* Dashboard KPI cards — typography scales with each card's width */
+  .kpi-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.75rem), 1fr));
+  }
+
+  .kpi-card {
+    container-type: inline-size;
+    @apply flex min-h-[6.75rem] flex-col rounded-xl border p-3 sm:min-h-[7.25rem] sm:p-4;
+  }
+
+  .kpi-card__label {
+    font-size: clamp(0.625rem, 3.2cqi, 0.75rem);
+    @apply font-medium uppercase tracking-wide leading-tight;
+  }
+
+  .kpi-card__value {
+    font-size: clamp(1.125rem, 9cqi, 1.875rem);
+  }
+
+  .kpi-card__meta {
+    font-size: clamp(0.625rem, 2.8cqi, 0.75rem);
+  }
+
+  .kpi-card__icon {
+    padding: clamp(0.375rem, 2.5cqi, 0.5rem);
+  }
+
+  .kpi-card__icon-glyph {
+    width: clamp(1rem, 5.5cqi, 1.25rem);
+    height: clamp(1rem, 5.5cqi, 1.25rem);
+  }
+
+  .kpi-card__sparkline {
+    height: clamp(2rem, 11cqi, 3rem);
+  }
+
+  .table-surface {
+    @apply overflow-x-auto rounded-lg border;
+    border-color: var(--border);
+  }
+  .table-surface table {
+    @apply w-full text-left text-sm;
+  }
+  .table-surface thead {
+    background: color-mix(in srgb, var(--panel) 70%, var(--bg));
+    color: var(--color-subheader);
+  }
+  .table-surface th {
+    @apply px-4 py-2 font-medium;
+  }
+  .table-surface td {
+    @apply px-4 py-3;
+    border-top: 1px solid var(--border);
+  }
+  .table-surface tbody tr:hover {
+    background: color-mix(in srgb, var(--red) 5%, transparent);
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .modal-panel {
+    @apply max-h-[90vh] w-full overflow-y-auto rounded-[10px] border shadow-2xl;
+    background: var(--panel);
+    border-color: var(--border);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.015em;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .modal-panel::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Primary page scroll — hidden scrollbar, wheel + arrow keys when focused */
+  .scroll-region {
+    @apply min-h-0 flex-1 overflow-y-auto outline-none;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scroll-region::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .scroll-region:focus-visible {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 45%, transparent);
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between border-b px-4 py-3;
+    border-color: var(--border);
+  }
+  .modal-title {
+    @apply text-base font-semibold;
+    color: var(--red);
+  }
+
+  .filter-badge {
+    @apply rounded px-2 py-0.5 text-xs;
+    background: color-mix(in srgb, var(--red) 12%, var(--panel));
+    color: var(--fg);
+  }
+
+  .section-header {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide;
+    color: var(--color-subheader);
+  }
+}
+
+/* Force dark surfaces when not in light mode — catches bg-white without dark: */
+html:not(.light) .inventory-shell .bg-white {
+  background-color: var(--panel);
+}
+html:not(.light) .inventory-shell .bg-slate-50 {
+  background-color: color-mix(in srgb, var(--panel) 85%, var(--bg));
+}
+html:not(.light) .inventory-shell .bg-slate-100 {
+  background-color: color-mix(in srgb, var(--panel) 75%, var(--bg));
+}
+html:not(.light) .inventory-shell .hover\:bg-slate-50:hover {
+  background-color: color-mix(in srgb, var(--red) 8%, var(--panel));
+}
+html:not(.light) .inventory-shell .hover\:bg-slate-100:hover {
+  background-color: color-mix(in srgb, var(--red) 10%, var(--panel));
+}
+html:not(.light) .inventory-shell .text-slate-900 {
+  color: var(--fg);
+}
+html:not(.light) .inventory-shell .text-slate-800 {
+  color: var(--fg);
+}
+html:not(.light) .inventory-shell .text-slate-700 {
+  color: var(--fg);
+}
+html:not(.light) .inventory-shell .border-slate-200,
+html:not(.light) .inventory-shell .border-slate-300 {
+  border-color: var(--border);
+}
+html:not(.light) .inventory-shell .border-slate-100 {
+  border-color: color-mix(in srgb, var(--border) 60%, var(--panel));
+}
+
+/* Recharts — dark tooltips and non-white hover cursors */
+html:not(.light) .inventory-shell .recharts-default-tooltip {
+  background-color: var(--panel) !important;
+  border-color: var(--border) !important;
+  color: var(--fg) !important;
+}
+html:not(.light) .inventory-shell .recharts-tooltip-item,
+html:not(.light) .inventory-shell .recharts-tooltip-label {
+  color: var(--fg) !important;
+}
+html:not(.light) .inventory-shell .recharts-tooltip-cursor {
+  fill: color-mix(in srgb, var(--red) 12%, transparent) !important;
+}
+html:not(.light) .inventory-shell .recharts-active-dot circle {
+  fill: var(--red) !important;
+  stroke: var(--panel) !important;
+}
+
+.leaflet-container {
+  @apply z-0 h-full w-full rounded-lg;
+  background: color-mix(in srgb, var(--panel) 60%, var(--bg));
+  border: 1px solid var(--border);
+}
+
+/* Map marker popup — high contrast on light map tiles */
+.site-map-popup .leaflet-popup-content-wrapper {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  padding: 0;
+}
+
+.site-map-popup .leaflet-popup-content {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.site-map-popup .leaflet-popup-tip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.site-map-popup .leaflet-popup-close-button {
+  color: var(--color-muted) !important;
+  font-size: 1.25rem !important;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
+  top: 0.35rem !important;
+  right: 0.35rem !important;
+}
+
+.site-map-popup .leaflet-popup-close-button:hover {
+  color: var(--fg) !important;
+}
+
+.site-map-popup-body {
+  padding: 0.875rem 1rem 1rem;
+  max-width: 20rem;
+}
+
+.site-map-popup-title {
+  margin: 0 2rem 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+
+.site-map-popup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.site-map-popup-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.site-map-popup-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.8125rem;
+}
+
+.site-map-popup-row-stack {
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+}
+
+.site-map-popup-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-subheader);
+}
+
+.site-map-popup-value {
+  color: var(--fg);
+  word-break: break-word;
+}
+
+.site-map-popup-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: color-mix(in srgb, var(--fg) 92%, white);
+}
+
+.site-map-popup-address {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.site-map-popup-address p {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--fg) 88%, white);
+  word-break: break-word;
+}
+
+.site-map-popup-stats .site-map-popup-row {
+  align-items: center;
+}
+
+.site-map-popup-util-ok {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.site-map-popup-util-high {
+  font-weight: 700;
+  color: var(--red);
+}
+
+.site-map-popup-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.site-map-popup-badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--border));
+  color: var(--fg);
+}
+
+.site-map-popup-coords {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--color-muted);
+}
+
+.site-map-popup-action {
+  margin-top: 0.75rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--red);
+  border: none;
+  cursor: pointer;
+}
+
+.site-map-popup-action:hover {
+  filter: brightness(1.08);
+}
+
+.site-map-tooltip-wrapper.leaflet-tooltip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  color: var(--fg);
+  padding: 0;
+}
+
+.site-map-tooltip-wrapper.leaflet-tooltip-top::before {
+  border-top-color: var(--border);
+}
+
+.site-map-tooltip {
+  padding: 0.4rem 0.55rem;
+  max-width: 14rem;
+}
+
+.site-map-tooltip-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.25;
+}
+
+.site-map-tooltip-line {
+  margin-top: 0.15rem;
+  font-size: 0.6875rem;
+  color: var(--color-subheader);
+  line-height: 1.35;
+}
+
+.site-map-tooltip-sep {
+  margin: 0 0.25rem;
+  opacity: 0.6;
+}
+
+/* Hide scrollbars inside inventory module while keeping scroll behavior */
+.inventory-shell :where(.overflow-y-auto, .overflow-y-scroll, .overflow-auto, .overflow-x-auto) {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.inventory-shell :where(.overflow-y-auto, .overflow-y-scroll, .overflow-auto, .overflow-x-auto)::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

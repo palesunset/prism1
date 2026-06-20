@@ -1,10 +1,14 @@
 import { calculateIpNetwork, octetsToString } from './ipCalculator';
-import { planVlsm, type HostRequirementInput } from './vlsmPlanner';
+import { calculateV6Network } from './ipCalculatorV6';
+import { isIpv6Input } from './ipMathV6';
+import { planNetwork, type HostRequirementInput } from './vlsmPlanner';
+import { isV6Subnet } from './vlsmPlannerV6';
 import {
   searchIp,
   simulateVlsmImport,
   validateRecord,
   type IpamConflict,
+  type IpamInventoryCrossCheck,
   type NetLensWorkflowPayload,
 } from '../services/ipamApi';
 
@@ -35,6 +39,7 @@ export type NetLensInsights = {
   suggestions: string[];
   warnings: string[];
   ipamReachable: boolean;
+  inventory?: IpamInventoryCrossCheck;
 };
 
 export type NetLensResult = {
@@ -94,7 +99,14 @@ function collectSuggestions(conflicts: IpamConflict[]): string[] {
 async function queryIpamReadOnly(
   address: string,
   recordType: 'host' | 'subnet',
-): Promise<{ conflicts: IpamConflict[]; suggestions: string[]; overlaps: string[]; warnings: string[]; reachable: boolean }> {
+): Promise<{
+  conflicts: IpamConflict[];
+  suggestions: string[];
+  overlaps: string[];
+  warnings: string[];
+  reachable: boolean;
+  inventory?: IpamInventoryCrossCheck;
+}> {
   const overlaps: string[] = [];
   const conflicts: string[] = [];
   const warnings: string[] = [];
@@ -126,6 +138,7 @@ async function queryIpamReadOnly(
       address,
       record_type: recordType,
       status: 'used',
+      inventory_crosscheck: recordType === 'host',
     });
     for (const c of validate.conflicts ?? validate.blocking ?? []) {
       if (!conflicts.includes(c.message)) conflicts.push(c.message);
@@ -134,9 +147,16 @@ async function queryIpamReadOnly(
       warnings.push(w.message);
     }
     suggestions = [...new Set([...suggestions, ...collectSuggestions(validate.conflicts ?? [])])];
+    return {
+      conflicts,
+      suggestions,
+      overlaps,
+      warnings,
+      reachable: true,
+      inventory: validate.inventory,
+    };
   } catch {
     reachable = false;
-    warnings.push('IPAM API unavailable — overlap check skipped (local validation only).');
   }
 
   return { conflicts, suggestions, overlaps, warnings, reachable };
@@ -154,13 +174,15 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
   }
 
   if (parsed.mode === 'vlsm') {
-    const requirements: HostRequirementInput[] = parsed.hosts.map((hosts, i) => ({
-      id: `nl-${i}`,
-      hosts,
-      siteName: `Site ${String.fromCharCode(65 + i)}`,
-    }));
+    const requirements: HostRequirementInput[] = parsed.hosts.map((value, i) => {
+      const siteName = `Site ${String.fromCharCode(65 + i)}`;
+      if (isIpv6Input(parsed.baseNetwork) && value >= 32 && value <= 128) {
+        return { id: `nl-${i}`, targetPrefix: value, siteName };
+      }
+      return { id: `nl-${i}`, hosts: value, siteName };
+    });
 
-    const plan = planVlsm(parsed.baseNetwork, requirements);
+    const plan = planNetwork(parsed.baseNetwork, requirements);
     if (!plan.ok) {
       return {
         inputMode: 'vlsm',
@@ -170,22 +192,40 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
       };
     }
 
-    const analysis: NetLensAnalysis = {
-      network: octetsToString(plan.baseNetworkAddress),
-      broadcast: octetsToString(plan.baseBroadcast),
-      usableRange: plan.remainingRange ?? `${plan.summary}`,
-      totalIps: plan.totalBaseIps,
-      usableHosts: plan.totalRequiredHosts,
-      cidr: plan.baseNetwork,
-      role: 'vlsm-plan',
-      normalizedInput: plan.baseNetwork,
-      vlsmSummary: plan.summary,
-      vlsmSubnets: plan.subnets.map((s) => ({
-        cidr: `${octetsToString(s.network)}/${s.prefix}`,
-        hosts: s.requiredHosts,
-        site: s.siteLabel,
-      })),
-    };
+    const analysis: NetLensAnalysis =
+      plan.family === 'ipv6'
+        ? {
+            network: plan.baseNetwork.split('/')[0] ?? plan.baseNetwork,
+            broadcast: plan.subnets[0] && isV6Subnet(plan.subnets[0]) ? plan.subnets[plan.subnets.length - 1]!.lastAddress : plan.baseNetwork,
+            usableRange: plan.remainingRange ?? plan.summary,
+            totalIps: plan.totalBaseIps,
+            usableHosts: plan.totalRequiredHosts,
+            cidr: plan.baseNetwork,
+            role: 'vlsm-plan',
+            normalizedInput: plan.baseNetwork,
+            vlsmSummary: plan.summary,
+            vlsmSubnets: plan.subnets.map((s) =>
+              isV6Subnet(s)
+                ? { cidr: s.cidr, hosts: s.requiredHosts ?? s.targetPrefix ?? 0, site: s.siteLabel }
+                : { cidr: `${octetsToString(s.network)}/${s.prefix}`, hosts: s.requiredHosts, site: s.siteLabel },
+            ),
+          }
+        : {
+            network: octetsToString(plan.baseNetworkAddress!),
+            broadcast: octetsToString(plan.baseBroadcast!),
+            usableRange: plan.remainingRange ?? `${plan.summary}`,
+            totalIps: plan.totalBaseIps,
+            usableHosts: plan.totalRequiredHosts,
+            cidr: plan.baseNetwork,
+            role: 'vlsm-plan',
+            normalizedInput: plan.baseNetwork,
+            vlsmSummary: plan.summary,
+            vlsmSubnets: plan.subnets.map((s) =>
+              isV6Subnet(s)
+                ? { cidr: s.cidr, hosts: s.requiredHosts ?? 0, site: s.siteLabel }
+                : { cidr: `${octetsToString(s.network)}/${s.prefix}`, hosts: s.requiredHosts, site: s.siteLabel },
+            ),
+          };
 
     const insights: NetLensInsights = {
       overlaps: [],
@@ -206,12 +246,21 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
       const sim = await simulateVlsmImport(
         {
           baseNetwork: plan.baseNetwork,
-          subnets: plan.subnets.map((s) => ({
-            cidr: `${octetsToString(s.network)}/${s.prefix}`,
-            site: s.siteLabel,
-            requiredHosts: s.requiredHosts,
-            prefix: s.prefix,
-          })),
+          subnets: plan.subnets.map((s) =>
+            isV6Subnet(s)
+              ? {
+                  cidr: s.cidr,
+                  site: s.siteLabel,
+                  requiredHosts: s.requiredHosts ?? s.targetPrefix ?? 0,
+                  prefix: s.prefix,
+                }
+              : {
+                  cidr: `${octetsToString(s.network)}/${s.prefix}`,
+                  site: s.siteLabel,
+                  requiredHosts: s.requiredHosts,
+                  prefix: s.prefix,
+                },
+          ),
         },
         'NetLens preview',
       );
@@ -245,7 +294,90 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
     };
   }
 
-  const calc = calculateIpNetwork(parsed.query);
+  const calcInput = parsed.mode === 'ip' ? `${parsed.query}/32` : parsed.query;
+  const calc = calculateIpNetwork(calcInput);
+  const isV6 = parsed.query.includes(':');
+
+  if (isV6) {
+    const recordType = parsed.mode === 'cidr' ? 'subnet' : 'host';
+    const address = parsed.mode === 'ip' ? parsed.query : parsed.query.trim();
+    const calcInput = parsed.mode === 'ip' && !address.includes('/') ? address : address;
+    const v6Calc = calculateV6Network(calcInput.includes('/') || parsed.mode === 'cidr' ? calcInput : calcInput);
+
+    let validationStatus: 'valid' | 'invalid' = v6Calc.ok ? 'valid' : 'invalid';
+    const validationErrors: string[] = v6Calc.ok ? [] : [v6Calc.error];
+
+    if (v6Calc.ok) {
+      try {
+        const formatCheck = await validateRecord({
+          address: v6Calc.normalizedInput,
+          record_type: recordType,
+          status: 'used',
+        });
+        const blocking = formatCheck.blocking ?? formatCheck.conflicts ?? [];
+        const formatIssue = blocking.some((c) =>
+          /invalid|malformed|parse|prefix length|not a valid/i.test(c.message),
+        );
+        if (!formatCheck.allowed && formatIssue) {
+          validationStatus = 'invalid';
+          validationErrors.length = 0;
+          for (const c of blocking) validationErrors.push(c.message);
+        }
+      } catch {
+        validationErrors.push('IPAM unavailable — could not validate IPv6 format.');
+      }
+    }
+
+    const ipam = await queryIpamReadOnly(
+      v6Calc.ok ? v6Calc.normalizedInput.split('/')[0] ?? v6Calc.normalizedInput : address.split('/')[0] ?? address,
+      recordType,
+    );
+
+    const analysis: NetLensAnalysis | null =
+      v6Calc.ok && validationStatus === 'valid'
+        ? {
+            network: v6Calc.network,
+            broadcast: v6Calc.lastAddress,
+            usableRange: v6Calc.usableRangeLabel,
+            totalIps: v6Calc.totalAddresses ?? 0,
+            usableHosts: v6Calc.usableHosts ?? 0,
+            cidr: v6Calc.normalizedInput,
+            role: recordType,
+            normalizedInput: v6Calc.normalizedInput,
+          }
+        : null;
+
+    const suggestions = [...ipam.suggestions];
+    if (ipam.inventory?.matches?.length) {
+      suggestions.push(
+        `Inventory: ${ipam.inventory.matches.length} equipment match(es) for this address.`,
+      );
+    }
+    if (validationStatus === 'valid' && ipam.conflicts.length === 0 && ipam.overlaps.length === 0 && ipam.reachable) {
+      suggestions.push('No IPAM conflicts detected for this IPv6 input.');
+    }
+    return {
+      inputMode: parsed.mode,
+      validation: {
+        status: validationStatus,
+        errors: validationErrors,
+        summary:
+          validationStatus === 'valid' && v6Calc.ok
+            ? v6Calc.summary
+            : validationErrors[0] ?? 'Invalid IPv6 input',
+      },
+      analysis,
+      insights: {
+        overlaps: ipam.overlaps,
+        conflicts: ipam.conflicts,
+        suggestions: [...new Set(suggestions)],
+        warnings: ipam.warnings,
+        ipamReachable: ipam.reachable,
+        inventory: ipam.inventory,
+      },
+    };
+  }
+
   if (!calc.ok) {
     return {
       inputMode: parsed.mode,
@@ -273,7 +405,7 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
   if (calc.validation.recommendations.length > 0) {
     suggestions.push(...calc.validation.recommendations);
   }
-  if (ipam.conflicts.length === 0 && ipam.overlaps.length === 0 && ipam.ipamReachable) {
+  if (ipam.conflicts.length === 0 && ipam.overlaps.length === 0 && ipam.reachable) {
     suggestions.push('No IPAM conflicts detected for this input.');
   }
   if (parsed.mode === 'cidr' && calc.usableHosts > 0) {
@@ -299,6 +431,7 @@ export async function analyzeNetLens(raw: string): Promise<NetLensResult> {
       suggestions: [...new Set(suggestions)],
       warnings: ipam.warnings,
       ipamReachable: ipam.reachable,
+      inventory: ipam.inventory,
     },
   };
 }

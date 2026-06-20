@@ -1,390 +1,558 @@
-# Prism Platform
+# PRISM Platform
 
-Unified offline-first toolkit for **network equipment inventory**, **LSP design** (CSPF paths, failure simulation, multi-vendor MPLS/SRv6 config generation), and **Mini IPAM** (IP registry, VLSM, conflict detection).
+**PRISM** (Platform for Routing, Inventory, IPAM & Simulation) is an **offline-first** desktop toolkit for network engineering teams. It runs entirely on your PC or a server on your LAN — no cloud account required.
+
+Use one unified web UI to manage **equipment inventory**, design **MPLS/SRv6 LSP paths**, operate a full **Mini IPAM** (IPv4 + IPv6), and access floating engineering tools (IP Calculator, VLSM Planner, NetLens, Quick Notes).
 
 **Repository:** [github.com/palesunset/PrismPlatform](https://github.com/palesunset/PrismPlatform)
 
-## Modules
+---
 
-| Module | Description |
+## What you get
+
+| Area | Features |
 | --- | --- |
-| **Equipment Inventory** | Sites, equipment, slots/ports, map, dashboard, CSV import/export, Oz AI assistant |
-| **LSP Design** | Topology import, CSPF primary/backup paths, failure simulation, vendor config export |
-| **Mini IPAM** | IP registry, search, VLSM import, utilization analytics, integrity audit, **IP Workflow** (approval lifecycle) |
-| **Quick Notes** | Draggable floating notes window from the PRISM menu |
-| **IP Calculator** | Network engineering IP/subnet diagnostic tool from the PRISM menu |
-| **VLSM Planner** | Variable-length subnet planning with dry-run and **Save to IPAM** |
-| **NetLens** | Floating IP validation engine — parse IP/CIDR/VLSM, cross-check IPAM, dry-run imports (read-only); **Submit to Workflow** |
-| **Traffic Simulation** | Available inside LSP workspace (failure scenarios, relief advisor) |
+| **LSP Design** | CSV topology import, CSPF primary/backup paths, role-based routing rules, failure simulation, utilization heatmap, multi-vendor config export (Nokia, Huawei, Cisco IOS XR, Juniper), project save/load |
+| **Equipment Inventory** | Sites, equipment, slots/ports, dashboard analytics, geographic map, CSV import/export, duplicate-IP protection, integrity checks, **Oz** local AI assistant (optional) |
+| **Mini IPAM (v1.3)** | IPv4/IPv6 registry, subnet detail & host allocation, search, VLSM import, utilization analytics, integrity audit, backup/restore, API keys, **IP Workflow** (approval lifecycle) |
+| **Floating tools** (purple **PRISM** menu) | Quick Notes, IP Calculator (browser-only), VLSM Planner (Save to IPAM), NetLens (validate + Submit to Workflow) |
 
-## Quick start — unified platform (recommended)
+### How the pieces fit together
 
-**Requirements:** Python 3.11+, Node 20+ (inventory API needs Node **22.5+** for built-in SQLite)
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Platform UI  (http://localhost:5173)                       │
+│  Home · LSP · Inventory · IPAM · floating PRISM tools       │
+└───────────────┬─────────────────────────────────────────────┘
+                │  /api/* proxied in dev mode
+    ┌───────────┼───────────┬───────────┬───────────┐
+    ▼           ▼           ▼           ▼           ▼
+ LSP :5000  Inventory  Notes :3002  IPAM :3003
+            :3001
+```
+
+| Service | Port | Data store |
+| --- | --- | --- |
+| Platform UI (Vite) | **5173** | — |
+| LSP API (FastAPI) | **5000** | In-memory topology + `.lsp.json` projects |
+| Inventory API | **3001** | `modules/inventory/backend/inventory.db` |
+| Notes API | **3002** | `modules/notes/backend/notes.db` |
+| IPAM API | **3003** | `modules/ipam/backend/ipam.db` |
+
+---
+
+## Repository layout
+
+```
+PrismPlatform/
+├── platform/frontend/       # Unified shell (home, routing, IPAM UI, floating tools)
+├── modules/
+│   ├── lsp/                 # LSP API + embedded UI (@lsp)
+│   ├── inventory/           # Inventory API + embedded UI (@inventory)
+│   ├── ipam/backend/        # IPAM API (UI lives in platform/frontend)
+│   └── notes/backend/       # Notes API (UI in platform)
+├── scripts/                 # Dev helpers (run-lsp-api, kill-dev-ports, smoke-test)
+├── packaging/               # PyInstaller spec
+├── docs/                    # USER_MANUAL.md, PROJECT_STRUCTURE.md
+└── package.json             # npm run dev — starts all services
+```
+
+See **`docs/PROJECT_STRUCTURE.md`** for module wiring details.
+
+---
+
+## Requirements
+
+Install these **before** you start:
+
+| Component | Version | Why |
+| --- | --- | --- |
+| **Python** | 3.11+ | LSP API (CSPF, config generation) |
+| **Node.js** | 20+ (**22.5+ recommended**) | All JavaScript APIs; Inventory & IPAM need **built-in SQLite** (Node 22.5+) |
+| **npm** | Comes with Node | Dependency install |
+| **Git** | Optional | Clone the repo |
+
+**Verify** (PowerShell or Terminal):
 
 ```powershell
-# From repository root
+python --version    # expect 3.11+
+node --version      # expect v20+ (v22.5+ for Inventory/IPAM SQLite)
+npm --version
+```
+
+---
+
+## Run locally (step-by-step)
+
+Follow these steps **in order** from the repository root.
+
+### Step 1 — Get the code
+
+```powershell
+git clone https://github.com/palesunset/PrismPlatform.git
+cd PrismPlatform
+```
+
+*(Or unzip a release archive and `cd` into the folder.)*
+
+### Step 2 — Install dependencies
+
+```powershell
 npm run install:all
-pip install -r backend/requirements.txt
+pip install -r modules/lsp/backend/requirements.txt
+```
+
+This installs Node packages for the platform shell, LSP, Inventory, Notes, and IPAM. The first run can take several minutes.
+
+> **Oz AI (optional):** Inventory can download a ~2 GB Llama model on first backend install. To skip:  
+> `$env:SKIP_OZ_MODEL_DOWNLOAD = "1"; npm run install:all`  
+> Inventory works fully without Oz; only the chat assistant stays disabled.
+
+### Step 3 — Start everything
+
+```powershell
 npm run dev
 ```
 
-Open **http://localhost:5173** — pick a module on the home screen. Use the floating PRISM menu for modules, **Notes**, **IP Calculator**, **VLSM Planner**, and **NetLens** while you work.
+Wait until the terminal shows **all five** processes running:
 
-| Service | URL (dev) |
+| Label in terminal | Service |
 | --- | --- |
-| Platform UI | http://localhost:5173 |
-| LSP API | http://localhost:5000 (`/api/lsp/*`) |
-| Inventory API | http://localhost:3001 (`/api/inventory/*`) |
-| Notes API | http://localhost:3002 (`/api/notes/*`) |
-| IPAM API | http://localhost:3003 (`/api/ipam/*`) |
+| `lsp-api` | LSP API on port 5000 |
+| `inv-api` | Inventory API on port 3001 |
+| `notes-api` | Notes API on port 3002 |
+| `ipam-api` | IPAM API on port 3003 |
+| `web` | Platform UI on port 5173 |
 
-If ports are stuck from a previous session, run `npm run dev:kill` before `npm run dev`.
+### Step 4 — Open the app
 
-## Hosting on a local network (LAN)
+In your browser on the **same PC**:
 
-Share Prism Platform with colleagues on the same Wi‑Fi or office LAN (e.g. `http://192.168.1.50:5173`).
+**http://localhost:5173**
 
-**Recommended for beginners:** keep using `npm run dev`, add `host: true` to `platform/frontend/vite.config.ts`, open firewall port **5173**, and give clients the server PC’s LAN IP.
+You should see the PRISM home screen with three tiles: **LSP Design**, **Inventory**, **Mini IPAM**.
 
-Full step-by-step instructions (firewall, IP lookup, security, production reverse proxy) are in **`USER_MANUAL.md` → [Hosting on a local network (LAN)](USER_MANUAL.md#hosting-on-a-local-network-lan)**.
+### Step 5 — Confirm it works
 
-| Approach | Best for | Client URL |
+1. Press **1** on the keyboard → opens **LSP Design**.
+2. Click the purple **PRISM** floating button (bottom area) → module switcher expands.
+3. Choose **Home** → back to the start screen.
+
+If any step fails, see **Troubleshooting** below.
+
+### Stuck ports from a previous session
+
+```powershell
+npm run dev:kill
+npm run dev
+```
+
+### Troubleshooting (local)
+
+| Problem | Fix |
+| --- | --- |
+| `EADDRINUSE` / port already in use | Run `npm run dev:kill`, then `npm run dev` |
+| Page blank or “Cannot connect” | Wait 30s for all APIs; check terminal for red errors |
+| Inventory/IPAM DB errors | Upgrade Node to **22.5+** |
+| LSP import fails | Confirm Python deps: `pip install -r modules/lsp/backend/requirements.txt` |
+| APIs fail in browser but terminal looks OK | Hard-refresh the browser (Ctrl+F5) |
+
+---
+
+## Run on a local network (LAN)
+
+Share PRISM with colleagues on the same Wi‑Fi or office LAN (e.g. `http://192.168.1.50:5173`).
+
+### Concepts
+
+| Term | Meaning |
+| --- | --- |
+| **Server PC** | The machine that runs `npm run dev` and holds the databases |
+| **Client PC** | Any other device on the same network that opens a browser |
+| **localhost** | Only reachable on the server PC itself — other PCs cannot use it |
+| **LAN IP** | Server address on your network, usually `192.168.x.x` or `10.x.x.x` |
+
+> **Security:** Dev mode has **no login**. Anyone who can reach port 5173 can use the app. Use only on **trusted** networks, or add API keys (see Step 7).
+
+### Step 1 — Install on the server PC
+
+Same as local setup: **Requirements** → `npm run install:all` → `pip install -r modules/lsp/backend/requirements.txt`.
+
+### Step 2 — Find the server’s LAN IP
+
+**Windows:**
+
+```powershell
+ipconfig
+```
+
+Look for **IPv4 Address** under your active Wi‑Fi or Ethernet adapter (e.g. `192.168.1.50`).
+
+**macOS / Linux:** `ip addr` or `ifconfig`.
+
+Write this down — clients will use `http://YOUR_IP:5173`.
+
+### Step 3 — Open the firewall (Windows example)
+
+1. **Windows Defender Firewall** → **Advanced settings** → **Inbound Rules** → **New Rule**
+2. Type: **Port** → **TCP** → **5173**
+3. **Allow the connection** → apply to **Private** network
+4. Name: `PRISM Platform (5173)`
+
+You only need port **5173** for the recommended dev setup. Backend APIs stay on localhost and are reached through Vite’s proxy on the server.
+
+### Step 4 — Enable LAN access for the web UI
+
+Edit `platform/frontend/vite.config.ts`. Inside the `server` block, add **`host: true`**:
+
+```ts
+  server: {
+    host: true,
+    port: 5173,
+    proxy: {
+      // ... keep existing proxy entries unchanged
+    },
+  },
+```
+
+This makes Vite listen on all interfaces (`0.0.0.0`), not just localhost.
+
+**Alternative (no file edit):** start only the UI with `cd platform/frontend` then `npx vite --host` — but you still need all APIs running separately. Prefer editing `vite.config.ts` and using `npm run dev` from the repo root.
+
+### Step 5 — Start the platform on the server
+
+```powershell
+npm run dev
+```
+
+Test on the **server PC**:
+
+- http://localhost:5173
+- http://192.168.1.50:5173 *(replace with your IP)*
+
+Both must work before testing other PCs.
+
+### Step 6 — Connect from other devices
+
+On any PC/tablet on the **same network**:
+
+1. Open Chrome, Edge, or Firefox.
+2. Go to **`http://SERVER_IP:5173`** (e.g. `http://192.168.1.50:5173`).
+3. Use the home tiles or PRISM menu as usual.
+
+### Step 7 — Optional: lock down Inventory API
+
+For LAN deployments, set an API key on the Inventory backend:
+
+1. Copy `modules/inventory/backend/.env.example` → `modules/inventory/backend/.env`
+2. Generate a key: `cd modules/inventory/backend` → `node scripts/generate-api-key.js`
+3. Add to `.env`:
+
+   ```env
+   HOST=127.0.0.1
+   API_KEY=your-generated-key-here
+   CORS_ORIGINS=http://localhost:5173,http://192.168.1.50:5173
+   ```
+
+4. Restart `npm run dev`.
+
+Browser traffic still goes through port 5173 in dev mode. See **`docs/USER_MANUAL.md`** for production reverse-proxy setup (nginx/Caddy, always-on server).
+
+### LAN troubleshooting
+
+| Problem | What to try |
+| --- | --- |
+| Page does not load from another PC | Same Wi‑Fi/VLAN? Firewall rule for 5173? Correct IP? |
+| Page loads but modules error | `npm run dev` still running on server? Check server terminal |
+| Connection refused | Wait 30s after start; retry |
+| IP changed after sleep | Re-run `ipconfig`; consider a DHCP reservation |
+
+---
+
+## Using the platform
+
+### Home screen
+
+Three main modules (keyboard shortcuts on home only):
+
+| Key | Module | Route |
 | --- | --- | --- |
-| **Dev mode + Vite `--host`** | Teams testing on a trusted LAN; all modules | `http://SERVER_IP:5173` |
-| **LSP-only desktop** | Path design only, no Inventory/IPAM | `http://SERVER_IP:5000/lsp` |
-| **nginx / Caddy reverse proxy** | Always-on server, single port | `http://SERVER_IP:8080` |
+| **1** | LSP Design | `/lsp` |
+| **2** | Equipment Inventory | `/inventory` |
+| **3** | Mini IPAM | `/ipam` |
 
-## Quick Notes
+Click a tile or press the number key.
 
-Notes open as a **draggable floating window** from the PRISM menu while you are in Inventory or LSP — drag it anywhere and keep working behind it.
+### PRISM floating menu (purple)
 
-- Create, edit, pin, color, archive, and delete notes
-- **To-do lists** with checkboxes — add tasks, mark complete, track progress
-- Data stored locally in `notes/backend/notes.db` via `/api/notes`
-- Requires the Notes API (started automatically with `npm run dev`)
+After you leave the home screen, a **purple PRISM button** appears. Click it to expand the module switcher.
 
-## IP Calculator
+- **Navigate:** Home, Inventory, LSP Design, Mini IPAM
+- **Tools:** Quick Notes, IP Calculator, VLSM Planner, NetLens
 
-Network engineering **decision-support tool** — draggable floating window from the PRISM menu for ISP, enterprise, and telecom work.
+**Tips:**
 
-- **Input** — CIDR (`192.168.1.10/27`), combined IP+mask, or split IP + mask/CIDR fields
-- **Smart validation** — detects host, network, or broadcast input; explains context and suggests assignable IPs (never just “not assignable”)
-- **Overview** — network, broadcast, mask, block size, totals
-- **Hosts** — first/last usable, range, position in subnet
-- **Binary** — IP and mask with network vs host bits highlighted
-- **Router view** — Cisco `ip route` and wildcard mask
-- **Classification** — RFC1918, public, loopback, link-local, CGNAT with descriptions
-- One-line engineering summary, copy/export JSON or CSV
-- Runs entirely in the browser (no backend)
+- Drag the menu by its grip handle — position is saved between sessions.
+- Double-click the collapsed button to expand quickly.
+- Tool panels are draggable floating windows; they stay open while you work in any module.
 
-## Mini IPAM
+---
 
-Full **local IP address management** module — home tile #3 or `/ipam`. Data stored in `ipam/backend/ipam.db` via the IPAM API (port **3003**, started with `npm run dev`).
+## Module guide — LSP Design
 
-| Phase | Scope |
+**Open:** Home tile **1** or PRISM menu → **LSP Design**.
+
+**Purpose:** Design RSVP-TE / SR-MPLS / SRv6 tunnel paths on a network graph.
+
+### First-time workflow
+
+1. **Prepare CSV files** — `nes.csv` (network elements) and `links.csv` (links). Sample files: `modules/lsp/sample_data/`.
+2. **Import topology** — drag both CSVs onto the window, or use the file picker in the left panel.
+3. **Set path rules** (left panel → **Path Rules** tab):
+   - Required bandwidth, max hops
+   - Mode: `rsvp_te`, `sr_mpls`, or `srv6`
+   - Optional: enforce role-based path finding
+4. **Choose Source and Destination** NEs in the top bar.
+5. Click **Compute LSP** (or **Ctrl/Cmd + Enter**).
+   - Primary path = **cyan**, backup = **orange**.
+6. **Simulate failures** — right-click a node or link → **Simulate Failure** (auto-recompute when failures are active).
+7. **Export config** — **View Configuration** for forward/reverse CLI; **Download ZIP** for per-NE `.cfg` files.
+
+### Save your work
+
+- **Ctrl/Cmd + S** — save a portable `.lsp.json` project (topology, layout, saved LSPs).
+- **Open** — reload a project file later.
+
+### Keyboard shortcuts (LSP)
+
+| Shortcut | Action |
 | --- | --- |
-| **1 — Basic IP database** | Subnet/host registry, instant search, IPv4 validation, pre-save validate |
-| **2 — VLSM & conflicts** | VLSM JSON import (from VLSM Planner), overlap/duplicate detection, subnet tracking, free-space finder, next-IP suggestion |
-| **3 — Analytics & reporting** | Utilization dashboard, project breakdown, high-util alerts, downloadable utilization report |
-| **4 — Enterprise foundation** | Audit log, bulk CSV import, JSON export with analytics |
-| **5 — IP Workflow Manager** | Allocation lifecycle (request → validate → approve → registry), NetLens attachment, change log |
+| **Ctrl/Cmd + K** | Focus Source NE field |
+| **Ctrl/Cmd + Enter** | Compute LSP |
+| **Ctrl/Cmd + S** | Save project |
 
-NetLens validates; **IP Workflow** controls approvals and state; the **Registry** is the system of record (written only when a workflow is approved, reserved, or activated).
+CSV column reference and vendor notes: **`docs/USER_MANUAL.md` → LSP Design**.
 
-### Integrity and audit
+---
 
-- **Pre-save validation** and **post-save integrity scan** on every change
-- **Audit tab** — health score, conflicts, warnings, orphan IPs, re-scan, downloadable report; shows **“IP integrity is all good”** when clean
-- **VLSM dry run** — simulate imports before writing (VLSM Planner, NetLens, or IPAM System Control)
-- **Duplicate prevention** — allocating or registering an IP that already exists is blocked with a clear error (client + server)
+## Module guide — Equipment Inventory
 
-### UI tabs
+**Open:** Home tile **2** or PRISM menu → **Equipment Inventory**.
 
-| Tab | Purpose |
-| --- | --- |
-| **Dashboard** | Per-subnet utilization cards + summary KPIs |
-| **Registry** | Source-of-truth CRUD; expandable subnet rows with nested hosts (Address, Type, Status, Project, Location, VLAN) |
-| **Subnets** | Subnet list with metadata preview; detail panel with project/location/VLAN, free ranges, host allocation |
-| **Search** | Query any IP/CIDR/project — membership, calculated context, conflict hints |
-| **IP Workflow** | Allocation pipeline — requests queue, approvals, blocked items, lifecycle history (NetLens → approve → registry) |
-| **Analytics** | Project breakdown, utilization table, report download |
-| **Audit** | Integrity health score, conflict/warning list, orphan IPs, report download |
-| **System Control** | Bulk CSV import, VLSM JSON import, JSON/CSV export, activity log |
+**Purpose:** Manage sites, chassis, slots, ports, and utilization across your network.
 
-### VLSM integration
+### First-time workflow
 
-The **VLSM Planner** (PRISM menu) includes **Save to IPAM** on its Export tab. Use **Dry run** first; subnets import as `reserved` records under a project name and IPAM refreshes automatically. You can also import VLSM JSON from **System Control**.
+1. **Sites** — create sites manually or **Import CSV** (template in `modules/inventory/frontend/public/sample-data/site_import_template.csv`).
+2. **Equipment** — add devices per site, or import `equipment_import_template.csv` / `combined_import_template.csv`.
+3. **Dashboard** — KPIs, utilization charts, EOL timeline, vendor breakdown.
+4. **Map** — geographic view of sites (set coordinates on sites for pins).
+5. **Equipment detail** — slots, ports, status; edit port assignments in the port grid.
+6. **Export** — dashboard and list exports; failed exports show a toast with the error.
 
-For controlled allocations (approval trail, conflict gates), use **IP Workflow** instead of writing directly to the Registry.
+### Data integrity
 
-### IP Workflow Manager
+- Duplicate IP addresses are **blocked** on save (HTTP 409).
+- IP addresses are normalized (canonical form) for lookup and import.
+- **Integrity scan:** `GET /api/inventory/integrity` (API) for duplicate-IP reports.
 
-State machine for IP/subnet allocations — does **not** calculate addresses (NetLens) and does **not** replace the Registry; it manages **state transitions**, **approvals**, and **audit**.
+### Oz AI assistant (optional)
 
-**Lifecycle:** `REQUESTED` → `VALIDATED` → `PENDING_APPROVAL` → `APPROVED` → `RESERVED` → `ACTIVE` (also `MODIFIED`, `DECOMMISSIONED`)
+- Floating **Oz** button (bottom-right, coral/red) — natural-language queries over your inventory.
+- Requires a local **GGUF** Llama model (~2 GB default). See **Oz AI setup** below.
+- Inventory works **without** Oz; chat stays disabled until the model is present.
 
-| Area | What you see |
-| --- | --- |
-| **Requests queue** | New and in-review allocations |
-| **Active workflows** | Approved, reserved, or active items |
-| **Blocked requests** | Invalid NetLens result or conflicts (needs fix or admin override) |
-| **History log** | Every transition with actor, reason, and timestamp |
+Standalone Inventory dev: `npm run dev:inventory-only` from repo root.
 
-**Actions:** submit for approval, approve, reject, apply NetLens suggestion, override (with reason), reserve, activate, decommission.
+---
 
-**Registry writes** happen only when a workflow is **approved** (creates `reserved`), **reserved**, or **activated** (updates to `used`). Decommission removes the linked registry record.
+## Module guide — Mini IPAM
 
-Create requests on the **IP Workflow** tab (auto-runs NetLens) or from **NetLens → Submit to Workflow** (opens the IP Workflow tab when you are already in Mini IPAM).
+**Open:** Home tile **3** or PRISM menu → **Mini IPAM**.
 
-## NetLens
+**Purpose:** Local IPv4/IPv6 address management — registry, search, analytics, audit, and optional approval workflow.
 
-Stateless **IP validation engine** — draggable floating panel from the PRISM menu. NetLens does **not** store records; it validates input and optionally reads IPAM for cross-checks.
+### Quick start (direct registry)
 
-- **Input** — single IP, CIDR, or VLSM-style host list (`hosts: 50, 20, 10`)
-- **Validation** — format, role (host/network/broadcast), RFC1918 classification
-- **Network analysis** — mask, usable range, block size, position in subnet
-- **Intelligence insights** — IPAM lookup, conflict hints, VLSM import dry-run against live registry
-- **Submit to Workflow** — after analysis, send the address and NetLens result to **Mini IPAM → IP Workflow** (validation only; no registry write from NetLens)
-- Runs analysis in the browser; IPAM checks use read-only API calls when the IPAM service is running
+1. Open **Registry** tab.
+2. Click **Add record** — enter a subnet (`10.0.0.0/24`) or host.
+3. Click **Validate** on the form before saving.
+4. Expand subnet rows (chevron) to see nested hosts.
 
-**Integration flow:** NetLens (validate) → IP Workflow (approve) → Registry (persist)
+### Allocate a host from a subnet
 
-## Inventory — Oz AI (Llama model)
+1. Open **Subnets** tab.
+2. Select a subnet from the list.
+3. In the detail panel:
+   - **Next IP** — suggests the next free address (works for many IPv6 prefixes; very large spaces may show **Util N/A** on the dashboard — that is expected).
+   - **Manual entry** — type an address → **Allocate**.
+4. Duplicates show an inline error instead of silent failure.
 
-The **Oz** assistant in Inventory runs a **local Llama** GGUF model via `node-llama-cpp` (offline, no cloud API). Inventory works without it, but Oz chat stays disabled until the model file is present.
+### Search and audit
+
+- **Search** — query any IP, CIDR, or project name.
+- **Audit** — integrity health score, conflicts, orphan IPs, downloadable report.
+- **Analytics** — utilization by project; toggle **IPv4 / IPv6** family where shown.
+
+### IP Workflow (controlled allocations)
+
+Use when you need validation, approval, and an audit trail **before** the registry is updated.
+
+```
+NetLens (validate)  →  IP Workflow (approve)  →  reserve / activate  →  Registry
+```
+
+**Create a request:**
+
+- **Option A:** NetLens → analyze IP/CIDR → **Submit to Workflow** → open **IP Workflow** tab in IPAM.
+- **Option B:** IPAM → **IP Workflow** → fill address, project, location → **Create & validate with NetLens**.
+
+**Typical lifecycle:** `REQUESTED` → `VALIDATED` → `PENDING_APPROVAL` → `APPROVED` → `RESERVED` → `ACTIVE`.
+
+**Important:** Registry writes happen on **Mark reserved** and **Activate** — not on approve alone.
+
+### System Control
+
+Backup/restore, API keys, bulk CSV import, VLSM JSON import (with dry-run), exports, activity log.
+
+Full tab reference: **`modules/ipam/README.md`** and **`docs/USER_MANUAL.md` → Mini IPAM**.
+
+---
+
+## Module guide — Floating tools
+
+Open from the **PRISM menu** (available in LSP, Inventory, and IPAM).
+
+### Quick Notes
+
+1. PRISM menu → **Notes**.
+2. Create notes or **to-do lists** (checkboxes).
+3. Pin, color, archive, or delete items.
+4. Data stored in `modules/notes/backend/notes.db` (Notes API required — started with `npm run dev`).
+
+### IP Calculator
+
+1. PRISM menu → **IP Calculator**.
+2. Enter CIDR (`192.168.1.10/27`, `2001:db8::/48`), bare IP, or IP + mask.
+3. Browse tabs: Overview, Hosts/Addresses, Classification; IPv4 adds Binary, Router, Class.
+4. Copy summary or export JSON/CSV.
+5. Runs **entirely in the browser** — no backend needed.
+
+### VLSM Planner
+
+1. PRISM menu → **VLSM Planner**.
+2. Enter **base network** (e.g. `10.0.0.0/24` or `2001:db8::/48`).
+3. Add rows per site:
+   - **IPv4:** host counts (`50`, `20`, `10`).
+   - **IPv6:** target prefix (`64` or `/64` per site from a `/48` base).
+4. Review the generated plan.
+5. **Export** tab → **Dry run** first, then **Save to IPAM** (imports as `reserved` under a project name).
+
+For approval-gated allocations, use **IP Workflow** instead of direct registry writes.
+
+### NetLens
+
+1. PRISM menu → **NetLens**.
+2. Enter IP, CIDR, IPv6 prefix, or VLSM-style list (`hosts: 50, 20, 10`).
+3. Review **Validation**, **Network analysis**, and **Intelligence insights** (IPAM cross-check when IPAM API is running).
+4. Optional: **Submit to Workflow** → continues in Mini IPAM → **IP Workflow** tab.
+
+NetLens **never writes** to the registry — it validates only.
+
+---
+
+## Oz AI setup (Inventory, optional)
 
 | Item | Detail |
 | --- | --- |
-| Default model | `inventory/backend/models/llama-3.2-3b-instruct-q4_k_m.gguf` (~2 GB) |
-| Custom model | Set `OZ_MODEL_PATH` in `inventory/backend/.env` |
-| Node | **22.5+** required (same as the inventory API) |
+| Default model | `modules/inventory/backend/models/llama-3.2-3b-instruct-q4_k_m.gguf` (~2 GB) |
+| Custom model | Set `OZ_MODEL_PATH` in `modules/inventory/backend/.env` |
+| Node | **22.5+** required |
 
-### Choose a model for your machine
-
-Pick any **GGUF instruct** model your PC can run, download it, then point Oz at the file with `OZ_MODEL_PATH` in `inventory/backend/.env`:
-
-```env
-# Relative to inventory/backend/
-OZ_MODEL_PATH=models/llama-3.2-1b-instruct-q4_k_m.gguf
-
-# Or an absolute path anywhere on disk
-OZ_MODEL_PATH=D:/AI/llama-3.2-3b-instruct-q8_0.gguf
-```
-
-| Machine | Suggested starting point |
-| --- | --- |
-| Low RAM / older CPU | **1B** class, Q4 quant (~1 GB) |
-| Typical laptop | **3B** Q4_K_M (default, ~2 GB) |
-| Workstation / GPU | **3B+** Q8 or larger quant |
-
-Copy `inventory/backend/.env.example` to `.env`, set `OZ_MODEL_PATH`, place your `.gguf` file at that path, and restart the inventory API.
-
-When `OZ_MODEL_PATH` is set, the automatic default download is skipped — you supply your own file.
-
-### Automatic download (default model only)
-
-From the repo root after `npm run install:all`, or from `inventory/backend` (only when `OZ_MODEL_PATH` is **not** set):
+**Automatic download** (when `OZ_MODEL_PATH` is not set):
 
 ```powershell
-cd inventory/backend
+cd modules/inventory/backend
 npm install
 ```
 
-The `postinstall` script downloads the default 3B model once from Hugging Face. Expect a few minutes on first install.
-
-### Manual download (default model)
-
-If the automatic download fails (rate limit, offline prep, or CI):
-
-```powershell
-cd inventory/backend
-npm run download-model
-```
-
-Skip the download when you do not need Oz yet:
+**Skip download:**
 
 ```powershell
 $env:SKIP_OZ_MODEL_DOWNLOAD = "1"
 npm install
 ```
 
-### Verify Oz is ready
-
-1. Start the platform: `npm run dev` (or inventory-only: `cd inventory && npm run dev`).
-2. Open **Inventory** → use the **Oz** floating chat button.
-3. On backend startup you should see `Oz: loading model from ...` with your configured path.
-
-If chat says the model is missing, confirm the `.gguf` file exists at `OZ_MODEL_PATH` (or the default path) and restart the inventory API on port **3001**.
-
-## Quick start — LSP only
+**Manual download:**
 
 ```powershell
-cd backend
-python -m pip install -r requirements.txt
-$env:PYTHONPATH = "."
-python -m uvicorn app.main:app --host 127.0.0.1 --port 5000
-
-cd ..\frontend
-npm install
-npm run dev
+cd modules/inventory/backend
+npm run download-model
 ```
 
-The Vite dev server proxies `/api/lsp` to `http://127.0.0.1:5000`.
+**Verify:** Start `npm run dev` → Inventory → Oz button → backend log should show `Oz: loading model from ...`.
 
-## Quick start — Inventory only
+| Machine | Suggested model |
+| --- | --- |
+| Low RAM / older CPU | 1B class, Q4 (~1 GB) |
+| Typical laptop | 3B Q4_K_M (default) |
+| Workstation / GPU | 3B+ Q8 or larger |
 
-```powershell
-cd inventory
-npm install
-cd backend && npm install
-cd ../frontend && npm install
-npm run dev
-```
+---
 
-Inventory UI: **http://localhost:5173** (standalone) · API: **http://localhost:3001**
+## Alternative run modes
 
-### Oz AI — Llama model (optional)
+| Mode | Command | Use when |
+| --- | --- | --- |
+| **Full platform** (recommended) | `npm run dev` | Everything in one UI |
+| **LSP only** | `npm run dev:lsp-only` | Path design without Inventory/IPAM |
+| **Inventory only** | `npm run dev:inventory-only` | Inventory API + standalone Vite UI |
+| **Production-like (LSP serves built UI)** | `npm run build:platform` then `cd modules/lsp/backend` → `python run_desktop.py` | Single-process demo; Inventory/IPAM APIs must run separately for those modules |
 
-Oz uses a local **GGUF** model (default: Llama 3.2 3B ~2 GB). Configure a different file in `backend/.env`:
-
-```env
-OZ_MODEL_PATH=models/your-model.gguf
-```
-
-See **Inventory — Oz AI (Llama model)** above for download steps and hardware guidance.
-
-## LSP features
-
-- Bulk import of `nes.csv` and `links.csv` (drag-and-drop in the UI or file picker).
-- UI state persistence (mode/path rules/Nokia CLI style) via localStorage.
-- Save/Open a portable project file (`.lsp.json`) containing topology, cached layout positions, and saved LSPs.
-- FastAPI backend with NetworkX CSPF (parallel links supported via an expanded graph model).
-- React + Vite + TypeScript UI with Cytoscape.js and the `cose-bilkent` compound layout for site grouping.
-- Vendor templates (Jinja2) for Nokia SR OS, Huawei VRP, Cisco IOS XR, and Juniper Junos across RSVP-TE, SR-MPLS, and SRv6 modes.
-- PyInstaller packaging entry point (`backend/run_desktop.py`) for desktop distribution after building the platform frontend.
-
-## Production-like local run (API serves the built UI)
-
-```powershell
-npm run build:platform
-cd backend
-$env:PYTHONPATH = "."
-python .\run_desktop.py
-```
-
-FastAPI serves `platform/frontend/dist` when present (falls back to `frontend/dist`). Inventory API must run separately on port 3001 for inventory features.
-
-## Legacy quick start (LSP backend + LSP frontend only)
-
-### 1) Backend (Python 3.11+)
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-$env:PYTHONPATH = "."
-python -m uvicorn app.main:app --host 127.0.0.1 --port 5000
-```
-
-### 2) Frontend (Node 20+)
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-The Vite dev server proxies `/api/lsp` to `http://127.0.0.1:5000`.
-
-### 3) Production-like local run (LSP-only UI)
-
-```powershell
-cd frontend
-npm run build
-cd ..\backend
-$env:PYTHONPATH = "."
-python .\run_desktop.py
-```
-
-This starts FastAPI on `http://127.0.0.1:5000` and opens your browser. The backend automatically serves `frontend/dist` when present.
-
-## Keyboard shortcuts
-
-- **Ctrl/Cmd + K**: focus Source NE field
-- **Ctrl/Cmd + Enter**: compute LSP
-- **Ctrl/Cmd + S**: save project
-
-## Configuration Output (forward / reverse)
-
-- Click **View Configuration** to open the exported configuration overlay.
-- Tabs:
-  - **Path details**: path summary (nodes + totals).
-  - **Forward path** and **Reverse path**: vendor CLI blocks.
-- **User Define Configuration** (X/Y/Z):
-  - Visible on **Forward path** and **Reverse path** tabs.
-  - Editing X/Y/Z updates the preview after a short delay.
-  - **Update configuration** updates only the currently selected tab block (forward or reverse).
-
-## Packaging (PyInstaller)
-
-Build the frontend first, then run PyInstaller from the repository root. The spec builds a **single `prism.exe`** (one-file) that unpacks to a temp directory at runtime; templates and `frontend_dist` are included as data files (see `app/main.py` frozen-path handling).
-
-```powershell
-npm run build:platform
-# or LSP-only: cd frontend && npm run build
-cd ..
-pyinstaller .\build_scripts\pyinstaller.spec
-```
-
-The executable is written to `dist/prism.exe` (Windows). First launch may be a few seconds slower than an onedir build while the bundle extracts.
-
-### Icons & macOS notarization
-
-- **Icons:** Replace the default PyInstaller icon by passing `icon='assets/app.ico'` (Windows) in `EXE(...)` and ship `.icns` separately for macOS bundling if you add an `.app` target later.
-- **Notarization:** Apple notarization/stapling is outside this repo; use your Developer ID certificate and `notarytool` in your release pipeline to avoid Gatekeeper warnings.
+---
 
 ## Tests
 
 From repository root:
 
 ```powershell
-npm test          # LSP, inventory, notes, IPAM, platform build
-npm run smoke     # live API smoke tests (start APIs first: npm run dev)
+npm test          # LSP, inventory, notes, IPAM, platform build + vitest
+npm run smoke     # Live API smoke tests — run npm run dev first in another terminal
 ```
 
-| Suite | Command | What it covers |
-| --- | --- | --- |
-| **All** | `npm test` | LSP pytest + lint + Vitest, inventory, notes, IPAM, platform build |
-| **LSP backend** | `cd backend && python -m pytest` | CSPF, role validation, import, API |
-| **LSP frontend** | `cd frontend && npm run lint && npm run test` | NE picker, project file validation |
-| **Inventory** | `cd inventory/backend && node scripts/test-all.js` | Schema, Oz, HTTP API |
-| **Notes** | `cd notes/backend && npm run test` | Notes CRUD API |
-| **IPAM** | `cd ipam/backend && npm run test` | Registry, search, VLSM import, duplicate host (409), integrity |
-| **Platform UI** | `cd platform/frontend && npm run build` | Production build of unified shell |
-| **Smoke** | `npm run smoke` | Live LSP + inventory endpoints (requires `npm run dev`) |
+| Suite | Command |
+| --- | --- |
+| All | `npm test` |
+| LSP backend | `cd modules/lsp/backend && python -m pytest` |
+| Inventory | `cd modules/inventory/backend && node scripts/test-all.js` |
+| IPAM | `cd modules/ipam/backend && npm test` |
+| Platform UI | `cd platform/frontend && npm run build && npm test` |
 
-## API overview
+---
 
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/lsp/import` | Multipart upload of `nes_file` + `links_file`. |
-| `GET` | `/api/lsp/topology` | Cytoscape elements JSON for the active topology. |
-| `POST` | `/api/lsp/compute` | CSPF primary + strict node-disjoint backup. |
-| `POST` | `/api/lsp/export` | ZIP bundle of per-NE `.cfg` files. |
-| `POST` | `/api/lsp/export/clipboard` | Ingress-only plaintext configuration. |
-| `POST` | `/api/lsp/export/monolithic` | Legacy monolithic plaintext (Path details + Forward + Reverse). |
-| `POST` | `/api/lsp/export/monolithic/section?section=forward\|reverse` | Render one monolithic block for partial refresh. |
-| `GET` | `/api/lsp/health` | Health probe. |
+## Packaging (Windows desktop)
 
-Inventory API routes are under `/api/inventory/*` (see `inventory/README.md`).
+Build the platform frontend, then PyInstaller:
+
+```powershell
+npm run build:platform
+pyinstaller .\packaging\pyinstaller.spec
+```
+
+Output: `dist/prism.exe` (single-file). First launch may take a few seconds while the bundle extracts.
+
+---
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
-| **`USER_MANUAL.md`** | Platform overview, all modules, LSP CSV schemas, UI walkthrough, vendor notes, **LAN hosting guide** |
-| **`inventory/README.md`** | Inventory API routes and standalone run instructions |
+| **`docs/USER_MANUAL.md`** | Full walkthrough, CSV schemas, vendor notes, extended LAN / nginx guide |
+| **`docs/PROJECT_STRUCTURE.md`** | Repo layout, dev wiring, feature summary |
+| **`modules/inventory/README.md`** | Inventory API routes |
+| **`modules/ipam/README.md`** | IPAM API, env vars, schema |
+
+---
 
 ## Credits
 

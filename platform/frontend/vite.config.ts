@@ -6,9 +6,9 @@ import { fileURLToPath } from "url";
 
 const platformDir = path.dirname(fileURLToPath(import.meta.url));
 const platformEntry = path.resolve(platformDir, "src/main.tsx");
-const inventorySrc = path.resolve(platformDir, "../../inventory/frontend/src");
-const inventoryFonts = path.resolve(platformDir, "../../inventory/frontend/public/fonts");
-const lspSrc = path.resolve(platformDir, "../../frontend/src");
+const inventorySrc = path.resolve(platformDir, "../../modules/inventory/frontend/src");
+const inventoryFonts = path.resolve(platformDir, "../../modules/inventory/frontend/public/fonts");
+const lspSrc = path.resolve(platformDir, "../../modules/lsp/frontend/src");
 
 /** Bare imports from aliased workspace src must resolve via platform/node_modules on CI. */
 function resolveWorkspaceDepsPlugin(workspaceRoots: string[]): Plugin {
@@ -81,11 +81,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes("node_modules")) return;
-          if (id.includes("leaflet") || id.includes("react-leaflet")) return "leaflet";
-          if (id.includes("recharts")) return "recharts";
-          if (id.includes("cytoscape")) return "cytoscape";
-          if (id.includes("react")) return "react";
+          const norm = id.replace(/\\/g, "/");
+          if (norm.includes("/platform/frontend/src/pages/ipam/")) return "ipam";
+          if (norm.includes("/modules/lsp/frontend/") || norm.includes("/@lsp/")) return "lsp";
+          if (norm.includes("/modules/inventory/frontend/") || norm.includes("/@inventory/")) return "inventory";
+          if (!norm.includes("node_modules")) return;
+          if (norm.includes("leaflet") || norm.includes("react-leaflet")) return "leaflet";
+          if (norm.includes("recharts")) return "recharts";
+          if (norm.includes("cytoscape")) return "cytoscape";
+          if (norm.includes("react")) return "react";
           return "vendor";
         },
       },

@@ -19,6 +19,7 @@ export type ClassificationEntry = {
 
 export type IpCalcSuccess = {
   ok: true;
+  family: 'ipv4';
   input: string;
   normalizedInput: string;
   ip: IpOctets;
@@ -51,7 +52,21 @@ export type IpCalcSuccess = {
 
 export type IpCalcFailure = { ok: false; error: string };
 
-export type IpCalcResult = IpCalcSuccess | IpCalcFailure;
+export type { IpCalcSuccessV6, IpCalcResultV6 } from './ipCalculatorV6';
+export { calculateV6Network, combineV6Inputs, resultToCsvV6, resultToJsonV6 } from './ipCalculatorV6';
+
+import { calculateV6Network, type IpCalcResultV6, type IpCalcSuccessV6 } from './ipCalculatorV6';
+import { isIpv6Input } from './ipMathV6';
+
+export type IpCalcResult = IpCalcSuccess | IpCalcSuccessV6 | IpCalcFailure;
+
+export function isIpCalcV4(result: IpCalcSuccess | IpCalcSuccessV6): result is IpCalcSuccess {
+  return result.family === 'ipv4';
+}
+
+export function isIpCalcV6(result: IpCalcSuccess | IpCalcSuccessV6): result is IpCalcSuccessV6 {
+  return result.family === 'ipv6';
+}
 
 const OCTET_RE = /^(25[0-5]|2[0-4]\d|1?\d?\d)$/;
 
@@ -133,6 +148,14 @@ export function combineIpInputs(ipPart: string, maskPart: string): string {
   const ip = ipPart.trim();
   const mask = maskPart.trim();
   if (!ip) return '';
+  if (isIpv6Input(ip)) {
+    if (!mask) return ip;
+    if (mask.startsWith('/') || /^\d{1,3}$/.test(mask)) {
+      const prefix = mask.startsWith('/') ? mask : `/${mask}`;
+      return `${ip.split('/')[0]}${prefix}`;
+    }
+    return ip;
+  }
   if (!mask) return ip;
   if (mask.startsWith('/') || /^\d{1,2}$/.test(mask)) {
     const prefix = mask.startsWith('/') ? mask : `/${mask}`;
@@ -356,7 +379,18 @@ function buildSmartValidation(
 }
 
 export function calculateIpNetwork(input: string): IpCalcResult {
-  const parsed = parseIpInput(input);
+  const trimmed = input.trim();
+  if (!trimmed) return { ok: false, error: 'Enter an IP address with CIDR or subnet mask.' };
+  if (isIpv6Input(trimmed)) {
+    return calculateV6Network(trimmed);
+  }
+
+  let v4Input = trimmed;
+  if (!trimmed.includes('/') && !trimmed.includes(' ')) {
+    v4Input = `${trimmed.split('/')[0]}/32`;
+  }
+
+  const parsed = parseIpInput(v4Input);
   if ('error' in parsed) return { ok: false, error: parsed.error };
 
   const { ip, prefix } = parsed;
@@ -403,6 +437,7 @@ export function calculateIpNetwork(input: string): IpCalcResult {
 
   return {
     ok: true,
+    family: 'ipv4',
     input: input.trim(),
     normalizedInput,
     ip,

@@ -7,14 +7,24 @@ import { useIpCalculatorStore } from '../store/useIpCalculatorStore';
 import {
   calculateIpNetwork,
   combineIpInputs,
+  isIpCalcV6,
   octetsToString,
   resultToCsv,
   resultToJson,
   type ClassificationEntry,
   type InputRole,
   type IpCalcSuccess,
+  type IpCalcSuccessV6,
 } from '../utils/ipCalculator';
+import { resultToCsvV6, resultToJsonV6 } from '../utils/ipCalculatorV6';
 import { clampToViewport, type FloatingPoint } from '../utils/floatingPanel';
+import {
+  FLOATING_INPUT_RING,
+  FLOATING_PANEL_ICON,
+  FLOATING_CHROME,
+  FLOATING_PANEL_SHELL,
+  FLOATING_PRIMARY_BTN,
+} from '../utils/floatingPanelTheme';
 
 const STORAGE_KEY = 'prism-ip-calc-panel-v1';
 const PANEL_W = 448;
@@ -179,9 +189,127 @@ function classificationStyle(category: ClassificationEntry['category']): string 
   }
 }
 
-function ResultTabs(props: { result: IpCalcSuccess }) {
+function ResultTabs(props: { result: IpCalcSuccess | IpCalcSuccessV6 }) {
   const { result } = props;
   const [tab, setTab] = useState<TabId>('allocation');
+
+  if (isIpCalcV6(result)) {
+    return <ResultTabsV6 result={result} tab={tab} setTab={setTab} />;
+  }
+
+  return <ResultTabsV4 result={result} tab={tab} setTab={setTab} />;
+}
+
+function ResultTabsV6(props: {
+  result: IpCalcSuccessV6;
+  tab: TabId;
+  setTab: (t: TabId) => void;
+}) {
+  const { result, tab, setTab } = props;
+  const v6Tabs: TabId[] = ['allocation', 'overview', 'hosts', 'classification'];
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const downloadFile = (content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2 font-mono text-xs text-cyan-100">
+        {result.summary}
+      </div>
+      <div className="mb-2 flex justify-center gap-1 overflow-x-auto rounded-lg border border-white/10 bg-gray-900/50 p-0.5">
+        {v6Tabs.map((id) => (
+          <TabButton key={id} active={tab === id} onClick={() => setTab(id)}>
+            {id === 'allocation' ? 'Allocation' : id === 'overview' ? 'Overview' : id === 'hosts' ? 'Addresses' : 'Class'}
+          </TabButton>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/10 bg-gray-900/40 p-3">
+        {tab === 'overview' ? (
+          <div className="divide-y divide-white/5">
+            <InfoRow label="Family" value="IPv6" />
+            <InfoRow label="Network" value={`${result.network}/${result.cidr}`} mono />
+            <InfoRow label="Last address" value={result.lastAddress} mono />
+            <InfoRow label="CIDR" value={`/${result.cidr}`} />
+            <InfoRow label="Block size" value={result.blockSizeLabel} />
+            <InfoRow label="Total addresses" value={result.totalAddressesLabel} />
+            <InfoRow label="Full range" value={result.usableRangeLabel} mono />
+          </div>
+        ) : null}
+        {tab === 'allocation' ? <ValidationCardV6 result={result} /> : null}
+        {tab === 'hosts' ? (
+          <div className="divide-y divide-white/5">
+            <InfoRow label="Address" value={result.address} mono />
+            <InfoRow label="First" value={result.firstUsable ?? '—'} mono />
+            <InfoRow label="Last" value={result.lastUsable ?? '—'} mono />
+            <InfoRow label="Position" value={result.hostIndexLabel} />
+          </div>
+        ) : null}
+        {tab === 'classification' ? (
+          <div className="space-y-2">
+            {result.classifications.map((entry) => (
+              <div key={entry.label} className={clsx('rounded-lg border p-3', classificationStyle(entry.category))}>
+                <p className="text-sm font-semibold text-slate-100">{entry.label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">{entry.description}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button type="button" onClick={() => void copyText(result.summary)} className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/15">
+          <Copy className="h-3 w-3" /> Copy summary
+        </button>
+        <button type="button" onClick={() => void copyText(resultToJsonV6(result))} className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/15">
+          <Copy className="h-3 w-3" /> Copy JSON
+        </button>
+        <button type="button" onClick={() => downloadFile(resultToJsonV6(result), 'ip-calc-v6.json', 'application/json')} className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/15">
+          <Download className="h-3 w-3" /> JSON
+        </button>
+        <button type="button" onClick={() => downloadFile(resultToCsvV6(result), 'ip-calc-v6.csv', 'text/csv')} className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/15">
+          <Download className="h-3 w-3" /> CSV
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ValidationCardV6(props: { result: IpCalcSuccessV6 }) {
+  const { validation } = props.result;
+  return (
+    <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3">
+      <div className="flex items-start gap-2">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+        <div className="text-xs">
+          <p className="font-semibold text-emerald-200">{validation.headline}</p>
+          <p className="mt-1 text-slate-400">{validation.explanation}</p>
+          <p className="mt-2 font-mono text-emerald-300/90">{validation.usableRangeLabel}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResultTabsV4(props: {
+  result: IpCalcSuccess;
+  tab: TabId;
+  setTab: (t: TabId) => void;
+}) {
+  const { result, tab, setTab } = props;
 
   const copyText = async (text: string) => {
     try {
@@ -403,7 +531,7 @@ export function IpCalculatorPanel() {
       {panelOpen ? (
         <motion.div
           ref={rootRef}
-          className="fixed z-[197] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-md"
+          className={clsx('fixed z-[197] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden', FLOATING_CHROME, FLOATING_PANEL_SHELL)}
           style={{
             left: position.x,
             top: position.y,
@@ -426,7 +554,7 @@ export function IpCalculatorPanel() {
               title="Drag to move"
             >
               <GripVertical className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />
-              <Calculator className="h-4 w-4 shrink-0 text-cyan-400" strokeWidth={2} />
+              <Calculator className={clsx('h-4 w-4 shrink-0', FLOATING_PANEL_ICON)} strokeWidth={2} />
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-semibold text-slate-100">IP Calculator</h2>
                 <p className="truncate text-[9px] text-slate-500">Network engineering tool</p>
@@ -447,8 +575,11 @@ export function IpCalculatorPanel() {
               IP address
             </label>
             <input
-              className="mb-2 w-full rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-sm text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-600 focus:ring-2"
-              placeholder="192.168.1.10 or 192.168.1.10/27"
+              className={clsx(
+                'mb-2 w-full rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-600',
+                FLOATING_INPUT_RING,
+              )}
+              placeholder="192.168.1.10/27 or 2001:db8::1"
               value={ipInput}
               onChange={(e) => setIpInput(e.target.value)}
               onKeyDown={(e) => {
@@ -461,8 +592,11 @@ export function IpCalculatorPanel() {
             </label>
             <div className="mb-2 flex gap-2">
               <input
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-sm text-slate-100 outline-none ring-cyan-500/40 placeholder:text-slate-600 focus:ring-2"
-                placeholder="/27 or 255.255.255.224"
+                className={clsx(
+                  'min-w-0 flex-1 rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-600',
+                  FLOATING_INPUT_RING,
+                )}
+                placeholder="/27, /64, or 255.255.255.224"
                 value={maskInput}
                 onChange={(e) => setMaskInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -473,7 +607,7 @@ export function IpCalculatorPanel() {
               <button
                 type="button"
                 onClick={runCalc}
-                className="shrink-0 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-500"
+                className={clsx('shrink-0', FLOATING_PRIMARY_BTN, 'px-3 py-2')}
               >
                 Calculate
               </button>

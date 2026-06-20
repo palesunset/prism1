@@ -17,6 +17,13 @@ import { useIpamStore } from '../store/useIpamStore';
 import { analyzeNetLens, netLensResultToWorkflowPayload, type NetLensResult } from '../utils/netLens';
 import { attachWorkflowNetLens, createWorkflowRequest } from '../services/ipamApi';
 import { clampToViewport, type FloatingPoint } from '../utils/floatingPanel';
+import {
+  FLOATING_INPUT_RING,
+  FLOATING_PANEL_ICON,
+  FLOATING_CHROME,
+  FLOATING_PANEL_SHELL,
+  FLOATING_PRIMARY_BTN,
+} from '../utils/floatingPanelTheme';
 
 const STORAGE_KEY = 'prism-netlens-panel-v1';
 const PANEL_W = 448;
@@ -24,6 +31,8 @@ const PANEL_H = 672;
 
 const PLACEHOLDER = `192.168.1.10
 192.168.1.0/27
+2001:db8::1
+2001:db8::/48
 10.0.0.0/24
 hosts: 50, 20, 10`;
 
@@ -88,7 +97,7 @@ function ResultView(props: { result: NetLensResult }) {
               <dd className="font-mono text-slate-100">{result.analysis.network}</dd>
             </div>
             <div className="flex justify-between gap-2">
-              <dt className="text-slate-500">Broadcast</dt>
+              <dt className="text-slate-500">{result.analysis.role === 'subnet' || result.inputMode === 'cidr' ? 'Last address' : 'Broadcast'}</dt>
               <dd className="font-mono text-slate-100">{result.analysis.broadcast}</dd>
             </div>
             <div className="flex justify-between gap-2">
@@ -270,7 +279,7 @@ export function NetLensPanel() {
       {panelOpen ? (
         <motion.div
           ref={rootRef}
-          className="fixed z-[201] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-teal-500/20 bg-gray-950/95 shadow-2xl backdrop-blur-md"
+          className={clsx('fixed z-[201] flex w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden', FLOATING_CHROME, FLOATING_PANEL_SHELL)}
           style={{
             left: position.x,
             top: position.y,
@@ -293,7 +302,7 @@ export function NetLensPanel() {
               title="Drag to move"
             >
               <GripVertical className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />
-              <ScanEye className="h-4 w-4 shrink-0 text-teal-400" strokeWidth={2} />
+              <ScanEye className={clsx('h-4 w-4 shrink-0', FLOATING_PANEL_ICON)} strokeWidth={2} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-100">NetLens</p>
                 <p className="truncate text-[9px] text-slate-500">Stateless IP validation · read-only IPAM</p>
@@ -311,7 +320,10 @@ export function NetLensPanel() {
 
           <div className="flex min-h-0 flex-1 flex-col p-3">
             <textarea
-              className="mb-2 min-h-[5.5rem] shrink-0 resize-y rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-xs text-slate-100 outline-none focus:ring-2 focus:ring-teal-500/40"
+              className={clsx(
+                'mb-2 min-h-[5.5rem] shrink-0 resize-y rounded-lg border border-white/10 bg-gray-900/80 px-3 py-2 font-mono text-xs text-slate-100',
+                FLOATING_INPUT_RING,
+              )}
               placeholder={PLACEHOLDER}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -322,7 +334,7 @@ export function NetLensPanel() {
                 type="button"
                 onClick={() => void runAnalysis(input)}
                 disabled={loading || !input.trim()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+                className={clsx('inline-flex items-center gap-1.5', FLOATING_PRIMARY_BTN)}
               >
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanEye className="h-3.5 w-3.5" />}
                 Analyze

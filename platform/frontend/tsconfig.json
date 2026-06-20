@@ -17,10 +17,10 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["../../inventory/frontend/src/*"],
-      "@lsp/*": ["../../frontend/src/*"],
-      "@inventory/*": ["../../inventory/frontend/src/*"]
+      "@/*": ["../../modules/inventory/frontend/src/*"],
+      "@lsp/*": ["../../modules/lsp/frontend/src/*"],
+      "@inventory/*": ["../../modules/inventory/frontend/src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../../modules/inventory/frontend/src/**/*"]
 }

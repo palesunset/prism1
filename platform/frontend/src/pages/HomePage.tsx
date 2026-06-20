@@ -10,17 +10,6 @@ type ModuleChoice = "/inventory" | "/lsp" | "/ipam";
 
 const modules = [
   {
-    to: "/inventory" as const,
-    label: "Inventory",
-    tagline: "Sites, equipment, ports & map",
-    description: "Manage network inventory, import CSVs, dashboard views, and Oz AI assistant.",
-    Icon: Boxes,
-    accent: "from-emerald-500/20 to-cyan-500/10",
-    ring: "group-hover:ring-emerald-400/50",
-    icon: "text-emerald-300",
-    cta: "Open Inventory",
-  },
-  {
     to: "/lsp" as const,
     label: "LSP Design",
     tagline: "Paths, simulation & config export",
@@ -30,6 +19,17 @@ const modules = [
     ring: "group-hover:ring-cyan-400/50",
     icon: "text-cyan-300",
     cta: "Open LSP Design",
+  },
+  {
+    to: "/inventory" as const,
+    label: "Inventory",
+    tagline: "Sites, equipment, ports & map",
+    description: "Manage network inventory, import CSVs, dashboard views, and Oz AI assistant.",
+    Icon: Boxes,
+    accent: "from-emerald-500/20 to-cyan-500/10",
+    ring: "group-hover:ring-emerald-400/50",
+    icon: "text-emerald-300",
+    cta: "Open Inventory",
   },
   {
     to: "/ipam" as const,
@@ -66,8 +66,8 @@ export function HomePage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (leaving) return;
-      if (e.key === "1") go("/inventory");
-      if (e.key === "2") go("/lsp");
+      if (e.key === "1") go("/lsp");
+      if (e.key === "2") go("/inventory");
       if (e.key === "3") go("/ipam");
     };
     window.addEventListener("keydown", onKey);
@@ -177,9 +177,9 @@ export function HomePage() {
           className="mt-3 text-[10px] text-slate-600 sm:mt-4 sm:text-xs"
         >
           Press <kbd className="rounded border border-white/10 bg-gray-900 px-1.5 py-0.5 font-mono text-slate-400">1</kbd>{" "}
-          for Inventory ·{" "}
+          for LSP Design ·{" "}
           <kbd className="rounded border border-white/10 bg-gray-900 px-1.5 py-0.5 font-mono text-slate-400">2</kbd> for
-          LSP Design ·{" "}
+          Inventory ·{" "}
           <kbd className="rounded border border-white/10 bg-gray-900 px-1.5 py-0.5 font-mono text-slate-400">3</kbd> for
           Mini IPAM
         </motion.p>

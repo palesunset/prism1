@@ -6,13 +6,11 @@ import { useNotesStore } from "../store/useNotesStore";
 import { useIpCalculatorStore } from "../store/useIpCalculatorStore";
 import { useVlsmPlannerStore } from "../store/useVlsmPlannerStore";
 import { useNetLensStore } from "../store/useNetLensStore";
+import { FLOATING_TOOL_ACTIVE, FLOATING_TAB_ACTIVE, FLOATING_FAB, FLOATING_CHROME, FLOATING_PANEL_SHELL, FLOATING_INACTIVE_BTN, FLOATING_MUTED_TEXT, FLOATING_SUBTLE_BORDER, FLOATING_NOTES_ACTIVE } from "../utils/floatingPanelTheme";
 
 const STORAGE_KEY = "prism-platform-switcher-v1";
 const FAB_SIZE = 48;
 
-/** Indigo/violet halo — visible on maps without clashing with LSP path cyan. */
-const PANEL_GLOW =
-  "shadow-[0_0_0_1px_rgba(129,140,248,0.18),0_0_22px_rgba(99,102,241,0.22),0_10px_32px_rgba(0,0,0,0.42)]";
 const FAB_GLOW =
   "shadow-[0_0_0_1px_rgba(167,139,250,0.35),0_0_18px_rgba(99,102,241,0.45),0_6px_20px_rgba(0,0,0,0.5)]";
 const FAB_GLOW_HOVER =
@@ -23,12 +21,12 @@ function FabIcon(props: { className?: string; strokeWidth?: number }) {
 }
 
 function PanelHeaderIcon() {
-  return <FabIcon className="h-3.5 w-3.5 shrink-0 text-slate-500" strokeWidth={1.75} />;
+  return <FabIcon className={clsx("h-3.5 w-3.5 shrink-0", FLOATING_MUTED_TEXT)} strokeWidth={1.75} />;
 }
 
 const modules = [
-  { to: "/inventory", label: "Equipment Inventory", short: "Inv", Icon: Boxes },
   { to: "/lsp", label: "LSP Design", short: "LSP", Icon: Network },
+  { to: "/inventory", label: "Equipment Inventory", short: "Inv", Icon: Boxes },
   { to: "/ipam", label: "Mini IPAM", short: "IPAM", Icon: Database },
 ] as const;
 
@@ -80,9 +78,7 @@ function clampToViewport(x: number, y: number, w: number, h: number): Point {
 function tabClass({ isActive }: { isActive: boolean }) {
   return clsx(
     "flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
-    isActive
-      ? "bg-indigo-500/25 text-indigo-100 ring-1 ring-indigo-400/45"
-      : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+    isActive ? FLOATING_TAB_ACTIVE : FLOATING_INACTIVE_BTN,
   );
 }
 
@@ -218,13 +214,13 @@ export function PlatformSwitcher() {
   return (
     <div
       ref={rootRef}
-      className="fixed z-[200] select-none touch-none"
+      className={clsx("fixed z-[200] select-none touch-none", FLOATING_CHROME)}
       style={{ left: displayPos.x, top: displayPos.y }}
       aria-label="PRISM module switcher"
     >
       {expanded ? (
-        <div className={clsx("w-[min(15.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-indigo-500/25 bg-gray-950/95 backdrop-blur-md", PANEL_GLOW)}>
-          <div className="flex items-center gap-1 border-b border-white/10 px-2 py-1.5">
+        <div className={clsx("w-[min(15.5rem,calc(100vw-1.5rem))] overflow-hidden", FLOATING_CHROME, FLOATING_PANEL_SHELL)}>
+          <div className={clsx("flex items-center gap-1 border-b px-2 py-1.5", FLOATING_SUBTLE_BORDER)}>
             <div
               className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 active:cursor-grabbing"
               onPointerDown={onDragStart}
@@ -233,16 +229,16 @@ export function PlatformSwitcher() {
               onPointerCancel={(e) => finishDrag(e, false)}
               title="Drag to move"
             >
-              <GripVertical className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />
+              <GripVertical className={clsx("h-4 w-4 shrink-0", FLOATING_MUTED_TEXT)} strokeWidth={2} />
               <PanelHeaderIcon />
-              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <span className={clsx("truncate text-[10px] font-semibold uppercase tracking-wider", FLOATING_MUTED_TEXT)}>
                 Modules
               </span>
             </div>
             <button
               type="button"
               onClick={collapse}
-              className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-white/10 hover:text-slate-100"
+              className={clsx("shrink-0 rounded-md p-1", FLOATING_INACTIVE_BTN)}
               aria-label="Collapse module switcher"
               title="Collapse"
             >
@@ -250,7 +246,7 @@ export function PlatformSwitcher() {
             </button>
           </div>
           {(onInventory || onLsp || onIpam) && (
-            <p className="px-3 pt-2 text-[10px] text-slate-500">
+            <p className={clsx("px-3 pt-2 text-[10px]", FLOATING_MUTED_TEXT)}>
               {onInventory ? "Equipment inventory" : onIpam ? "IP address management" : "LSP & traffic simulation"}
             </p>
           )}
@@ -286,9 +282,7 @@ export function PlatformSwitcher() {
               }}
               className={clsx(
                 "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
-                ipCalcOpen
-                  ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40"
-                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+                ipCalcOpen ? FLOATING_TOOL_ACTIVE : FLOATING_INACTIVE_BTN,
               )}
               title="IP Calculator"
             >
@@ -303,9 +297,7 @@ export function PlatformSwitcher() {
               }}
               className={clsx(
                 "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
-                vlsmOpen
-                  ? "bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40"
-                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+                vlsmOpen ? FLOATING_TOOL_ACTIVE : FLOATING_INACTIVE_BTN,
               )}
               title="VLSM Planner"
             >
@@ -320,9 +312,7 @@ export function PlatformSwitcher() {
               }}
               className={clsx(
                 "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
-                netLensOpen
-                  ? "bg-teal-500/20 text-teal-200 ring-1 ring-teal-500/40"
-                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+                netLensOpen ? FLOATING_TOOL_ACTIVE : FLOATING_INACTIVE_BTN,
               )}
               title="NetLens — IP validation engine"
             >
@@ -337,9 +327,7 @@ export function PlatformSwitcher() {
               }}
               className={clsx(
                 "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
-                notesOpen
-                  ? "bg-amber-500/20 text-amber-200 ring-1 ring-amber-500/40"
-                  : "text-slate-400 hover:bg-white/10 hover:text-slate-100",
+                notesOpen ? FLOATING_NOTES_ACTIVE : FLOATING_INACTIVE_BTN,
               )}
               title="Quick Notes"
             >
@@ -352,10 +340,8 @@ export function PlatformSwitcher() {
         <button
           type="button"
           className={clsx(
-            "flex h-12 w-12 cursor-grab items-center justify-center rounded-2xl",
-            "border border-violet-400/35 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600",
-            "text-white backdrop-blur-sm transition",
-            "hover:border-violet-300/50 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500",
+            "flex h-12 w-12 cursor-grab items-center justify-center rounded-2xl backdrop-blur-sm transition",
+            FLOATING_FAB,
             "active:scale-[0.97] active:cursor-grabbing",
             FAB_GLOW,
             FAB_GLOW_HOVER,

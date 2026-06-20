@@ -1,7 +1,8 @@
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Download, ShieldAlert, XCircle } from 'lucide-react';
-import type { IpamIntegrityAudit, IpamIntegrityStatus } from '../../services/ipamApi';
-import { integrityReportUrl } from '../../services/ipamApi';
+import { downloadIpamFile, type IpamIntegrityAudit, IpamIntegrityStatus } from '../../services/ipamApi';
+import { formatAllocationEfficiency, efficiencyMetricsForFamily } from '../../utils/ipamEfficiency';
+import type { IpAddressFamily } from '../../utils/ipamFamily';
 
 export function IntegrityBadge(props: { status: IpamIntegrityStatus }) {
   if (props.status === 'conflict') {
@@ -28,8 +29,14 @@ export function IntegrityBadge(props: { status: IpamIntegrityStatus }) {
   );
 }
 
-export function IpamAuditPanel(props: { audit: IpamIntegrityAudit | null; loading?: boolean; onRescan: () => void }) {
+export function IpamAuditPanel(props: {
+  audit: IpamIntegrityAudit | null;
+  loading?: boolean;
+  onRescan: () => void;
+  addressFamily?: IpAddressFamily;
+}) {
   const { audit, loading } = props;
+  const family = props.addressFamily ?? 'ipv4';
 
   if (loading && !audit) {
     return <p className="text-sm text-slate-500">Running integrity audit…</p>;
@@ -41,8 +48,10 @@ export function IpamAuditPanel(props: { audit: IpamIntegrityAudit | null; loadin
   const scoreColor =
     audit.summary.healthScore >= 90 ? 'text-emerald-300' : audit.summary.healthScore >= 70 ? 'text-amber-300' : 'text-rose-300';
 
+  const efficiency = formatAllocationEfficiency(efficiencyMetricsForFamily(audit.summary, family), family);
+
   return (
-    <div className="h-full space-y-4 overflow-y-auto pr-1">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm text-slate-400">
           <ShieldAlert className="h-4 w-4 text-indigo-400" />
@@ -56,20 +65,20 @@ export function IpamAuditPanel(props: { audit: IpamIntegrityAudit | null; loadin
           >
             Re-scan database
           </button>
-          <a
-            href={integrityReportUrl()}
-            download
+          <button
+            type="button"
+            onClick={() => void downloadIpamFile('/integrity/report.txt', 'ipam-integrity-report.txt')}
             className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/15"
           >
             <Download className="h-3.5 w-3.5" />
             Download report
-          </a>
+          </button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <div className="rounded-xl border border-white/10 bg-gray-900/50 p-3">
-          <p className="text-[10px] uppercase text-slate-500">Total entries</p>
+          <p className="text-[10px] uppercase text-slate-500">Total Entries</p>
           <p className="text-xl font-semibold text-slate-100">{audit.summary.total}</p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/10 p-3">
@@ -85,12 +94,13 @@ export function IpamAuditPanel(props: { audit: IpamIntegrityAudit | null; loadin
           <p className="text-xl font-semibold text-amber-300">{audit.summary.warnings}</p>
         </div>
         <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/10 p-3">
-          <p className="text-[10px] uppercase text-slate-500">Health score</p>
+          <p className="text-[10px] uppercase text-slate-500">Health Score</p>
           <p className={clsx('text-xl font-semibold', scoreColor)}>{audit.summary.healthScore}%</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-gray-900/50 p-3">
-          <p className="text-[10px] uppercase text-slate-500">Efficiency</p>
-          <p className="text-xl font-semibold text-indigo-300">{audit.summary.efficiencyPercent}%</p>
+          <p className="text-[10px] uppercase text-slate-500">{family === 'ipv6' ? 'IPv6' : 'IPv4'} efficiency</p>
+          <p className="text-xl font-semibold text-indigo-300">{efficiency.value}</p>
+          <p className="mt-0.5 text-[9px] leading-snug text-slate-500">{efficiency.detail}</p>
         </div>
       </div>
 

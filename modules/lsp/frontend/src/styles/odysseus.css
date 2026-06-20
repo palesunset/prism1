@@ -1,0 +1,328 @@
+/**
+ * Portable Odysseus UI styles (from odysseus-main/static/style.css).
+ * Scoped to .lsp-shell so LSP theme never bleeds into platform floating UI.
+ */
+
+/* ── Theme tokens ── */
+.lsp-shell {
+  --bg: #282c34;
+  --fg: #9cdef2;
+  --panel: #111111;
+  --border: #355a66;
+  --red: #e06c75;
+  --accent: var(--red);
+  --green: #50fa7b;
+  --warn: #f0ad4e;
+
+  --hl-bg: #1e2228;
+  --hl-fg: #9cdef2;
+  --hl-keyword: #c678dd;
+  --hl-string: #e5c07b;
+  --hl-comment: #828997;
+  --hl-function: #61afef;
+  --hl-number: #d19a66;
+  --hl-builtin: #56b6c2;
+  --hl-variable: #abb2bf;
+  --hl-params: #a8c0d4;
+
+  --color-error: #ff4444;
+  --color-success: #50fa7b;
+  --color-warning: #f0ad4e;
+  --color-muted: #888888;
+  --color-subheader: #6b8a94;
+  --color-accent: #00aaff;
+  --color-link-hover: #66c7ff;
+  --accent-warm: #d19a66;
+
+  --select-bg: var(--bg);
+  --select-fg: var(--fg);
+  --select-option-bg: color-mix(in srgb, var(--panel) 74%, var(--bg));
+  --select-option-fg: var(--fg);
+  --select-option-active-bg: color-mix(in srgb, var(--accent) 24%, var(--panel));
+
+  --font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --ody-radius-sm: 4px;
+  --ody-radius-md: 6px;
+  --ody-radius-lg: 10px;
+  --ody-shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --ody-shadow-panel: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Base (scoped — must not affect platform floating PRISM menu) ── */
+.lsp-shell {
+  font-family: var(--font-family);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+.lsp-shell pre,
+.lsp-shell code,
+.lsp-shell .font-mono {
+  font-family: var(--font-family);
+}
+
+.lsp-shell pre,
+.lsp-shell code {
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+/* ── Scrollbars (LSP module only) ── */
+@supports selector(::-webkit-scrollbar) {
+  .lsp-shell ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .lsp-shell ::-webkit-scrollbar-track {
+    background: var(--panel);
+  }
+
+  .lsp-shell ::-webkit-scrollbar-thumb {
+    background-color: var(--red);
+    border-radius: 4px;
+    border: 2px solid var(--panel);
+  }
+
+  .lsp-shell ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--red) 80%, white);
+  }
+}
+
+.lsp-shell {
+  scrollbar-color: var(--red) var(--panel);
+  scrollbar-width: thin;
+}
+
+/* ── Form controls (colors only — layout classes unchanged) ── */
+.lsp-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.lsp-shell select,
+.lsp-shell textarea {
+  background-color: var(--bg) !important;
+  color: var(--fg) !important;
+  border-color: var(--border) !important;
+  border-radius: var(--ody-radius-sm) !important;
+  transition:
+    background 0.08s,
+    border-color 0.08s,
+    color 0.08s,
+    opacity 0.08s;
+}
+
+.lsp-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover,
+.lsp-shell select:hover,
+.lsp-shell textarea:hover {
+  border-color: var(--fg) !important;
+  background-color: var(--panel) !important;
+}
+
+.lsp-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.lsp-shell select:focus,
+.lsp-shell textarea:focus {
+  border-color: var(--hl-function) !important;
+  outline: 1px solid var(--hl-function) !important;
+  outline-offset: 0;
+}
+
+.lsp-shell input::placeholder,
+.lsp-shell textarea::placeholder {
+  color: color-mix(in srgb, var(--fg) 35%, transparent);
+}
+
+.lsp-shell select {
+  color-scheme: dark;
+}
+
+.lsp-shell select option,
+.lsp-shell select optgroup {
+  background-color: var(--select-option-bg);
+  color: var(--select-option-fg);
+}
+
+.lsp-shell select option:checked {
+  background-color: var(--select-option-active-bg);
+}
+
+/* ── Buttons (secondary / ghost — primary keeps Tailwind accent mapping) ── */
+.lsp-shell button {
+  font-family: inherit;
+  transition:
+    background 0.08s,
+    border-color 0.08s,
+    color 0.08s,
+    opacity 0.08s,
+    box-shadow 0.12s;
+}
+
+.lsp-shell button[class*="border-white"],
+.lsp-shell button[class*="bg-white/"] {
+  background-color: color-mix(in srgb, var(--fg) 6%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--fg) !important;
+}
+
+.lsp-shell button[class*="border-white"]:hover,
+.lsp-shell button[class*="bg-white/"]:hover {
+  border-color: var(--fg) !important;
+  background-color: color-mix(in srgb, var(--accent) 12%, var(--panel)) !important;
+  color: var(--color-link-hover) !important;
+}
+
+.lsp-shell button[class*="bg-cyan-6"],
+.lsp-shell button[class*="from-cyan-"] {
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.lsp-shell button[class*="bg-cyan-6"]:hover,
+.lsp-shell button[class*="from-cyan-"]:hover {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ── Range & checkbox ── */
+.lsp-shell input[type="range"] {
+  accent-color: var(--accent);
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
+  border-radius: 2px;
+  border: none;
+}
+
+.lsp-shell input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+.lsp-shell input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+.lsp-shell input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ── Top bar ── */
+.lsp-shell header {
+  background: color-mix(in srgb, var(--panel) 82%, transparent) !important;
+  border-bottom: 1px solid var(--border) !important;
+  backdrop-filter: blur(10px);
+  /* Single separator line — avoid panel shadow bleeding into the graph body */
+  box-shadow: none;
+}
+
+.lsp-shell header h1,
+.lsp-shell header span[class*="font-bold"] {
+  color: var(--fg);
+}
+
+/* ── Floating / glass panels (not the top header) ── */
+.lsp-shell [class*="backdrop-blur"]:not(header) {
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--ody-shadow-panel);
+}
+
+.lsp-shell [class*="backdrop-blur"] [class*="border-b"] {
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent) !important;
+}
+
+/* Tab underline active state */
+.lsp-shell [class*="border-cyan-4"],
+.lsp-shell [class*="border-cyan-5"],
+.lsp-shell [class*="text-cyan-4"] {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.lsp-shell [class*="bg-cyan-6"]:not(button) {
+  background-color: color-mix(in srgb, var(--accent) 22%, var(--panel)) !important;
+}
+
+/* ── Config modal ── */
+.lsp-shell .rounded-2xl.border.shadow-2xl {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  border-radius: var(--ody-radius-lg) !important;
+  box-shadow: var(--ody-shadow-modal);
+  animation: ody-modal-enter 0.25s ease-out both;
+}
+
+.lsp-shell .rounded-2xl.border.shadow-2xl h2 {
+  color: var(--fg);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.lsp-shell [role="tablist"] [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.lsp-shell [class*="bg-cyan-950"],
+.lsp-shell [class*="border-cyan-9"] {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel)) !important;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border)) !important;
+}
+
+.lsp-shell pre[class*="text-green"] {
+  color: var(--hl-string) !important;
+}
+
+/* Code / config blocks — not full-bleed graph overlays (those use inset-0) */
+.lsp-shell .rounded-lg[class*="bg-prism-hlBg"],
+.lsp-shell pre[class*="bg-prism-hlBg"] {
+  background-color: var(--hl-bg) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--ody-radius-md);
+}
+
+.lsp-shell [class*="inset-0"][class*="bg-prism-hlBg"] {
+  background-color: var(--hl-bg) !important;
+  border: none;
+}
+
+/* ── Details / collapsible sections ── */
+.lsp-shell details {
+  border-color: var(--border) !important;
+  background: color-mix(in srgb, var(--panel) 90%, var(--bg)) !important;
+}
+
+.lsp-shell details summary {
+  color: var(--fg);
+}
+
+.lsp-shell details summary:hover {
+  color: var(--color-link-hover);
+}
+
+/* ── Map toolbar / legend chips ── */
+.lsp-shell .rounded-full[class*="bg-cyan"],
+.lsp-shell .fixed.bottom-6.left-1\/2 {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+@keyframes ody-modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

@@ -8,9 +8,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURES = path.join(__dirname, "..", "backend", "tests", "fixtures");
+const FIXTURES = path.join(__dirname, "..", "modules", "lsp", "backend", "tests", "fixtures");
 const LSP = "http://127.0.0.1:5000";
 const INV = "http://127.0.0.1:3001";
+const IPAM = "http://127.0.0.1:3003";
 
 async function get(url) {
   const res = await fetch(url);
@@ -59,6 +60,10 @@ async function main() {
   assert(invHealth.status === 200 && invHealth.body.ok === true, "Inventory health failed");
   console.log("✓ Inventory API health");
 
+  const ipamHealth = await get(`${IPAM}/api/ipam/health`);
+  assert(ipamHealth.status === 200 && ipamHealth.body.service === "prism-ipam", "IPAM health failed");
+  console.log("✓ IPAM API health");
+
   const nesBuf = fs.readFileSync(path.join(FIXTURES, "minimal_nes.csv"));
   const linksBuf = fs.readFileSync(path.join(FIXTURES, "minimal_links.csv"));
   const importRes = await postMultipart(`${LSP}/api/lsp/import`, {
@@ -97,6 +102,6 @@ async function main() {
 
 main().catch((err) => {
   console.error("\nSmoke test failed:", err.message);
-  console.error("Ensure both APIs are running: npm run dev:lsp-api & npm run dev:inv-api");
+  console.error("Ensure APIs are running: npm run dev (LSP, inventory, IPAM)");
   process.exit(1);
 });
