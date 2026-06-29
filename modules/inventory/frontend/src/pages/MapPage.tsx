@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { useSitesList, useSiteMutations, useMapBootstrap } from '@/hooks/useSites';
+import { useSiteMutations, useMapBootstrap } from '@/hooks/useSites';
 import { useToast } from '@/hooks/useToast';
 import { SiteMap } from '@/components/Map/SiteMap';
 import { Modal } from '@/components/common/Modal';

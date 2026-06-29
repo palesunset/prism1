@@ -71,7 +71,7 @@ export function KPICard({
                 {...tooltip}
                 contentStyle={{ ...tooltip.contentStyle, fontSize: 12 }}
                 labelFormatter={(m) => String(m)}
-                formatter={(v: number) => [v, 'Equipment']}
+                formatter={(v) => [Number(v ?? 0), 'Equipment']}
               />
               <Line
                 type="monotone"

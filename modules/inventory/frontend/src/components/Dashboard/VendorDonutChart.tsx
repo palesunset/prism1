@@ -64,10 +64,10 @@ export function VendorDonutChart({
           <Tooltip
             {...chartTooltipStyle(isDark)}
             cursor={chartTooltipCursor(isDark)}
-            formatter={(value: number, _n, ctx) => {
+            formatter={(value, _n, ctx) => {
               const row = ctx.payload as { pctVendor?: number };
               const pct = row?.pctVendor ?? 0;
-              return [`${value} (${Number(pct).toFixed(1)}%)`, 'Equipment'];
+              return [`${Number(value ?? 0)} (${Number(pct).toFixed(1)}%)`, 'Equipment'];
             }}
           />
           <Legend
