@@ -12,7 +12,6 @@ import {
 import {
   buildAnalytics,
   buildUtilizationReport,
-  getCapabilities,
   getSubnetDetail,
   scanAllConflicts,
   suggestNextIpInSubnet,
@@ -59,10 +58,6 @@ import { crossCheckInventory } from '../services/ipamInventoryCrossCheck.js';
 const router = Router();
 const adminRouteGuard = createAdminRouteGuard(getSecurityConfig());
 const uploadLimiter = createRateLimiters(getSecurityConfig()).upload;
-
-router.get('/capabilities', async (_req, res) => {
-  res.json(getCapabilities());
-});
 
 router.get('/picklists', async (_req, res) => {
   res.json(await listPicklists());

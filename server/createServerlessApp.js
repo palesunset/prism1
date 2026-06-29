@@ -20,8 +20,3 @@ export function createServerlessApp(scope = "all") {
 
   return app;
 }
-
-/** @deprecated Local unified dev — prefer split serverless entrypoints on Vercel. */
-export function createPlatformApi() {
-  return createServerlessApp("all");
-}

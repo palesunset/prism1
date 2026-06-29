@@ -1,24 +1,7 @@
-import serverless from "serverless-http";
+import { bootServerless } from "../server/bootServerless.js";
 import { createServerlessApp } from "../server/createServerlessApp.js";
 
-function bootApp(createApp) {
-  try {
-    const app = createApp();
-    return serverless(app, {
-      binary: ["multipart/form-data", "application/octet-stream"],
-    });
-  } catch (err) {
-    console.error("[api] Failed to start:", err);
-    const detail = err instanceof Error ? err.message : String(err);
-    return async (_req, res) => {
-      res.statusCode = 503;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "API failed to start", detail }));
-    };
-  }
-}
-
-export default bootApp(() => createServerlessApp("all"));
+export default bootServerless(() => createServerlessApp("all"), "api");
 
 export const config = {
   maxDuration: 60,
