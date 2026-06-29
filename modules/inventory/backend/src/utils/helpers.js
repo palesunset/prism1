@@ -21,12 +21,14 @@ export function normalizeStatus(s) {
   return 'Active';
 }
 
-/** SQLite SQLITE_CONSTRAINT_UNIQUE (Node's node:sqlite uses numeric errcode). */
+/** SQLite / Postgres unique constraint violations. */
 export function isUniqueConstraintError(e) {
   return (
     e?.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+    e?.code === '23505' ||
     e?.errcode === 2067 ||
-    /UNIQUE constraint failed/i.test(String(e?.message || ''))
+    /UNIQUE constraint failed/i.test(String(e?.message || '')) ||
+    /duplicate key value violates unique constraint/i.test(String(e?.message || ''))
   );
 }
 

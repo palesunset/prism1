@@ -3,6 +3,12 @@
 export function translateSql(sql) {
   let out = sql;
 
+  out = out.replace(/BEGIN\s+IMMEDIATE\b/gi, "BEGIN");
+  out = out.replace(/BEGIN\s+DEFERRED\b/gi, "BEGIN");
+  out = out.replace(/BEGIN\s+EXCLUSIVE\b/gi, "BEGIN");
+
+  out = out.replace(/\bIFNULL\s*\(/gi, "COALESCE(");
+
   out = out.replace(/datetime\s*\(\s*'now'\s*,\s*'(-?\d+)\s+(\w+)'\s*\)/gi, (_m, n, unit) => {
     const u = unit.toLowerCase().replace(/s$/, "");
     const abs = String(n).replace(/^-/, "");

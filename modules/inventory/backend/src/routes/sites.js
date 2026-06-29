@@ -256,16 +256,19 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   });
 });
 
-router.post('/import/combined', uploadLimiter, upload.single('file'), async (req, res) => {
-  const fileBuffer = await readUploadedFileBuffer(req.file);
-  if (!fileBuffer) {
-    return res.status(400).json({ error: 'CSV file is required (field name: file)' });
+router.post('/import/combined', uploadLimiter, upload.single('file'), async (req, res, next) => {
+  try {
+    const fileBuffer = await readUploadedFileBuffer(req.file);
+    if (!fileBuffer) {
+      return res.status(400).json({ error: 'CSV file is required (field name: file)' });
+    }
+
+    const rows = await parseUploadCsvBuffer(fileBuffer);
+    const result = processCombinedImport(rows);
+    res.json(result);
+  } catch (e) {
+    next(e);
   }
-
-  const rows = await parseUploadCsvBuffer(fileBuffer);
-
-  const result = processCombinedImport(rows);
-  res.json(result);
 });
 
 router.get('/summary', (req, res) => {
