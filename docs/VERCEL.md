@@ -6,7 +6,13 @@ PRISM runs entirely on **Vercel** (UI + APIs) with **Supabase Postgres**. No loc
 
 1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/acrxdkqqvcfnedljixyg).
 2. **SQL Editor** → run `supabase/migrations/001_prism_schema.sql`.
-3. **Authentication → Users** → create your admin user (email + password).
+3. **Authentication → Users** → create the admin user (see below), or run once locally:
+   ```bash
+   # In repo root .env: SUPABASE_SERVICE_ROLE_KEY=...
+   ADMIN_PASSWORD='your-password' npm run create-admin
+   ```
+   Default login: username **`admin`** → Supabase email **`admin@prism.admin`**.  
+   In **Authentication → Providers → Email**, disable **Sign ups** so only this account can exist.
 4. Copy from **Project Settings → API**:
    - Project URL
    - **anon public** key
@@ -22,7 +28,9 @@ In [Vercel](https://vercel.com) → your project → **Settings → Environment 
 | `DATABASE_URL` | Postgres URI from Supabase |
 | `VITE_SUPABASE_URL` | `https://acrxdkqqvcfnedljixyg.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role (optional, future server use) |
+| `VITE_ADMIN_USERNAME` | `admin` (login username) |
+| `VITE_ADMIN_EMAIL` | `admin@prism.admin` (Supabase Auth email) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role (server + one-time `npm run create-admin`) |
 
 Vercel sets `VERCEL=1` automatically — APIs use Supabase instead of SQLite.
 
@@ -49,7 +57,7 @@ Browser → Vercel CDN (React SPA)
 
 ## First login
 
-When `VITE_SUPABASE_*` is set, the platform shows an **admin login** screen. Sign in with the Supabase user you created.
+When `VITE_SUPABASE_*` is set, the platform shows an **admin login** screen. Sign in with username **`admin`** and your admin password. Only the user matching `VITE_ADMIN_EMAIL` is allowed.
 
 ## Optional local preview
 

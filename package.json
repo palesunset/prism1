@@ -28,7 +28,8 @@
     "test:platform": "cd platform/frontend && npm run build && npm test",
     "smoke": "node scripts/smoke-test.mjs",
     "preflight": "npm run build:platform && cd modules/lsp/backend && python -m pytest -q && cd ../frontend && npm run lint && npm test",
-    "lint": "cd modules/lsp/frontend && npm run lint"
+    "lint": "cd modules/lsp/frontend && npm run lint",
+    "create-admin": "node scripts/create-prism-admin.mjs"
   },
   "dependencies": {
     "serverless-http": "^3.2.0"

@@ -3,7 +3,7 @@ import { useAdminAuth } from "../context/AdminAuthContext";
 
 export function AdminGate({ children }: { children: ReactNode }) {
   const { ready, authRequired, session, signIn } = useAdminAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,7 +24,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const msg = await signIn(email, password);
+    const msg = await signIn(username, password);
     if (msg) setError(msg);
     setBusy(false);
   }
@@ -37,16 +37,16 @@ export function AdminGate({ children }: { children: ReactNode }) {
       >
         <div>
           <h1 className="text-xl font-semibold text-white">PRISM Admin</h1>
-          <p className="mt-1 text-sm text-slate-400">Sign in with your Supabase admin account.</p>
+          <p className="mt-1 text-sm text-slate-400">Single admin sign-in.</p>
         </div>
         <label className="block text-sm text-slate-300">
-          Email
+          Username
           <input
-            type="email"
+            type="text"
             autoComplete="username"
             className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-white"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
           />
         </label>
