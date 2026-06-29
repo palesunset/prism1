@@ -44,6 +44,18 @@ const modules = [
   },
 ] as const;
 
+function prefetchModule(to: ModuleChoice): void {
+  if (to === "/inventory") {
+    void import("../modules/InventoryModule");
+    void fetch("/api/inventory/bootstrap").catch(() => undefined);
+  } else if (to === "/ipam") {
+    void import("../modules/IpamModule");
+    void fetch("/api/ipam/bootstrap").catch(() => undefined);
+  } else if (to === "/lsp") {
+    void import("../modules/LspModule");
+  }
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
@@ -58,7 +70,7 @@ export function HomePage() {
         /* ignore */
       }
       setLeaving(to);
-      window.setTimeout(() => navigate(to), reduceMotion ? 0 : 320);
+      window.setTimeout(() => navigate(to), reduceMotion ? 0 : 80);
     },
     [leaving, navigate, reduceMotion],
   );
@@ -145,6 +157,8 @@ export function HomePage() {
                 }}
                 transition={{ delay: 0.2 + index * 0.08, duration: 0.35 }}
                 onClick={() => go(mod.to)}
+                onMouseEnter={() => prefetchModule(mod.to)}
+                onFocus={() => prefetchModule(mod.to)}
                 className={`group relative flex flex-col rounded-xl border border-white/10 bg-gray-900/70 p-4 text-left shadow-xl backdrop-blur-sm transition-[border-color,box-shadow] duration-300 hover:border-white/20 hover:shadow-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 disabled:cursor-default sm:p-5 ${mod.ring} ring-1 ring-transparent`}
               >
                 <div

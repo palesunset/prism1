@@ -63,11 +63,6 @@ router.get('/picklists', async (_req, res) => {
   res.json(await listPicklists());
 });
 
-router.get('/bootstrap', async (_req, res) => {
-  const [subnets, picklists] = await Promise.all([buildDashboard(), listPicklists()]);
-  res.json({ subnets, picklists });
-});
-
 router.get('/settings', async (_req, res) => {
   res.json({ settings: await listSettings(), utilizationAlertPercent: await getUtilizationAlertPercent() });
 });

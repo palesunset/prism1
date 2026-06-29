@@ -1,18 +1,24 @@
 import express from "express";
-import { createNotesApp } from "../modules/notes/backend/src/app.js";
-import { createIpamApp } from "../modules/ipam/backend/src/app.js";
-import { createInventoryApp } from "../modules/inventory/backend/src/app.js";
 
 /** @typedef {"all" | "inventory" | "ipam" | "notes"} ServerlessScope */
 
-/** Isolated serverless apps — avoids one slow module blocking all APIs (504 cascades). */
-export function createServerlessApp(scope = "all") {
+/** Isolated serverless apps — only import the backend module that is needed. */
+export async function createServerlessApp(scope = "all") {
   const app = express();
   app.set("trust proxy", 1);
 
-  if (scope === "all" || scope === "notes") app.use(createNotesApp());
-  if (scope === "all" || scope === "ipam") app.use(createIpamApp());
-  if (scope === "all" || scope === "inventory") app.use(createInventoryApp());
+  if (scope === "all" || scope === "notes") {
+    const { createNotesApp } = await import("../modules/notes/backend/src/app.js");
+    app.use(createNotesApp());
+  }
+  if (scope === "all" || scope === "ipam") {
+    const { createIpamApp } = await import("../modules/ipam/backend/src/app.js");
+    app.use(createIpamApp());
+  }
+  if (scope === "all" || scope === "inventory") {
+    const { createInventoryApp } = await import("../modules/inventory/backend/src/app.js");
+    app.use(createInventoryApp());
+  }
 
   app.use("/api", (_req, res) => {
     res.status(404).json({ detail: "Not found" });

@@ -82,6 +82,16 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 800,
+    modulePreload: {
+      resolveDependencies(_filename, deps) {
+        return deps.filter(
+          (dep) =>
+            !/(InventoryModule|LspModule|IpamModule|MapPage|leaflet|cytoscape|recharts|pdf-|motion-)/.test(
+              dep,
+            ),
+        );
+      },
+    },
     rolldownOptions: {
       output: {
         strictExecutionOrder: true,

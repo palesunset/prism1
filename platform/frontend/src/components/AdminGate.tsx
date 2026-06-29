@@ -2,21 +2,17 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 
 export function AdminGate({ children }: { children: ReactNode }) {
-  const { ready, authRequired, session, signIn } = useAdminAuth();
+  const { sessionChecked, authRequired, session, signIn } = useAdminAuth();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950 text-slate-400">
-        Loading…
-      </div>
-    );
+  if (!authRequired || session) {
+    return <>{children}</>;
   }
 
-  if (!authRequired || session) {
+  if (!sessionChecked) {
     return <>{children}</>;
   }
 

@@ -16,7 +16,7 @@ import {
 } from "../lib/adminAuthConfig";
 
 type AdminAuthState = {
-  ready: boolean;
+  sessionChecked: boolean;
   authRequired: boolean;
   session: { username: string } | null;
   signIn: (username: string, password: string) => Promise<string | null>;
@@ -26,9 +26,9 @@ type AdminAuthState = {
 const AdminAuthContext = createContext<AdminAuthState | null>(null);
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(!isSupabaseConfigured);
-  const [session, setSession] = useState<{ username: string } | null>(null);
   const authRequired = isSupabaseConfigured;
+  const [sessionChecked, setSessionChecked] = useState(!isSupabaseConfigured);
+  const [session, setSession] = useState<{ username: string } | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -44,7 +44,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         if (user) void client.auth.signOut();
         setSession(null);
       }
-      setReady(true);
+      setSessionChecked(true);
     });
 
     const { data: sub } = client.auth.onAuthStateChange((_event, nextSession) => {
@@ -89,8 +89,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, authRequired, session, signIn, signOut }),
-    [ready, authRequired, session, signIn, signOut],
+    () => ({ sessionChecked, authRequired, session, signIn, signOut }),
+    [sessionChecked, authRequired, session, signIn, signOut],
   );
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;

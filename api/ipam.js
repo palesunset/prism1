@@ -1,7 +1,7 @@
-import { bootServerless } from "../server/bootServerless.js";
+import { bootServerlessAsync } from "../server/bootServerless.js";
 import { createServerlessApp } from "../server/createServerlessApp.js";
 
-export default bootServerless(() => createServerlessApp("ipam"), "api/ipam");
+export default bootServerlessAsync(() => createServerlessApp("ipam"), "api/ipam");
 
 export const config = {
   maxDuration: 60,

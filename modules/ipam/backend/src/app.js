@@ -53,6 +53,12 @@ export function createIpamApp() {
     res.json(getCapabilities());
   });
 
+  app.get("/api/ipam/bootstrap", async (_req, res) => {
+    const { buildDashboard, listPicklists } = await import("./services/ipamService.js");
+    const [subnets, picklists] = await Promise.all([buildDashboard(), listPicklists()]);
+    res.json({ subnets, picklists });
+  });
+
   app.use("/api/ipam/import", rateLimiters.upload);
   app.use("/api/ipam/restore", rateLimiters.upload);
 

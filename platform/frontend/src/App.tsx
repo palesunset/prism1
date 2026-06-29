@@ -1,9 +1,5 @@
 import { Suspense, lazy } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
-import { NotesPanel } from "./components/NotesPanel";
-import { IpCalculatorPanel } from "./components/IpCalculatorPanel";
-import { VlsmPlannerPanel } from "./components/VlsmPlannerPanel";
-import { NetLensPanel } from "./components/NetLensPanel";
 import { PlatformSwitcher } from "./components/PlatformSwitcher";
 import { HomePage } from "./pages/HomePage";
 
@@ -12,6 +8,19 @@ const InventoryModule = lazy(() =>
 );
 const LspModule = lazy(() => import("./modules/LspModule").then((m) => ({ default: m.LspModule })));
 const IpamModule = lazy(() => import("./modules/IpamModule").then((m) => ({ default: m.IpamModule })));
+
+const NotesPanel = lazy(() =>
+  import("./components/NotesPanel").then((m) => ({ default: m.NotesPanel })),
+);
+const IpCalculatorPanel = lazy(() =>
+  import("./components/IpCalculatorPanel").then((m) => ({ default: m.IpCalculatorPanel })),
+);
+const VlsmPlannerPanel = lazy(() =>
+  import("./components/VlsmPlannerPanel").then((m) => ({ default: m.VlsmPlannerPanel })),
+);
+const NetLensPanel = lazy(() =>
+  import("./components/NetLensPanel").then((m) => ({ default: m.NetLensPanel })),
+);
 
 function ModuleFallback() {
   return (
@@ -57,10 +66,12 @@ export default function App() {
           />
         </Routes>
       </div>
-      <NotesPanel />
-      <IpCalculatorPanel />
-      <VlsmPlannerPanel />
-      <NetLensPanel />
+      <Suspense fallback={null}>
+        <NotesPanel />
+        <IpCalculatorPanel />
+        <VlsmPlannerPanel />
+        <NetLensPanel />
+      </Suspense>
     </div>
   );
 }
