@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { createPgDb } from "./pgSync.js";
+import { createPgDb, formatPgError } from "./pgSync.js";
 
 function requireDatabaseUrl() {
   const url = process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim();
@@ -39,3 +39,5 @@ export function isPostgresMode() {
   const url = process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim();
   return isCloudHost() || Boolean(url);
 }
+
+export { formatPgError };

@@ -12,7 +12,9 @@ export function getSecurityConfig() {
     ? corsOriginsRaw.split(',').map((o) => o.trim()).filter(Boolean)
     : [];
   const host = (process.env.HOST || '127.0.0.1').trim() || '127.0.0.1';
-  const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
+  const onVercel = process.env.VERCEL === '1' || Boolean(process.env.VERCEL);
+  const trustProxy =
+    onVercel || process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
 
   return {
     apiKey,

@@ -1,5 +1,6 @@
 import express from "express";
 import db from "./db/index.js";
+import { formatPgError } from "prism-db";
 import { normalizeExistingIpAddresses } from "./utils/ipAddress.js";
 import sitesRouter from "./routes/sites.js";
 import equipmentRouter from "./routes/equipment.js";
@@ -157,7 +158,8 @@ export function createInventoryApp() {
       return res.status(403).json({ error: "Origin not allowed" });
     }
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    const message = formatPgError(err);
+    res.status(500).json({ error: message || "Internal server error" });
   });
 
   return app;

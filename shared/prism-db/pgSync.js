@@ -3,22 +3,20 @@ import pg from "pg";
 import { toPgParams, translateSql } from "./translate.js";
 
 const require = createRequire(import.meta.url);
-let deasyncModule;
+
 function getDeasync() {
-  if (deasyncModule !== undefined) return deasyncModule;
   try {
-    deasyncModule = require("deasync");
+    return require("deasync");
   } catch {
-    deasyncModule = null;
+    return null;
   }
-  return deasyncModule;
 }
 
 function syncQuery(pool, text, params = []) {
   const deasync = getDeasync();
   if (!deasync) {
     throw new Error(
-      "Postgres sync driver requires deasync (installed on Vercel Linux). Deploy to Vercel or use SQLite locally.",
+      "Postgres sync driver requires deasync (installed on Vercel Linux). Deploy to Vercel or use SQLite locally without DATABASE_URL.",
     );
   }
   let done = false;
@@ -66,11 +64,32 @@ function translateSqlBatch(sql) {
     .join(";\n");
 }
 
+function normalizeConnectionString(connectionString) {
+  let url = connectionString.trim();
+  if (url.includes("@db.") && url.includes("supabase.co") && !url.includes("pooler")) {
+    console.warn(
+      "[prism-db] DATABASE_URL uses direct db.*.supabase.co — Vercel needs the Session pooler URI (Connect → Session).",
+    );
+  }
+  if (url.includes("pooler.supabase.com") && !/[?&]pgbouncer=/i.test(url)) {
+    const sep = url.includes("?") ? "&" : "?";
+    url = `${url}${sep}pgbouncer=true`;
+  }
+  return url;
+}
+
 export function createPgDb(connectionString) {
+  const normalized = normalizeConnectionString(connectionString);
   const pool = new pg.Pool({
-    connectionString,
-    ssl: connectionString.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
-    max: 4,
+    connectionString: normalized,
+    ssl: normalized.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
+    max: 2,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 15_000,
+  });
+
+  pool.on("error", (err) => {
+    console.error("[prism-db] Postgres pool error:", err.message);
   });
 
   return {
@@ -86,5 +105,25 @@ export function createPgDb(connectionString) {
     close() {
       pool.end();
     },
+    ping() {
+      syncQuery(pool, "SELECT 1 AS ok");
+    },
   };
+}
+
+export function formatPgError(err) {
+  const msg = String(err?.message || err);
+  if (/relation .* does not exist/i.test(msg)) {
+    return "Database tables missing. Run supabase/migrations/001_prism_schema.sql in Supabase SQL Editor.";
+  }
+  if (/password authentication failed/i.test(msg)) {
+    return "DATABASE_URL password is wrong. Reset in Supabase → Connect → Session pooler.";
+  }
+  if (/ENOTFOUND|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
+    return "Cannot reach Postgres. Use Supabase Session pooler URI (not direct db.* host on Vercel).";
+  }
+  if (/deasync|Postgres sync driver/i.test(msg)) {
+    return "Postgres driver failed to initialize on serverless.";
+  }
+  return msg;
 }

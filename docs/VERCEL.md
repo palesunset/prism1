@@ -5,7 +5,7 @@ PRISM runs entirely on **Vercel** (UI + APIs) with **Supabase Postgres**. No loc
 ## 1 — Supabase setup
 
 1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/acrxdkqqvcfnedljixyg).
-2. **SQL Editor** → run `supabase/migrations/001_prism_schema.sql`.
+2. **SQL Editor** → run `supabase/migrations/001_prism_schema.sql` (creates `sites`, `equipment`, IPAM, etc.).
 3. **Authentication → Users** → create the admin user (see below), or run once locally:
    ```bash
    # In repo root .env: SUPABASE_SERVICE_ROLE_KEY=...
@@ -17,7 +17,10 @@ PRISM runs entirely on **Vercel** (UI + APIs) with **Supabase Postgres**. No loc
    - Project URL
    - **anon public** key
    - **service_role** key (server only — never expose in browser)
-5. Copy **Database → Connection string → URI** (use **Session pooler**, port 6543).
+5. Copy **Database connection string** from the top **Connect** button:
+   - Choose **Session pooler** (IPv4-compatible; required for Vercel)
+   - URI looks like: `postgresql://postgres.[ref]:[password]@aws-0-….pooler.supabase.com:5432/postgres`
+   - **Do not** use the direct `db.….supabase.co` host on Vercel (often fails).
 
 ## 2 — Vercel environment variables
 
@@ -25,7 +28,7 @@ In [Vercel](https://vercel.com) → your project → **Settings → Environment 
 
 | Variable | Value |
 |----------|--------|
-| `DATABASE_URL` | Postgres URI from Supabase |
+| `DATABASE_URL` | **Session pooler** Postgres URI from Supabase **Connect** |
 | `VITE_SUPABASE_URL` | `https://acrxdkqqvcfnedljixyg.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
 | `VITE_ADMIN_USERNAME` | `admin` (login username) |
