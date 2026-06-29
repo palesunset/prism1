@@ -13,7 +13,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
+  const ready = true;
   const [authRequired, setAuthRequired] = useState(false);
   const [apiKey, setApiKeyState] = useState<string | null>(() => {
     try {
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 25_000);
+      const timeout = window.setTimeout(() => controller.abort(), 15_000);
       try {
         const res = await fetch(inventoryApiUrl('/health'), { signal: controller.signal });
         if (!res.ok) throw new Error('health check failed');
@@ -39,7 +39,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) setAuthRequired(false);
       } finally {
         window.clearTimeout(timeout);
-        if (!cancelled) setReady(true);
       }
     })();
     return () => {

@@ -5,8 +5,8 @@ import { processCombinedImport } from '../utils/combinedImport.js';
 import { parseUploadCsvBuffer } from '../utils/csvUpload.js';
 import { getRateLimiters, escapeCsvCell } from '../middleware/security.js';
 import { csvUpload, readUploadedFileBuffer } from '../utils/csvMulter.js';
-
 import { promisifyRouter } from 'prism-db/expressAsync.js';
+import { listSites, listSiteRegions, listSiteTerritories, siteTerritoryValue } from '../services/sitesList.js';
 
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
@@ -35,63 +35,6 @@ function statsFromAggregateRow(row = {}) {
 
 const EMPTY_SITE_STATS = statsFromAggregateRow({});
 
-/** One grouped query for all sites (avoids N+1 timeouts on serverless Postgres). */
-async function aggregateSiteStatsBySiteId(vendor) {
-  const v = (vendor || '').toString().trim();
-  const hasVendor = v.length > 0;
-  const rows = await db
-    .prepare(
-      `
-    SELECT e.site_id,
-      COUNT(DISTINCT e.id) AS equipment_count,
-      COUNT(DISTINCT s.id) AS line_slot_count,
-      COUNT(DISTINCT b.id) AS slot_count,
-      COUNT(DISTINCT p.id) AS total_ports,
-      COUNT(DISTINCT CASE WHEN p.is_utilized = 1 THEN p.id END) AS utilized_ports,
-      COUNT(DISTINCT CASE WHEN b.is_utilized = 1 THEN b.id END) AS utilized_slot_count
-    FROM equipment e
-    LEFT JOIN slots s ON s.equipment_id = e.id
-    LEFT JOIN ports p ON p.slot_id = s.id
-    LEFT JOIN equipment_bays b ON b.equipment_id = e.id
-    WHERE 1=1
-      ${hasVendor ? 'AND LOWER(TRIM(e.vendor)) = LOWER(TRIM(?))' : ''}
-    GROUP BY e.site_id
-  `,
-    )
-    .all(...(hasVendor ? [v] : []));
-
-  const map = new Map();
-  for (const row of rows) {
-    map.set(row.site_id, statsFromAggregateRow(row));
-  }
-  return map;
-}
-
-async function aggregateSiteRouterTypesBySiteId() {
-  const rows = await db
-    .prepare(
-      `
-    SELECT site_id, GROUP_CONCAT(DISTINCT TRIM(router_type)) AS router_types_raw
-    FROM equipment
-    WHERE router_type IS NOT NULL AND TRIM(router_type) != ''
-    GROUP BY site_id
-  `,
-    )
-    .all();
-
-  const map = new Map();
-  for (const row of rows) {
-    const types = (row.router_types_raw || '')
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .sort()
-      .join(',');
-    map.set(row.site_id, types || null);
-  }
-  return map;
-}
-
 async function equipmentStatsForSite(siteId, vendor) {
   const v = (vendor || '').toString().trim();
   const hasVendor = v.length > 0;
@@ -117,90 +60,24 @@ async function equipmentStatsForSite(siteId, vendor) {
   return statsFromAggregateRow(row);
 }
 
-function siteTerritoryValue(s) {
-  const t = (s.territory || '').toString().trim();
-  if (t) return t;
-  return (s.area || '').toString();
-}
-
 router.get('/', async (req, res) => {
-  const q = (req.query.q || req.query.search || '').toString().trim().toLowerCase();
-  const vendor = (req.query.vendor || '').toString().trim();
-  const territory = (req.query.territory || '').toString().trim();
-  const region = (req.query.region || '').toString().trim();
-
-  const conditions = [];
-  const sqlParams = [];
-  if (territory) {
-    conditions.push(`(COALESCE(NULLIF(TRIM(s.territory), ''), s.area) = ?)`);
-    sqlParams.push(territory);
-  }
-  if (region) {
-    conditions.push(`s.region = ?`);
-    sqlParams.push(region);
-  }
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  let sites = await db
-    .prepare(
-      `SELECT s.*,
-        (SELECT COUNT(*) FROM equipment e WHERE e.site_id = s.id) AS equipment_count
-       FROM sites s
-       ${whereClause}
-       ORDER BY s.name`
-    )
-    .all(...sqlParams);
-
-  if (q) {
-    sites = sites.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.plaid.toLowerCase().includes(q) ||
-        siteTerritoryValue(s).toLowerCase().includes(q) ||
-        s.area.toLowerCase().includes(q) ||
-        s.region.toLowerCase().includes(q) ||
-        (s.address && s.address.toLowerCase().includes(q))
-    );
-  }
-
-  const statsBySite = await aggregateSiteStatsBySiteId(vendor);
-  const routerTypesBySite = await aggregateSiteRouterTypesBySiteId();
-
-  const withStats = sites.map((s) => {
-    const stats = statsBySite.get(s.id) || EMPTY_SITE_STATS;
-    return {
-      ...s,
-      equipment_count: stats.equipment_count,
-      total_ports: stats.total_ports,
-      utilized_ports: stats.utilized_ports,
-      utilization_pct: stats.utilization_pct,
-      equipment_router_types: routerTypesBySite.get(s.id) ?? null,
-    };
+  const lite = req.query.lite === '1' || req.query.lite === 'true';
+  const sites = await listSites({
+    q: (req.query.q || req.query.search || '').toString(),
+    vendor: (req.query.vendor || '').toString(),
+    territory: (req.query.territory || '').toString(),
+    region: (req.query.region || '').toString(),
+    lite,
   });
-
-  res.json(withStats);
+  res.json(sites);
 });
 
-router.get('/territories', async (req, res) => {
-  const rows = await db
-    .prepare(
-      `SELECT DISTINCT COALESCE(NULLIF(TRIM(territory), ''), area) AS t
-       FROM sites
-       WHERE COALESCE(NULLIF(TRIM(territory), ''), area) IS NOT NULL
-         AND TRIM(COALESCE(NULLIF(TRIM(territory), ''), area)) != ''
-       ORDER BY t`
-    )
-    .all();
-  res.json(rows.map((r) => r.t));
+router.get('/territories', async (_req, res) => {
+  res.json(await listSiteTerritories());
 });
 
-router.get('/regions', async (req, res) => {
-  const rows = await db
-    .prepare(
-      `SELECT DISTINCT region FROM sites WHERE region IS NOT NULL AND TRIM(region) != '' ORDER BY region`
-    )
-    .all();
-  res.json(rows.map((r) => r.region));
+router.get('/regions', async (_req, res) => {
+  res.json(await listSiteRegions());
 });
 
 router.post('/', async (req, res) => {

@@ -80,10 +80,6 @@ export const useIpamStore = create<IpamState>((set, get) => ({
         picklists: boot.picklists,
         loading: false,
       });
-      void api
-        .fetchAnalytics()
-        .then((analytics) => set({ analytics }))
-        .catch(() => undefined);
     } catch (e) {
       set({
         loading: false,

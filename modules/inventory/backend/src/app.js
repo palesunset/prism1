@@ -11,6 +11,7 @@ import statsRouter from "./routes/stats.js";
 import equipmentBaysRouter from "./routes/equipmentBays.js";
 import dashboardRouter from "./routes/dashboard.js";
 import healthRouter from "./routes/health.js";
+import bootstrapRouter from "./routes/bootstrap.js";
 import integrityRouter from "./routes/integrity.js";
 import {
   getSecurityConfig,
@@ -50,6 +51,7 @@ export function createInventoryApp() {
 
   app.use(INVENTORY_API, rateLimiters.api);
   app.use(INVENTORY_API, apiKeyAuth);
+  app.use(`${INVENTORY_API}/bootstrap`, bootstrapRouter);
 
   app.use(`${INVENTORY_API}/sites`, sitesRouter);
   app.use(`${INVENTORY_API}/equipment`, equipmentRouter);

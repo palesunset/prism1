@@ -4,6 +4,14 @@ import type { Site } from '@/types';
 
 export type SitesListParams = api.FetchSitesParams;
 
+export function useMapBootstrap() {
+  return useQuery({
+    queryKey: ['inventory-bootstrap'],
+    queryFn: () => api.fetchInventoryBootstrap(),
+    staleTime: 60_000,
+  });
+}
+
 /** @deprecated string form — pass `{ q, vendor }` or `SitesListParams` */
 export function useSitesList(q?: string | SitesListParams, vendor?: string) {
   const params: api.FetchSitesParams =
@@ -53,6 +61,7 @@ export function useSiteMutations() {
   const create = useMutation({
     mutationFn: (body: Partial<Site>) => api.createSite(body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-bootstrap'] });
       qc.invalidateQueries({ queryKey: ['sites'] });
       qc.invalidateQueries({ queryKey: ['site-territories'] });
       qc.invalidateQueries({ queryKey: ['site-regions'] });
@@ -63,6 +72,7 @@ export function useSiteMutations() {
     mutationFn: ({ id, body }: { id: string; body: Partial<Site> }) =>
       api.updateSite(id, body),
     onSuccess: (_, v) => {
+      qc.invalidateQueries({ queryKey: ['inventory-bootstrap'] });
       qc.invalidateQueries({ queryKey: ['sites'] });
       qc.invalidateQueries({ queryKey: ['site-territories'] });
       qc.invalidateQueries({ queryKey: ['site-regions'] });
@@ -74,6 +84,7 @@ export function useSiteMutations() {
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteSite(id),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory-bootstrap'] });
       qc.invalidateQueries({ queryKey: ['sites'] });
       qc.invalidateQueries({ queryKey: ['site-territories'] });
       qc.invalidateQueries({ queryKey: ['site-regions'] });

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import db from '../db/index.js';
+import db, { dbDialect } from '../db/index.js';
 import { logAudit } from './ipamAudit.js';
 import { checkHostAssignment, runPostSaveIntegrityScan, validateBeforeSave } from './ipamIntegrity.js';
 import {
@@ -550,7 +550,104 @@ export async function searchQuery(query) {
   };
 }
 
+function subnetRowToDashboard(subnet, usedHosts, reservedHosts) {
+  if (recordFamily(subnet) === 'ipv6') {
+    const networkLabel = v6HexToDisplay(subnet.v6_range_start);
+    const broadcastLabel = v6HexToDisplay(subnet.v6_range_end);
+    const usable = v6UsableHostCount(subnet);
+    const freeIps = usable != null ? Math.max(0, usable - usedHosts) : null;
+    const utilization =
+      usable != null && usable > 0 ? Math.round((usedHosts / usable) * 1000) / 10 : null;
+    return {
+      id: subnet.id,
+      address: subnet.address,
+      project: subnet.project,
+      location: subnet.location,
+      vlan: subnet.vlan,
+      network: networkLabel,
+      broadcast: broadcastLabel,
+      rangeLabel: `${networkLabel} → ${broadcastLabel}`,
+      totalIps: null,
+      usableHosts: usable,
+      usedHosts,
+      reservedHosts,
+      freeIps,
+      utilizationPercent: utilization,
+      status: subnet.status,
+      address_family: 'ipv6',
+    };
+  }
+
+  const totalIps = subnet.range_end - subnet.range_start + 1;
+  const usable =
+    subnet.cidr_prefix === 32
+      ? 1
+      : subnet.cidr_prefix === 31
+        ? 2
+        : totalIps > 2
+          ? totalIps - 2
+          : 0;
+  const freeIps = Math.max(0, usable - usedHosts);
+  const utilization = usable > 0 ? Math.round((usedHosts / usable) * 1000) / 10 : 0;
+
+  return {
+    id: subnet.id,
+    address: subnet.address,
+    project: subnet.project,
+    location: subnet.location,
+    vlan: subnet.vlan,
+    network: octetsToString(uint32ToIp(subnet.range_start)),
+    broadcast: octetsToString(uint32ToIp(subnet.range_end)),
+    rangeLabel: `${octetsToString(uint32ToIp(subnet.range_start))} → ${octetsToString(uint32ToIp(subnet.range_end))}`,
+    totalIps,
+    usableHosts: usable,
+    usedHosts,
+    reservedHosts,
+    freeIps,
+    utilizationPercent: utilization,
+    status: subnet.status,
+    address_family: 'ipv4',
+  };
+}
+
+/** Single SQL aggregation — avoids loading every host into memory on Postgres. */
+async function buildDashboardFromSql() {
+  const rows = await db
+    .prepare(
+      `
+    SELECT s.*,
+      COALESCE(SUM(CASE WHEN h.id IS NOT NULL AND h.status != 'free' THEN 1 ELSE 0 END), 0) AS used_hosts,
+      COALESCE(SUM(CASE WHEN h.id IS NOT NULL AND h.status = 'reserved' THEN 1 ELSE 0 END), 0) AS reserved_hosts
+    FROM ip_records s
+    LEFT JOIN ip_records h
+      ON h.record_type = 'host'
+      AND h.address_family = s.address_family
+      AND (
+        (COALESCE(s.address_family, 'ipv4') != 'ipv6'
+          AND h.range_start >= s.range_start AND h.range_start <= s.range_end)
+        OR (s.address_family = 'ipv6'
+          AND h.v6_range_start >= s.v6_range_start AND h.v6_range_start <= s.v6_range_end)
+      )
+    WHERE s.record_type = 'subnet'
+    GROUP BY s.id
+    ORDER BY s.address_family ASC,
+      CASE WHEN s.address_family = 'ipv6' THEN s.v6_range_start ELSE LPAD(s.range_start::text, 10, '0') END ASC
+  `,
+    )
+    .all();
+
+  return rows.map((row) => {
+    const usedHosts = Number(row.used_hosts) || 0;
+    const reservedHosts = Number(row.reserved_hosts) || 0;
+    return subnetRowToDashboard(rowToRecord(row), usedHosts, reservedHosts);
+  });
+}
+
 export async function buildDashboard(recordsInput = null) {
+  if (!recordsInput && dbDialect === 'postgres') {
+    return buildDashboardFromSql();
+  }
+
   let subnets;
   let hosts;
   if (recordsInput) {
@@ -565,68 +662,12 @@ export async function buildDashboard(recordsInput = null) {
     if (recordFamily(subnet) === 'ipv6') {
       const usedHosts = hosts.filter((h) => h.status !== 'free' && hostInSubnet(subnet, h)).length;
       const reservedHosts = hosts.filter((h) => h.status === 'reserved' && hostInSubnet(subnet, h)).length;
-      const networkLabel = v6HexToDisplay(subnet.v6_range_start);
-      const broadcastLabel = v6HexToDisplay(subnet.v6_range_end);
-      const usable = v6UsableHostCount(subnet);
-      const freeIps = usable != null ? Math.max(0, usable - usedHosts) : null;
-      const utilization =
-        usable != null && usable > 0 ? Math.round((usedHosts / usable) * 1000) / 10 : null;
-      return {
-        id: subnet.id,
-        address: subnet.address,
-        project: subnet.project,
-        location: subnet.location,
-        vlan: subnet.vlan,
-        network: networkLabel,
-        broadcast: broadcastLabel,
-        rangeLabel: `${networkLabel} → ${broadcastLabel}`,
-        totalIps: null,
-        usableHosts: usable,
-        usedHosts,
-        reservedHosts,
-        freeIps,
-        utilizationPercent: utilization,
-        status: subnet.status,
-        address_family: 'ipv6',
-      };
+      return subnetRowToDashboard(subnet, usedHosts, reservedHosts);
     }
 
-    const totalIps = subnet.range_end - subnet.range_start + 1;
-    const usable =
-      subnet.cidr_prefix === 32
-        ? 1
-        : subnet.cidr_prefix === 31
-          ? 2
-          : totalIps > 2
-            ? totalIps - 2
-            : 0;
-    const usedHosts = hosts.filter(
-      (h) => h.status !== 'free' && hostInSubnet(subnet, h),
-    ).length;
-    const reservedHosts = hosts.filter(
-      (h) => h.status === 'reserved' && hostInSubnet(subnet, h),
-    ).length;
-    const freeIps = Math.max(0, usable - usedHosts);
-    const utilization = usable > 0 ? Math.round((usedHosts / usable) * 1000) / 10 : 0;
-
-    return {
-      id: subnet.id,
-      address: subnet.address,
-      project: subnet.project,
-      location: subnet.location,
-      vlan: subnet.vlan,
-      network: octetsToString(uint32ToIp(subnet.range_start)),
-      broadcast: octetsToString(uint32ToIp(subnet.range_end)),
-      rangeLabel: `${octetsToString(uint32ToIp(subnet.range_start))} → ${octetsToString(uint32ToIp(subnet.range_end))}`,
-      totalIps,
-      usableHosts: usable,
-      usedHosts,
-      reservedHosts,
-      freeIps,
-      utilizationPercent: utilization,
-      status: subnet.status,
-      address_family: 'ipv4',
-    };
+    const usedHosts = hosts.filter((h) => h.status !== 'free' && hostInSubnet(subnet, h)).length;
+    const reservedHosts = hosts.filter((h) => h.status === 'reserved' && hostInSubnet(subnet, h)).length;
+    return subnetRowToDashboard(subnet, usedHosts, reservedHosts);
   });
 }
 

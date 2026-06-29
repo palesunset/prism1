@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { useSitesList, useSiteMutations, useSiteTerritories, useSiteRegions } from '@/hooks/useSites';
+import { useSitesList, useSiteMutations, useMapBootstrap } from '@/hooks/useSites';
 import { useToast } from '@/hooks/useToast';
 import { SiteMap } from '@/components/Map/SiteMap';
 import { Modal } from '@/components/common/Modal';
@@ -32,9 +32,10 @@ export function MapPage() {
   const navigate = useNavigate();
   const root = useInventoryRoot();
   const qc = useQueryClient();
-  const { data: sites = [], isLoading, isError, error, refetch } = useSitesList();
-  const { data: territoryList = [] } = useSiteTerritories();
-  const { data: regionList = [] } = useSiteRegions();
+  const { data: bootstrap, isLoading, isError, error, refetch } = useMapBootstrap();
+  const sites = bootstrap?.sites ?? [];
+  const territoryList = bootstrap?.territories ?? [];
+  const regionList = bootstrap?.regions ?? [];
   const { create } = useSiteMutations();
   const { showToast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
@@ -252,6 +253,7 @@ export function MapPage() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImported={() => {
+          qc.invalidateQueries({ queryKey: ['inventory-bootstrap'] });
           qc.invalidateQueries({ queryKey: ['sites'] });
           qc.invalidateQueries({ queryKey: ['summary'] });
           qc.invalidateQueries({ queryKey: ['dashboard'] });

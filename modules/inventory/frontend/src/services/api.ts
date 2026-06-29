@@ -49,7 +49,20 @@ export type FetchSitesParams = {
   vendor?: string;
   territory?: string;
   region?: string;
+  lite?: boolean;
 };
+
+export type InventoryBootstrap = {
+  sites: Site[];
+  regions: string[];
+  territories: string[];
+  authRequired?: boolean;
+};
+
+export async function fetchInventoryBootstrap(): Promise<InventoryBootstrap> {
+  const { data } = await api.get<InventoryBootstrap>('/bootstrap');
+  return data;
+}
 
 export async function fetchSites(params?: FetchSitesParams): Promise<Site[]> {
   const p: Record<string, string> = {};
@@ -57,6 +70,7 @@ export async function fetchSites(params?: FetchSitesParams): Promise<Site[]> {
   if (params?.vendor) p.vendor = params.vendor;
   if (params?.territory) p.territory = params.territory;
   if (params?.region) p.region = params.region;
+  if (params?.lite) p.lite = '1';
   const { data } = await api.get<Site[]>('/sites', {
     params: Object.keys(p).length ? p : undefined,
   });
