@@ -38,12 +38,14 @@ function normalizeConnectionString(connectionString) {
 
 export function createPgDb(connectionString) {
   const normalized = normalizeConnectionString(connectionString);
+  const onServerless = Boolean(process.env.VERCEL);
   const pool = new pg.Pool({
     connectionString: normalized,
     ssl: normalized.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
-    max: 2,
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 15_000,
+    // Single connection per lambda — deasync serializes queries; avoids pooler exhaustion.
+    max: onServerless ? 1 : 2,
+    idleTimeoutMillis: onServerless ? 5_000 : 20_000,
+    connectionTimeoutMillis: onServerless ? 8_000 : 15_000,
   });
 
   pool.on("error", (err) => {
@@ -178,6 +180,9 @@ export function formatPgError(err) {
   }
   if (/deasync|Postgres sync driver/i.test(msg)) {
     return "Postgres driver failed to initialize on serverless.";
+  }
+  if (/function printf\(/i.test(msg)) {
+    return "IPAM query incompatible with Postgres (printf). Redeploy the latest API build.";
   }
   return msg;
 }

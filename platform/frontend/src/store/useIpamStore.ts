@@ -74,7 +74,8 @@ export const useIpamStore = create<IpamState>((set, get) => ({
   loadInitial: async () => {
     set({ loading: true, error: null });
     try {
-      const [dashboard, analytics] = await Promise.all([api.fetchDashboard(), api.fetchAnalytics()]);
+      const dashboard = await api.fetchDashboard();
+      const analytics = await api.fetchAnalytics();
       set({ dashboard, analytics, loading: false });
     } catch (e) {
       set({

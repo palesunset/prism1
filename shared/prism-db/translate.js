@@ -9,6 +9,11 @@ export function translateSql(sql) {
 
   out = out.replace(/\bIFNULL\s*\(/gi, "COALESCE(");
 
+  out = out.replace(
+    /printf\s*\(\s*'%0(\d+)d'\s*,\s*([^)]+)\)/gi,
+    (_m, width, col) => `LPAD((${col.trim()})::text, ${width}, '0')`,
+  );
+
   out = out.replace(/datetime\s*\(\s*'now'\s*,\s*'(-?\d+)\s+(\w+)'\s*\)/gi, (_m, n, unit) => {
     const u = unit.toLowerCase().replace(/s$/, "");
     const abs = String(n).replace(/^-/, "");

@@ -3,6 +3,10 @@ import { createPgDb, formatPgError } from "./pgSync.js";
 
 const require = createRequire(import.meta.url);
 
+/** One Postgres pool for all backends (notes, IPAM, inventory) on serverless. */
+let sharedPgDb = null;
+let sharedPgUrl = null;
+
 function requireDatabaseUrl() {
   const url = process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim();
   if (!url) {
@@ -40,9 +44,13 @@ export function createPrismDb({ sqlitePath, sqliteInit }) {
   const url = process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim();
 
   if (cloud || url) {
-    const db = createPgDb(requireDatabaseUrl());
-    console.log("[prism-db] Supabase/Postgres (cloud)");
-    return { db, dialect: "postgres" };
+    const connectionUrl = requireDatabaseUrl();
+    if (!sharedPgDb || sharedPgUrl !== connectionUrl) {
+      sharedPgDb = createPgDb(connectionUrl);
+      sharedPgUrl = connectionUrl;
+      console.log("[prism-db] Supabase/Postgres (shared pool)");
+    }
+    return { db: sharedPgDb, dialect: "postgres" };
   }
 
   const db = openSqliteDatabase(sqlitePath, sqliteInit);
