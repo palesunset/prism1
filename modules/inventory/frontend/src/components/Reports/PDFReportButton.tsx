@@ -1,5 +1,4 @@
 import { FileDown } from 'lucide-react';
-import { generateSiteReportPdf, generateFullReportPdf } from '@/utils/pdfGenerator';
 import type { Site, Equipment, SiteSummaryRow } from '@/types';
 import * as api from '@/services/api';
 
@@ -7,7 +6,11 @@ export function SitePDFReportButton({ site, equipment }: { site: Site; equipment
   return (
     <button
       type="button"
-      onClick={() => generateSiteReportPdf(site, equipment)}
+      onClick={() =>
+        void import('@/utils/pdfGenerator').then(({ generateSiteReportPdf }) =>
+          generateSiteReportPdf(site, equipment)
+        )
+      }
       className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800"
     >
       <FileDown className="h-4 w-4" />
@@ -40,6 +43,7 @@ export function FullPDFReportButton({
             map.set(s.id, list);
           })
         );
+        const { generateFullReportPdf } = await import('@/utils/pdfGenerator');
         generateFullReportPdf(summaryRows, map);
       }}
       className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:hover:bg-slate-800"

@@ -82,19 +82,20 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 800,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          const norm = id.replace(/\\/g, "/");
-          if (norm.includes("/platform/frontend/src/pages/ipam/")) return "ipam";
-          if (norm.includes("/modules/lsp/frontend/") || norm.includes("/@lsp/")) return "lsp";
-          if (norm.includes("/modules/inventory/frontend/") || norm.includes("/@inventory/")) return "inventory";
-          if (!norm.includes("node_modules")) return;
-          if (norm.includes("leaflet") || norm.includes("react-leaflet")) return "leaflet";
-          if (norm.includes("recharts")) return "recharts";
-          if (norm.includes("cytoscape")) return "cytoscape";
-          if (norm.includes("react")) return "react";
-          return "vendor";
+        strictExecutionOrder: true,
+        codeSplitting: {
+          groups: [
+            { name: "cytoscape", test: /[\\/]node_modules[\\/]cytoscape/ },
+            { name: "leaflet", test: /[\\/]node_modules[\\/](leaflet|react-leaflet)/ },
+            { name: "recharts", test: /[\\/]node_modules[\\/](recharts|d3-|victory-vendor)/ },
+            { name: "pdf", test: /[\\/]node_modules[\\/]jspdf/ },
+            { name: "syntax", test: /[\\/]node_modules[\\/](react-syntax-highlighter|refractor)/ },
+            { name: "motion", test: /[\\/]node_modules[\\/]framer-motion/ },
+            { name: "react", test: /[\\/]node_modules[\\/]react(-dom)?[\\/]/ },
+            { name: "vendor", test: /[\\/]node_modules[\\/]/ },
+          ],
         },
       },
     },

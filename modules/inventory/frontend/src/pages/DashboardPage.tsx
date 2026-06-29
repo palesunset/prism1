@@ -5,7 +5,6 @@ import { useDashboardData, useEquipmentUtilization, useInvalidateDashboard } fro
 import type { DashboardFilters as DashboardFilterValues } from '@/types/dashboard';
 import type { SiteSummaryRow } from '@/types';
 import { downloadGlobalExportCsv } from '@/services/api';
-import { generateDashboardPdf } from '@/utils/pdfGenerator';
 import { FullPDFReportButton } from '@/components/Reports/PDFReportButton';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useToast } from '@/hooks/useToast';
@@ -211,7 +210,12 @@ export function DashboardPage() {
           <button
             type="button"
             disabled={!data}
-            onClick={() => data && generateDashboardPdf(data, filterNote)}
+            onClick={() =>
+              data &&
+              void import('@/utils/pdfGenerator').then(({ generateDashboardPdf }) =>
+                generateDashboardPdf(data, filterNote)
+              )
+            }
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
           >
             <FileDown className="h-4 w-4" />
