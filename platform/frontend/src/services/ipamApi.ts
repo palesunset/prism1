@@ -334,7 +334,8 @@ export type IpamHealth = {
 };
 
 const BASE = '/api/ipam';
-const IPAM_FETCH_MS = 12_000;
+const IPAM_FETCH_MS = 25_000;
+const IPAM_HEALTH_MS = 25_000;
 
 function authHeaders(method: string, hasBody: boolean): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -352,12 +353,16 @@ function authHeaders(method: string, hasBody: boolean): Record<string, string> {
   return headers;
 }
 
-async function ipamFetch(path: string, init?: RequestInit): Promise<Response> {
+async function ipamFetch(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = IPAM_FETCH_MS,
+): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const hasBody = init?.body != null && init.body !== '';
   const headers = { ...authHeaders(method, hasBody), ...(init?.headers as Record<string, string> | undefined) };
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), IPAM_FETCH_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(`${BASE}${path}`, { ...init, headers, signal: controller.signal });
   } catch (e) {
@@ -387,7 +392,7 @@ async function parseJson<T>(res: Response): Promise<T> {
 }
 
 export async function fetchHealth(): Promise<IpamHealth> {
-  return parseJson(await ipamFetch('/health'));
+  return parseJson(await ipamFetch('/health', undefined, IPAM_HEALTH_MS));
 }
 
 export async function fetchCapabilities(): Promise<IpamCapabilities> {

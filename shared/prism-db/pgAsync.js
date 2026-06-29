@@ -32,9 +32,10 @@ export function createPgDb(connectionString) {
   const pool = new pg.Pool({
     connectionString: normalized,
     ssl: normalized.includes("supabase.co") ? { rejectUnauthorized: false } : undefined,
-    max: onServerless ? 4 : 6,
-    idleTimeoutMillis: onServerless ? 10_000 : 20_000,
-    connectionTimeoutMillis: onServerless ? 8_000 : 15_000,
+    max: onServerless ? 2 : 6,
+    idleTimeoutMillis: onServerless ? 5_000 : 20_000,
+    connectionTimeoutMillis: onServerless ? 5_000 : 15_000,
+    allowExitOnIdle: onServerless,
   });
 
   pool.on("error", (err) => {

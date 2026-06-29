@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 12_000);
+      const timeout = window.setTimeout(() => controller.abort(), 25_000);
       try {
         const res = await fetch(inventoryApiUrl('/health'), { signal: controller.signal });
         if (!res.ok) throw new Error('health check failed');

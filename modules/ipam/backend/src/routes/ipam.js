@@ -69,11 +69,8 @@ router.get('/picklists', async (_req, res) => {
 });
 
 router.get('/bootstrap', async (_req, res) => {
-  const records = await listRecords();
-  res.json({
-    subnets: await buildDashboard(records),
-    picklists: await listPicklists(),
-  });
+  const [subnets, picklists] = await Promise.all([buildDashboard(), listPicklists()]);
+  res.json({ subnets, picklists });
 });
 
 router.get('/settings', async (_req, res) => {

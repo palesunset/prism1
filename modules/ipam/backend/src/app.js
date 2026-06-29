@@ -1,5 +1,4 @@
 import express from "express";
-import ipamRouter from "./routes/ipam.js";
 import db, { dbDialect } from "./db/index.js";
 import { formatPgError } from "prism-db";
 import { getCapabilities } from "./services/ipamAnalytics.js";
@@ -56,7 +55,21 @@ export function createIpamApp() {
 
   app.use("/api/ipam/import", rateLimiters.upload);
   app.use("/api/ipam/restore", rateLimiters.upload);
-  app.use("/api/ipam", rateLimiters.api, apiKeyAuth, adminActionGuard, ipamRouter);
+
+  /** Lazy-load heavy IPAM routes so /health responds quickly on cold start. */
+  let ipamRouterPromise = null;
+  function loadIpamRouter() {
+    if (!ipamRouterPromise) {
+      ipamRouterPromise = import("./routes/ipam.js").then((mod) => mod.default);
+    }
+    return ipamRouterPromise;
+  }
+
+  app.use("/api/ipam", rateLimiters.api, apiKeyAuth, adminActionGuard, (req, res, next) => {
+    loadIpamRouter()
+      .then((router) => router(req, res, next))
+      .catch(next);
+  });
 
   app.use((_req, res) => {
     res.status(404).json({ detail: "Not found" });
