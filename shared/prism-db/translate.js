@@ -21,9 +21,9 @@ export function translateSql(sql) {
 
   if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(out)) {
     out = out.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, "INSERT INTO");
-    if (/INSERT\s+INTO\s+ip_settings/i.test(out) && !/ON CONFLICT/i.test(out)) {
+    if (!/ON CONFLICT/i.test(out)) {
       out = out.replace(/;\s*$/, "");
-      out += " ON CONFLICT (key) DO NOTHING";
+      out += " ON CONFLICT DO NOTHING";
     }
   }
 

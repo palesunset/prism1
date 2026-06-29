@@ -20,8 +20,9 @@ export function getSecurityConfig() {
   return {
     apiKey,
     adminKey,
-    authRequired: apiKey.length > 0,
-    adminRequired: adminKey.length > 0,
+    // Cloud: platform AdminGate (Supabase) protects the UI; no separate IPAM API key in browser.
+    authRequired: !onVercel && apiKey.length > 0,
+    adminRequired: !onVercel && adminKey.length > 0,
     corsOrigins,
     host,
     trustProxy,

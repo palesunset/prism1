@@ -328,12 +328,18 @@ export type IpamHealth = {
   version: string;
   authRequired?: boolean;
   adminRequired?: boolean;
+  dialect?: string;
+  db?: string;
+  error?: string;
 };
 
 const BASE = '/api/ipam';
 
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+function authHeaders(method: string, hasBody: boolean): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (hasBody || (method !== 'GET' && method !== 'HEAD')) {
+    headers['Content-Type'] = 'application/json';
+  }
   try {
     const key = localStorage.getItem('prism-ipam-api-key');
     if (key) headers.Authorization = `Bearer ${key}`;
@@ -346,7 +352,9 @@ function authHeaders(): Record<string, string> {
 }
 
 async function ipamFetch(path: string, init?: RequestInit): Promise<Response> {
-  const headers = { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) };
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const hasBody = init?.body != null && init.body !== '';
+  const headers = { ...authHeaders(method, hasBody), ...(init?.headers as Record<string, string> | undefined) };
   return fetch(`${BASE}${path}`, { ...init, headers });
 }
 

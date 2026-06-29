@@ -35,6 +35,8 @@ In [Vercel](https://vercel.com) → your project → **Settings → Environment 
 | `VITE_ADMIN_EMAIL` | `admin@prism.admin` (Supabase Auth email) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role (server + one-time `npm run create-admin`) |
 
+Do **not** set `IPAM_API_KEY` or `API_KEY` on Vercel — Supabase admin login protects the app; those keys block browser IPAM calls.
+
 Vercel sets `VERCEL=1` automatically — APIs use Supabase instead of SQLite.
 
 ## 3 — Deploy

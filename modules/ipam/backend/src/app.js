@@ -1,6 +1,7 @@
 import express from "express";
 import ipamRouter from "./routes/ipam.js";
-import db from "./db/index.js";
+import db, { dbDialect } from "./db/index.js";
+import { formatPgError } from "prism-db";
 import { getCapabilities } from "./services/ipamAnalytics.js";
 import {
   createApiKeyAuth,
@@ -25,13 +26,28 @@ export function createIpamApp() {
   const adminActionGuard = createAdminActionGuard(config);
 
   app.get("/api/ipam/health", (_req, res) => {
-    res.json({
+    const payload = {
       status: "ok",
       service: "prism-ipam",
       version: "1.3",
       authRequired: config.authRequired,
       adminRequired: config.adminRequired,
-    });
+      dialect: dbDialect,
+    };
+    if (dbDialect === "postgres" && typeof db.ping === "function") {
+      try {
+        db.ping();
+        return res.json({ ...payload, db: "ok" });
+      } catch (e) {
+        return res.status(503).json({
+          ...payload,
+          status: "error",
+          db: "error",
+          error: formatPgError(e),
+        });
+      }
+    }
+    res.json({ ...payload, db: "ok" });
   });
 
   app.get("/api/ipam/capabilities", (_req, res) => {
@@ -48,7 +64,8 @@ export function createIpamApp() {
 
   app.use((err, _req, res, _next) => {
     console.error("[ipam] unhandled error:", err);
-    res.status(500).json({ detail: "Internal server error" });
+    const detail = formatPgError(err);
+    res.status(500).json({ detail: detail || "Internal server error" });
   });
 
   return app;
