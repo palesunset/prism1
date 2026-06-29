@@ -74,13 +74,20 @@ export const useIpamStore = create<IpamState>((set, get) => ({
   loadInitial: async () => {
     set({ loading: true, error: null });
     try {
-      const dashboard = await api.fetchDashboard();
-      const analytics = await api.fetchAnalytics();
-      set({ dashboard, analytics, loading: false });
+      const boot = await api.fetchBootstrap();
+      set({
+        dashboard: boot.subnets,
+        picklists: boot.picklists,
+        loading: false,
+      });
+      void api
+        .fetchAnalytics()
+        .then((analytics) => set({ analytics }))
+        .catch(() => undefined);
     } catch (e) {
       set({
         loading: false,
-        error: e instanceof Error ? e.message : 'Could not load IPAM. Is the IPAM API running on port 3003?',
+        error: e instanceof Error ? e.message : 'Could not load IPAM. Check /api/ipam/health on your deployment.',
       });
     }
   },
@@ -118,7 +125,7 @@ export const useIpamStore = create<IpamState>((set, get) => ({
 
   loadAnalytics: async () => {
     try {
-      const analytics = await api.fetchAnalytics();
+      const analytics = await api.fetchAnalytics({ scanConflicts: true });
       set({ analytics });
     } catch {
       /* ignore */

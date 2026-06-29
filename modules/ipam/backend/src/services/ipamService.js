@@ -553,9 +553,16 @@ export function searchQuery(query) {
   };
 }
 
-export function buildDashboard() {
-  const subnets = listRecords({ record_type: 'subnet' });
-  const hosts = listRecords({ record_type: 'host' });
+export function buildDashboard(recordsInput = null) {
+  let subnets;
+  let hosts;
+  if (recordsInput) {
+    subnets = recordsInput.filter((r) => r.record_type === 'subnet');
+    hosts = recordsInput.filter((r) => r.record_type === 'host');
+  } else {
+    subnets = listRecords({ record_type: 'subnet' });
+    hosts = listRecords({ record_type: 'host' });
+  }
 
   return subnets.map((subnet) => {
     if (recordFamily(subnet) === 'ipv6') {

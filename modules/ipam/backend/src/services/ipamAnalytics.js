@@ -5,8 +5,8 @@ import { hostInSubnet, rangesOverlapRecords, recordFamily } from '../lib/ipRange
 import { listAudit } from './ipamAudit.js';
 import { getUtilizationAlertPercent } from './ipamSettings.js';
 
-export function scanAllConflicts() {
-  const records = listRecords();
+export function scanAllConflicts(recordsInput = null) {
+  const records = recordsInput ?? listRecords();
   const issues = [];
   const hostByKey = new Map();
 
@@ -249,9 +249,10 @@ export function suggestNextIpInSubnet(subnet, allRecords = null) {
   return freeRanges[0].start;
 }
 
-export function buildAnalytics() {
-  const records = listRecords();
-  const subnets = buildDashboard();
+export function buildAnalytics(options = {}) {
+  const includeConflictScan = Boolean(options.includeConflictScan);
+  const records = options.records ?? listRecords();
+  const subnets = options.dashboard ?? buildDashboard(records);
   const hosts = records.filter((r) => r.record_type === 'host');
   const subnetRecords = records.filter((r) => r.record_type === 'subnet');
 
@@ -283,7 +284,9 @@ export function buildAnalytics() {
       ? Math.round((v6Utilizations.reduce((a, b) => a + b, 0) / v6Utilizations.length) * 10) / 10
       : null;
 
-  const conflictScan = scanAllConflicts();
+  const conflictScan = includeConflictScan
+    ? scanAllConflicts(records)
+    : { scannedAt: new Date().toISOString(), count: 0, issues: [] };
   const alertPercent = getUtilizationAlertPercent();
 
   return {
@@ -316,7 +319,7 @@ export function buildAnalytics() {
 }
 
 export function buildUtilizationReport() {
-  const analytics = buildAnalytics();
+  const analytics = buildAnalytics({ includeConflictScan: true });
   const lines = [
     'PRISM Mini IPAM — Utilization Report',
     `Generated: ${analytics.generatedAt}`,

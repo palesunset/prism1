@@ -118,7 +118,7 @@ export function IpamPage() {
   const searchLoading = useIpamStore((s) => s.searchLoading);
   const loadInitial = useIpamStore((s) => s.loadInitial);
   const loadRecords = useIpamStore((s) => s.loadRecords);
-  const loadPicklists = useIpamStore((s) => s.loadPicklists);
+  const loadAnalytics = useIpamStore((s) => s.loadAnalytics);
   const loadIntegrity = useIpamStore((s) => s.loadIntegrity);
   const loadAudit = useIpamStore((s) => s.loadAudit);
   const scanConflicts = useIpamStore((s) => s.scanConflicts);
@@ -133,11 +133,10 @@ export function IpamPage() {
 
   useEffect(() => {
     void loadInitial();
-    void loadPicklists();
-  }, [loadInitial, loadPicklists]);
+  }, [loadInitial]);
 
   useEffect(() => {
-    if (tab === 'registry' || tab === 'subnets' || tab === 'analytics' || tab === 'dashboard') {
+    if (tab === 'registry' || tab === 'subnets') {
       void loadRecords();
     }
   }, [tab, loadRecords]);
@@ -147,7 +146,14 @@ export function IpamPage() {
   }, [openWorkflowTabRequest]);
 
   useEffect(() => {
-    if (tab === 'audit' || tab === 'dashboard') {
+    if (tab === 'analytics') {
+      void loadAnalytics();
+      void scanConflicts().catch(() => undefined);
+    }
+  }, [tab, loadAnalytics, scanConflicts]);
+
+  useEffect(() => {
+    if (tab === 'audit') {
       void loadIntegrity();
     }
     if (tab === 'system') {

@@ -334,6 +334,7 @@ export type IpamHealth = {
 };
 
 const BASE = '/api/ipam';
+const IPAM_FETCH_MS = 12_000;
 
 function authHeaders(method: string, hasBody: boolean): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -355,7 +356,18 @@ async function ipamFetch(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const hasBody = init?.body != null && init.body !== '';
   const headers = { ...authHeaders(method, hasBody), ...(init?.headers as Record<string, string> | undefined) };
-  return fetch(`${BASE}${path}`, { ...init, headers });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), IPAM_FETCH_MS);
+  try {
+    return await fetch(`${BASE}${path}`, { ...init, headers, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('IPAM API request timed out');
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 function formatApiError(body: unknown, fallback: string): string {
@@ -484,6 +496,10 @@ export async function searchIp(query: string): Promise<IpamSearchResult> {
   }));
 }
 
+export async function fetchBootstrap(): Promise<{ subnets: SubnetDashboard[]; picklists: IpamPicklists }> {
+  return parseJson(await ipamFetch('/bootstrap'));
+}
+
 export async function fetchDashboard(): Promise<SubnetDashboard[]> {
   const data = await parseJson<{ subnets: SubnetDashboard[] }>(await ipamFetch('/dashboard'));
   return data.subnets;
@@ -529,8 +545,9 @@ export async function simulateVlsmImport(plan: unknown, project?: string): Promi
   }));
 }
 
-export async function fetchAnalytics(): Promise<IpamAnalytics> {
-  return parseJson(await ipamFetch('/analytics'));
+export async function fetchAnalytics(opts?: { scanConflicts?: boolean }): Promise<IpamAnalytics> {
+  const q = opts?.scanConflicts ? '?scan=1' : '';
+  return parseJson(await ipamFetch(`/analytics${q}`));
 }
 
 export async function scanConflicts(): Promise<IpamConflictScan> {

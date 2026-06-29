@@ -67,6 +67,15 @@ router.get('/picklists', (_req, res) => {
   res.json(listPicklists());
 });
 
+/** Fast first paint: dashboard + picklists in one DB pass (serverless-friendly). */
+router.get('/bootstrap', (_req, res) => {
+  const records = listRecords();
+  res.json({
+    subnets: buildDashboard(records),
+    picklists: listPicklists(),
+  });
+});
+
 router.get('/settings', (_req, res) => {
   res.json({ settings: listSettings(), utilizationAlertPercent: getUtilizationAlertPercent() });
 });
@@ -348,8 +357,16 @@ router.get('/dashboard', (_req, res) => {
   res.json({ subnets: buildDashboard() });
 });
 
-router.get('/analytics', (_req, res) => {
-  res.json(buildAnalytics());
+router.get('/analytics', (req, res) => {
+  const includeConflictScan = req.query.scan === '1' || req.query.conflicts === '1';
+  const records = listRecords();
+  res.json(
+    buildAnalytics({
+      records,
+      dashboard: buildDashboard(records),
+      includeConflictScan,
+    }),
+  );
 });
 
 router.get('/conflicts/scan', (_req, res) => {
