@@ -249,8 +249,8 @@ export async function buildIntegrityAudit() {
   const records = await listRecords();
   const subnets = records.filter((r) => r.record_type === 'subnet');
   const hosts = records.filter((r) => r.record_type === 'host');
-  const dashboard = buildDashboard(records);
-  const conflictScan = scanAllConflicts(records);
+  const dashboard = await buildDashboard(records);
+  const conflictScan = await scanAllConflicts(records);
   const recordStatus = new Map();
   const conflicts = [];
   const warnings = [];

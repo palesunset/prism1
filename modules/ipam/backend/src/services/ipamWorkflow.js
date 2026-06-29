@@ -191,7 +191,7 @@ export async function listWorkflows(filters = {}) {
     sql += ' LIMIT ?';
     params.push(Number(filters.limit));
   }
-  return await db.prepare(sql).all(...params).map(rowToWorkflow);
+  return (await db.prepare(sql).all(...params)).map(rowToWorkflow);
 }
 
 export async function getWorkflow(id) {

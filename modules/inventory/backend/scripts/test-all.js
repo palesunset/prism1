@@ -7,7 +7,6 @@ import { newId } from '../src/utils/helpers.js';
 import { processCombinedImport } from '../src/utils/combinedImport.js';
 import { importEquipmentFromParsed } from '../src/utils/equipmentImport.js';
 import { parseCsvRow } from '../src/utils/helpers.js';
-import { parseUploadCsvBuffer } from '../src/utils/csvUpload.js';
 import {
   parseIpForStorage,
   findEquipmentByIp,
@@ -24,10 +23,14 @@ const TEST_PLAIDS = [
   'TEST-ALL-IP',
 ];
 
-function cleanup() {
+const dbGet = (sql, ...params) => db.prepare(sql).get(...params);
+const dbAll = (sql, ...params) => db.prepare(sql).all(...params);
+const dbRun = (sql, ...params) => db.prepare(sql).run(...params);
+
+async function cleanup() {
   for (const plaid of TEST_PLAIDS) {
-    const site = db.prepare('SELECT id FROM sites WHERE plaid = ?').get(plaid);
-    if (site) db.prepare('DELETE FROM sites WHERE id = ?').run(site.id);
+    const site = await dbGet('SELECT id FROM sites WHERE plaid = ?', plaid);
+    if (site) await dbRun('DELETE FROM sites WHERE id = ?', site.id);
   }
 }
 
@@ -39,9 +42,10 @@ function eq(actual, expected, msg) {
   if (actual !== expected) throw new Error(`FAIL: ${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
-function runSchemaTests() {
+async function runSchemaTests() {
   console.log('\n--- Schema / columns ---');
-  const cols = db.prepare('PRAGMA table_info(equipment)').all().map((r) => r.name);
+  const rows = await dbAll('PRAGMA table_info(equipment)');
+  const cols = rows.map((r) => r.name);
   for (const col of [
     'software_version',
     'descriptor_version',
@@ -55,20 +59,25 @@ function runSchemaTests() {
   console.log('  Schema tests passed');
 }
 
-function runVersionFieldTests() {
+async function runVersionFieldTests() {
   console.log('\n--- Software / Descriptor Version ---');
-  cleanup();
+  await cleanup();
 
   const siteId = newId();
-  db.prepare(
-    `INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(siteId, 'Version Test Site', 'TEST-ALL-VERS', 'T1', 'T1', 'NCR');
+  await dbRun(
+    `INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`,
+    siteId,
+    'Version Test Site',
+    'TEST-ALL-VERS',
+    'T1',
+    'T1',
+    'NCR',
+  );
 
   const eqId = newId();
-  db.prepare(
+  await dbRun(
     `INSERT INTO equipment (id, site_id, vendor, model, network_element, serial_number, router_type, status, software_version, descriptor_version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     eqId,
     siteId,
     'NOKIA',
@@ -78,28 +87,24 @@ function runVersionFieldTests() {
     'P',
     'Active',
     'V800R021C00',
-    'NE5000E-V800R021C00'
+    'NE5000E-V800R021C00',
   );
 
-  const row = db.prepare('SELECT * FROM equipment WHERE id = ?').get(eqId);
+  const row = await dbGet('SELECT * FROM equipment WHERE id = ?', eqId);
   eq(row.software_version, 'V800R021C00', 'software_version stored');
   eq(row.descriptor_version, 'NE5000E-V800R021C00', 'descriptor_version stored');
 
-  db.prepare('UPDATE equipment SET software_version = ?, descriptor_version = ? WHERE id = ?').run(
-    'V900',
-    null,
-    eqId
-  );
-  const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(eqId);
+  await dbRun('UPDATE equipment SET software_version = ?, descriptor_version = ? WHERE id = ?', 'V900', null, eqId);
+  const updated = await dbGet('SELECT * FROM equipment WHERE id = ?', eqId);
   eq(updated.software_version, 'V900', 'software_version updated');
   eq(updated.descriptor_version, null, 'descriptor_version cleared');
 
   console.log('  Version field tests passed');
 }
 
-function runCsvVersionImportTests() {
+async function runCsvVersionImportTests() {
   console.log('\n--- CSV version columns ---');
-  cleanup();
+  await cleanup();
 
   const parsed = parseCsvRow({
     Vendor: 'HUAWEI',
@@ -112,7 +117,7 @@ function runCsvVersionImportTests() {
   eq(parsed.software_version, 'SW-1.0', 'parseCsvRow trims software_version');
   eq(parsed.descriptor_version, 'DESC-1.0', 'parseCsvRow trims descriptor_version');
 
-  const r = processCombinedImport([
+  const r = await processCombinedImport([
     {
       'Site Name': 'CSV Version Site',
       PLAID: 'TEST-ALL-SITE',
@@ -129,26 +134,31 @@ function runCsvVersionImportTests() {
   eq(r.equipment_added, 1, 'combined import with versions');
   eq(r.errors.length, 0, 'no errors on version import');
 
-  const eqRow = db
-    .prepare(
-      `SELECT e.software_version, e.descriptor_version FROM equipment e
-       JOIN sites s ON s.id = e.site_id WHERE s.plaid = ?`
-    )
-    .get('TEST-ALL-SITE');
+  const eqRow = await dbGet(
+    `SELECT e.software_version, e.descriptor_version FROM equipment e
+       JOIN sites s ON s.id = e.site_id WHERE s.plaid = ?`,
+    'TEST-ALL-SITE',
+  );
   eq(eqRow.software_version, 'V1.2.3', 'imported software_version');
   eq(eqRow.descriptor_version, 'DESC-V1', 'imported descriptor_version');
 
   console.log('  CSV version import tests passed');
 }
 
-function runEquipmentImportUtilTests() {
+async function runEquipmentImportUtilTests() {
   console.log('\n--- Per-site equipment import util ---');
-  cleanup();
+  await cleanup();
 
   const siteId = newId();
-  db.prepare(
-    `INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(siteId, 'Util Site', 'TEST-ALL-SITE', 'T1', 'T1', 'SLZ');
+  await dbRun(
+    `INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`,
+    siteId,
+    'Util Site',
+    'TEST-ALL-SITE',
+    'T1',
+    'T1',
+    'SLZ',
+  );
 
   const parsed = parseCsvRow({
     Vendor: 'CISCO',
@@ -158,10 +168,10 @@ function runEquipmentImportUtilTests() {
   });
   const existing = new Set();
   const batch = new Set();
-  const result = importEquipmentFromParsed(siteId, parsed, existing, batch, new Set());
+  const result = await importEquipmentFromParsed(siteId, parsed, existing, batch, new Set());
   assert(result.ok, 'importEquipmentFromParsed succeeds with software_version');
 
-  const row = db.prepare('SELECT software_version, descriptor_version FROM equipment WHERE serial_number = ?').get('TEST-SN-UTIL');
+  const row = await dbGet('SELECT software_version, descriptor_version FROM equipment WHERE serial_number = ?', 'TEST-SN-UTIL');
   eq(row.software_version, 'IOS-XE-17', 'util import software_version');
   eq(row.descriptor_version, null, 'util import descriptor_version null when omitted');
 
@@ -209,11 +219,10 @@ async function runHttpTests() {
       return;
     }
 
-    cleanup();
+    await cleanup();
 
     const jsonHeaders = authHeaders({ 'Content-Type': 'application/json' });
 
-    // Create site via API
     const siteRes = await fetch(`${api}/sites`, {
       method: 'POST',
       headers: jsonHeaders,
@@ -227,7 +236,6 @@ async function runHttpTests() {
     assert(siteRes.ok, `POST /api/sites — ${siteRes.status}`);
     const site = await siteRes.json();
 
-    // Create equipment with version fields
     const createRes = await fetch(`${api}/equipment`, {
       method: 'POST',
       headers: jsonHeaders,
@@ -247,7 +255,6 @@ async function runHttpTests() {
     eq(created.software_version, 'HTTP-SW-1', 'HTTP create software_version');
     eq(created.descriptor_version, 'HTTP-DESC-1', 'HTTP create descriptor_version');
 
-    // PATCH update versions
     const patchRes = await fetch(`${api}/equipment/${created.id}`, {
       method: 'PATCH',
       headers: jsonHeaders,
@@ -258,7 +265,6 @@ async function runHttpTests() {
     eq(patched.software_version, 'HTTP-SW-2', 'HTTP patch software_version');
     eq(patched.descriptor_version, null, 'HTTP patch descriptor_version cleared');
 
-    // Combined CSV import with BOM + versions
     const csvBody =
       'Site Name,PLAID,Region,Territory,Vendor,Model,Serial Number,Router Type,Software Version,Descriptor Version\n' +
       'HTTP Site 2,TEST-ALL-VERS,NCR,T1,HUAWEI,NE40E,TEST-SN-HTTP-CSV,DR,CSV-SW,CSV-DESC\n';
@@ -275,25 +281,22 @@ async function runHttpTests() {
     eq(importResult.equipment_added, 1, 'HTTP combined import equipment');
     assert(
       importResult.errors.length === 0 || importResult.equipment_added === 1,
-      'combined import no blocking errors'
+      'combined import no blocking errors',
     );
 
-    const csvEq = db
-      .prepare('SELECT software_version, descriptor_version FROM equipment WHERE serial_number = ?')
-      .get('TEST-SN-HTTP-CSV');
+    const csvEq = await dbGet('SELECT software_version, descriptor_version FROM equipment WHERE serial_number = ?', 'TEST-SN-HTTP-CSV');
     eq(csvEq.software_version, 'CSV-SW', 'HTTP CSV import software_version');
     eq(csvEq.descriptor_version, 'CSV-DESC', 'HTTP CSV import descriptor_version');
 
-    // GET equipment detail
     const getRes = await fetch(`${api}/equipment/${created.id}`, { headers: authHeaders() });
     assert(getRes.ok, 'GET /api/equipment/:id');
     const detail = await getRes.json();
     assert(detail.equipment?.software_version === 'HTTP-SW-2', 'GET returns software_version');
 
-    cleanup();
+    await cleanup();
     console.log('  HTTP API tests passed');
   } catch (e) {
-    cleanup();
+    await cleanup();
     const msg = e instanceof Error ? e.message : String(e);
     if (/fetch failed|ECONNREFUSED|network/i.test(msg)) {
       console.log('  SKIP: HTTP API unavailable');
@@ -303,7 +306,7 @@ async function runHttpTests() {
   }
 }
 
-function runIpAddressTests() {
+async function runIpAddressTests() {
   console.log('\n--- IP address normalization ---');
   const v4 = parseIpForStorage('10.0.0.1');
   assert(v4.ok && v4.value === '10.0.0.1', 'IPv4 parsed');
@@ -312,37 +315,48 @@ function runIpAddressTests() {
   assert(v6a.ok && v6b.ok && v6a.value === v6b.value, 'IPv6 canonical match');
   assert(!parseIpForStorage('10.0.0.0/24').ok, 'CIDR rejected for management IP');
 
-  cleanup();
+  await cleanup();
   const siteId = newId();
-  db.prepare(`INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`).run(
-    siteId,
-    'IP Test Site',
-    'TEST-ALL-IP',
-    'T1',
-    'T1',
-    'NCR',
-  );
+  await dbRun(`INSERT INTO sites (id, name, plaid, area, territory, region) VALUES (?, ?, ?, ?, ?, ?)`, siteId, 'IP Test Site', 'TEST-ALL-IP', 'T1', 'T1', 'NCR');
   const eq1 = newId();
   const eq2 = newId();
-  db.prepare(
+  await dbRun(
     `INSERT INTO equipment (id, site_id, vendor, model, network_element, serial_number, router_type, status, ip_address)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(eq1, siteId, 'NOKIA', '7750', 'NE-1', 'IP-SN-1', 'P', 'Active', '2001:db8::1');
-  db.prepare(
+    eq1,
+    siteId,
+    'NOKIA',
+    '7750',
+    'NE-1',
+    'IP-SN-1',
+    'P',
+    'Active',
+    '2001:db8::1',
+  );
+  await dbRun(
     `INSERT INTO equipment (id, site_id, vendor, model, network_element, serial_number, router_type, status, ip_address)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(eq2, siteId, 'NOKIA', '7750', 'NE-2', 'IP-SN-2', 'P', 'Active', '2001:0db8:0000:0000:0000:0000:0000:0001');
+    eq2,
+    siteId,
+    'NOKIA',
+    '7750',
+    'NE-2',
+    'IP-SN-2',
+    'P',
+    'Active',
+    '2001:0db8:0000:0000:0000:0000:0000:0001',
+  );
 
-  const lookup = findEquipmentByIp('2001:db8::1');
+  const lookup = await findEquipmentByIp('2001:db8::1');
   assert(lookup.ok && lookup.matches.length === 2, 'IPv6 by-ip finds both canonical forms');
 
-  const dupes = findDuplicateIpEquipment('2001:db8::1');
+  const dupes = await findDuplicateIpEquipment('2001:db8::1');
   assert(dupes.length === 2, 'duplicate IP detection finds both rows');
 
-  const groups = findDuplicateIpGroups();
+  const groups = await findDuplicateIpGroups();
   assert(groups.some((g) => g.equipment.length === 2), 'integrity groups duplicate IPv6');
 
-  cleanup();
+  await cleanup();
   console.log('  IP address tests passed');
 }
 
@@ -360,19 +374,19 @@ function runSecurityUtilTests() {
 async function main() {
   console.log('DC Inventory — full test suite');
   try {
-    runSchemaTests();
+    await runSchemaTests();
     runSecurityUtilTests();
-    runVersionFieldTests();
-    runCsvVersionImportTests();
-    runEquipmentImportUtilTests();
-    runIpAddressTests();
-    runOzGoldenTests();
+    await runVersionFieldTests();
+    await runCsvVersionImportTests();
+    await runEquipmentImportUtilTests();
+    await runIpAddressTests();
+    await runOzGoldenTests();
     await runHttpTests();
-    cleanup();
+    await cleanup();
     console.log('\n✓ All tests passed\n');
     process.exit(0);
   } catch (e) {
-    cleanup();
+    await cleanup();
     console.error('\n✗', e.message);
     process.exit(1);
   }
