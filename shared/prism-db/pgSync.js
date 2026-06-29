@@ -12,47 +12,6 @@ function getDeasync() {
   }
 }
 
-function syncQuery(pool, text, params = []) {
-  const deasync = getDeasync();
-  if (!deasync) {
-    throw new Error(
-      "Postgres sync driver requires deasync (installed on Vercel Linux). Deploy to Vercel or use SQLite locally without DATABASE_URL.",
-    );
-  }
-  let done = false;
-  let result;
-  let error;
-  pool.query(text, params, (err, res) => {
-    error = err;
-    result = res;
-    done = true;
-  });
-  deasync.loopWhile(() => !done);
-  if (error) throw error;
-  return result;
-}
-
-class PgStatement {
-  constructor(pool, sql) {
-    this.pool = pool;
-    this.sql = toPgParams(sql);
-  }
-
-  all(...params) {
-    return syncQuery(this.pool, this.sql, params).rows;
-  }
-
-  get(...params) {
-    const rows = syncQuery(this.pool, this.sql, params).rows;
-    return rows[0];
-  }
-
-  run(...params) {
-    const res = syncQuery(this.pool, this.sql, params);
-    return { changes: res.rowCount ?? 0 };
-  }
-}
-
 function translateSqlBatch(sql) {
   return sql
     .split(";")
@@ -60,8 +19,7 @@ function translateSqlBatch(sql) {
     .filter(Boolean)
     .map((chunk) => chunk.replace(/PRAGMA\s+\w+[^;]*/gi, ""))
     .filter(Boolean)
-    .map((chunk) => translateSql(chunk))
-    .join(";\n");
+    .map((chunk) => translateSql(chunk));
 }
 
 function normalizeConnectionString(connectionString) {
@@ -92,21 +50,117 @@ export function createPgDb(connectionString) {
     console.error("[prism-db] Postgres pool error:", err.message);
   });
 
+  /** Pinned client while BEGIN…COMMIT/ROLLBACK is active (SQLite-style transactions). */
+  let txClient = null;
+
+  function syncQuery(text, params = []) {
+    const deasync = getDeasync();
+    if (!deasync) {
+      throw new Error(
+        "Postgres sync driver requires deasync (installed on Vercel Linux). Deploy to Vercel or use SQLite locally without DATABASE_URL.",
+      );
+    }
+    const runner = txClient || pool;
+    let done = false;
+    let result;
+    let error;
+    runner.query(text, params, (err, res) => {
+      error = err;
+      result = res;
+      done = true;
+    });
+    deasync.loopWhile(() => !done);
+    if (error) throw error;
+    return result;
+  }
+
+  function checkoutClient() {
+    const deasync = getDeasync();
+    if (!deasync) {
+      throw new Error(
+        "Postgres sync driver requires deasync (installed on Vercel Linux). Deploy to Vercel or use SQLite locally without DATABASE_URL.",
+      );
+    }
+    let done = false;
+    let client;
+    let error;
+    pool.connect((err, c) => {
+      error = err;
+      client = c;
+      done = true;
+    });
+    deasync.loopWhile(() => !done);
+    if (error) throw error;
+    return client;
+  }
+
+  function releaseTxClient() {
+    if (txClient) {
+      txClient.release();
+      txClient = null;
+    }
+  }
+
+  function execChunk(chunk) {
+    if (/^BEGIN\b/i.test(chunk)) {
+      if (txClient) throw new Error("transaction already active");
+      txClient = checkoutClient();
+      syncQuery("BEGIN");
+      return;
+    }
+    if (/^COMMIT\b/i.test(chunk)) {
+      syncQuery("COMMIT");
+      releaseTxClient();
+      return;
+    }
+    if (/^ROLLBACK\b/i.test(chunk)) {
+      try {
+        syncQuery("ROLLBACK");
+      } finally {
+        releaseTxClient();
+      }
+      return;
+    }
+    syncQuery(chunk);
+  }
+
+  class PgStatement {
+    constructor(sql) {
+      this.sql = toPgParams(sql);
+    }
+
+    all(...params) {
+      return syncQuery(this.sql, params).rows;
+    }
+
+    get(...params) {
+      const rows = syncQuery(this.sql, params).rows;
+      return rows[0];
+    }
+
+    run(...params) {
+      const res = syncQuery(this.sql, params);
+      return { changes: res.rowCount ?? 0 };
+    }
+  }
+
   return {
     dialect: "postgres",
     pool,
     prepare(sql) {
-      return new PgStatement(pool, sql);
+      return new PgStatement(sql);
     },
     exec(sql) {
-      const batch = translateSqlBatch(sql);
-      if (batch) syncQuery(pool, batch);
+      for (const chunk of translateSqlBatch(sql)) {
+        execChunk(chunk);
+      }
     },
     close() {
+      releaseTxClient();
       pool.end();
     },
     ping() {
-      syncQuery(pool, "SELECT 1 AS ok");
+      syncQuery("SELECT 1 AS ok");
     },
   };
 }

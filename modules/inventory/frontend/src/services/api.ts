@@ -18,6 +18,13 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    // Let the browser set multipart boundary (manual Content-Type breaks file uploads).
+    if (config.headers) {
+      delete config.headers['Content-Type'];
+      delete config.headers['content-type'];
+    }
+  }
   const auth = authHeaderRecord();
   if (auth.Authorization) {
     config.headers.Authorization = auth.Authorization;
@@ -174,27 +181,21 @@ export async function importEquipmentCsv(siteId: string, file: File): Promise<Im
   const fd = new FormData();
   fd.append('site_id', siteId);
   fd.append('file', file);
-  const { data } = await api.post<ImportResult>('/equipment/import', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post<ImportResult>('/equipment/import', fd);
   return data;
 }
 
 export async function importSitesCsv(file: File): Promise<ImportResult> {
   const fd = new FormData();
   fd.append('file', file);
-  const { data } = await api.post<ImportResult>('/sites/import', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post<ImportResult>('/sites/import', fd);
   return data;
 }
 
 export async function importCombinedCsv(file: File): Promise<ImportResult> {
   const fd = new FormData();
   fd.append('file', file);
-  const { data } = await api.post<ImportResult>('/sites/import/combined', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post<ImportResult>('/sites/import/combined', fd);
   return data;
 }
 
