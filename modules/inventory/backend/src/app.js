@@ -1,5 +1,5 @@
 import express from "express";
-import db from "./db/index.js";
+import db, { isPostgresMode } from "./db/index.js";
 import { formatPgError } from "prism-db";
 import { normalizeExistingIpAddresses } from "./utils/ipAddress.js";
 import sitesRouter from "./routes/sites.js";
@@ -31,10 +31,12 @@ export function createInventoryApp() {
   if (config.trustProxy) app.set("trust proxy", 1);
 
   if (!normalized) {
-    try {
-      normalizeExistingIpAddresses();
-    } catch (e) {
-      console.warn("[inventory] IP normalize skipped:", e?.message || e);
+    if (!isPostgresMode()) {
+      try {
+        normalizeExistingIpAddresses();
+      } catch (e) {
+        console.warn("[inventory] IP normalize skipped:", e?.message || e);
+      }
     }
     normalized = true;
   }

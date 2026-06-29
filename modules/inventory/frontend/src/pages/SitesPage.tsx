@@ -46,7 +46,7 @@ export function SitesPage() {
   const [vendorFilter, setVendorFilter] = useState('');
   const [importOpen, setImportOpen] = useState(false);
 
-  const { data: sites = [], isLoading } = useSitesList({
+  const { data: sites = [], isLoading, isError, error, refetch } = useSitesList({
     q: searchTerm.trim() || undefined,
     vendor: vendorFilter.trim() || undefined,
     territory: territoryFilter || undefined,
@@ -177,7 +177,16 @@ export function SitesPage() {
           : 'Equipment counts and port utilization include all vendors at each site. Select a vendor above to see that vendor only.'}
       </p>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <p className="text-sm text-red-500">
+            Could not load sites{error instanceof Error && error.message ? `: ${error.message}` : ''}.
+          </p>
+          <button type="button" className="btn-primary text-sm" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="flex justify-center py-16">
           <LoadingSpinner />
         </div>

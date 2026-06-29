@@ -26,8 +26,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12_000);
       try {
-        const res = await fetch(inventoryApiUrl('/health'));
+        const res = await fetch(inventoryApiUrl('/health'), { signal: controller.signal });
         if (!res.ok) throw new Error('health check failed');
         const data = (await res.json()) as { authRequired?: boolean };
         if (!cancelled) {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         if (!cancelled) setAuthRequired(false);
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setReady(true);
       }
     })();

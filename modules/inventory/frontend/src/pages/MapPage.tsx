@@ -32,7 +32,7 @@ export function MapPage() {
   const navigate = useNavigate();
   const root = useInventoryRoot();
   const qc = useQueryClient();
-  const { data: sites = [], isLoading } = useSitesList();
+  const { data: sites = [], isLoading, isError, error, refetch } = useSitesList();
   const { data: territoryList = [] } = useSiteTerritories();
   const { data: regionList = [] } = useSiteRegions();
   const { create } = useSiteMutations();
@@ -192,7 +192,16 @@ export function MapPage() {
       </p>
 
       <div className="min-h-0 flex-1">
-      {isLoading ? (
+      {isError ? (
+        <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-3 text-center">
+          <p className="text-sm text-red-500">
+            Could not load sites{error instanceof Error && error.message ? `: ${error.message}` : ''}.
+          </p>
+          <button type="button" className="btn-primary text-sm" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="flex h-full min-h-[12rem] items-center justify-center">
           <LoadingSpinner />
         </div>

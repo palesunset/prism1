@@ -9,19 +9,85 @@ import { csvUpload, readUploadedFileBuffer } from '../utils/csvMulter.js';
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
 const upload = csvUpload;
-function siteEquipmentRouterTypes(siteId) {
+
+function statsFromAggregateRow(row = {}) {
+  const total = row.total_ports || 0;
+  const used = row.utilized_ports || 0;
+  const pct = total > 0 ? (used / total) * 100 : 0;
+  const slotTotal = row.slot_count || 0;
+  const slotUsed = row.utilized_slot_count || 0;
+  const slotPct = slotTotal > 0 ? (slotUsed / slotTotal) * 100 : 0;
+  return {
+    equipment_count: row.equipment_count || 0,
+    line_slot_count: row.line_slot_count || 0,
+    slot_count: slotTotal,
+    utilized_slot_count: slotUsed,
+    free_slot_count: slotTotal - slotUsed,
+    slot_utilization_pct: Math.round(slotPct * 10) / 10,
+    total_ports: total,
+    utilized_ports: used,
+    free_ports: total - used,
+    utilization_pct: Math.round(pct * 10) / 10,
+  };
+}
+
+const EMPTY_SITE_STATS = statsFromAggregateRow({});
+
+/** One grouped query for all sites (avoids N+1 timeouts on serverless Postgres). */
+function aggregateSiteStatsBySiteId(vendor) {
+  const v = (vendor || '').toString().trim();
+  const hasVendor = v.length > 0;
   const rows = db
     .prepare(
-      `SELECT DISTINCT TRIM(router_type) AS router_type
-       FROM equipment
-       WHERE site_id = ?
-         AND router_type IS NOT NULL
-         AND TRIM(router_type) != ''
-       ORDER BY router_type`
+      `
+    SELECT e.site_id,
+      COUNT(DISTINCT e.id) AS equipment_count,
+      COUNT(DISTINCT s.id) AS line_slot_count,
+      COUNT(DISTINCT b.id) AS slot_count,
+      COUNT(DISTINCT p.id) AS total_ports,
+      COUNT(DISTINCT CASE WHEN p.is_utilized = 1 THEN p.id END) AS utilized_ports,
+      COUNT(DISTINCT CASE WHEN b.is_utilized = 1 THEN b.id END) AS utilized_slot_count
+    FROM equipment e
+    LEFT JOIN slots s ON s.equipment_id = e.id
+    LEFT JOIN ports p ON p.slot_id = s.id
+    LEFT JOIN equipment_bays b ON b.equipment_id = e.id
+    WHERE 1=1
+      ${hasVendor ? 'AND LOWER(TRIM(e.vendor)) = LOWER(TRIM(?))' : ''}
+    GROUP BY e.site_id
+  `,
     )
-    .all(siteId);
-  const types = rows.map((r) => r.router_type).filter(Boolean);
-  return types.length ? types.join(',') : null;
+    .all(...(hasVendor ? [v] : []));
+
+  const map = new Map();
+  for (const row of rows) {
+    map.set(row.site_id, statsFromAggregateRow(row));
+  }
+  return map;
+}
+
+function aggregateSiteRouterTypesBySiteId() {
+  const rows = db
+    .prepare(
+      `
+    SELECT site_id, GROUP_CONCAT(DISTINCT TRIM(router_type)) AS router_types_raw
+    FROM equipment
+    WHERE router_type IS NOT NULL AND TRIM(router_type) != ''
+    GROUP BY site_id
+  `,
+    )
+    .all();
+
+  const map = new Map();
+  for (const row of rows) {
+    const types = (row.router_types_raw || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .sort()
+      .join(',');
+    map.set(row.site_id, types || null);
+  }
+  return map;
 }
 
 function equipmentStatsForSite(siteId, vendor) {
@@ -46,27 +112,10 @@ function equipmentStatsForSite(siteId, vendor) {
     LEFT JOIN equipment_bays b ON b.equipment_id = e.id
     WHERE e.site_id = ?
       ${hasVendor ? 'AND LOWER(TRIM(e.vendor)) = LOWER(TRIM(?))' : ''}
-  `
+  `,
       )
       .get(...(hasVendor ? [siteId, v] : [siteId])) || {};
-  const total = row.total_ports || 0;
-  const used = row.utilized_ports || 0;
-  const pct = total > 0 ? (used / total) * 100 : 0;
-  const slotTotal = row.slot_count || 0;
-  const slotUsed = row.utilized_slot_count || 0;
-  const slotPct = slotTotal > 0 ? (slotUsed / slotTotal) * 100 : 0;
-  return {
-    equipment_count: row.equipment_count || 0,
-    line_slot_count: row.line_slot_count || 0,
-    slot_count: slotTotal,
-    utilized_slot_count: slotUsed,
-    free_slot_count: slotTotal - slotUsed,
-    slot_utilization_pct: Math.round(slotPct * 10) / 10,
-    total_ports: total,
-    utilized_ports: used,
-    free_ports: total - used,
-    utilization_pct: Math.round(pct * 10) / 10,
-  };
+  return statsFromAggregateRow(row);
 }
 
 function siteTerritoryValue(s) {
@@ -115,15 +164,18 @@ router.get('/', (req, res) => {
     );
   }
 
+  const statsBySite = aggregateSiteStatsBySiteId(vendor);
+  const routerTypesBySite = aggregateSiteRouterTypesBySiteId();
+
   const withStats = sites.map((s) => {
-    const stats = equipmentStatsForSite(s.id, vendor);
+    const stats = statsBySite.get(s.id) || EMPTY_SITE_STATS;
     return {
       ...s,
       equipment_count: stats.equipment_count,
       total_ports: stats.total_ports,
       utilized_ports: stats.utilized_ports,
       utilization_pct: stats.utilization_pct,
-      equipment_router_types: siteEquipmentRouterTypes(s.id),
+      equipment_router_types: routerTypesBySite.get(s.id) ?? null,
     };
   });
 
@@ -286,8 +338,10 @@ router.get('/summary', (req, res) => {
         (s.address && s.address.toLowerCase().includes(q))
     );
   }
+  const statsBySite = aggregateSiteStatsBySiteId(vendor);
+  const routerTypesBySite = aggregateSiteRouterTypesBySiteId();
   const rows = sites.map((s) => {
-    const stats = equipmentStatsForSite(s.id, vendor);
+    const stats = statsBySite.get(s.id) || EMPTY_SITE_STATS;
     return {
       id: s.id,
       name: s.name,
@@ -299,7 +353,7 @@ router.get('/summary', (req, res) => {
       total_ports: stats.total_ports,
       utilized_ports: stats.utilized_ports,
       utilization_pct: stats.utilization_pct,
-      equipment_router_types: siteEquipmentRouterTypes(s.id),
+      equipment_router_types: routerTypesBySite.get(s.id) ?? null,
     };
   });
   res.json(rows);

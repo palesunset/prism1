@@ -15,6 +15,7 @@ import { inventoryApiBase, inventoryApiUrl } from '@/services/inventoryApiBase';
 const api = axios.create({
   baseURL: inventoryApiBase(),
   headers: { 'Content-Type': 'application/json' },
+  timeout: 45_000,
 });
 
 api.interceptors.request.use((config) => {
