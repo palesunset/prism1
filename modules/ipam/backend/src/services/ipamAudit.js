@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import db, { isPostgresMode } from '../db/index.js';
 
 if (!isPostgresMode()) {
-  db.exec(`
+  await db.exec(`
 CREATE TABLE IF NOT EXISTS ip_audit (
   id TEXT PRIMARY KEY,
   action TEXT NOT NULL,
@@ -16,8 +16,8 @@ CREATE INDEX IF NOT EXISTS idx_ip_audit_created ON ip_audit(created_at DESC);
 `);
 }
 
-export function logAudit(action, recordId, address, details = {}) {
-  db.prepare(
+export async function logAudit(action, recordId, address, details = {}) {
+  await db.prepare(
     `INSERT INTO ip_audit (id, action, record_id, address, details) VALUES (?, ?, ?, ?, ?)`,
   ).run(randomUUID(), action, recordId ?? null, address ?? null, JSON.stringify(details));
 }
@@ -31,8 +31,8 @@ function parseAuditDetails(raw) {
   }
 }
 
-export function listAudit(limit = 100) {
-  const rows = db
+export async function listAudit(limit = 100) {
+  const rows = await db
     .prepare(`SELECT * FROM ip_audit ORDER BY created_at DESC LIMIT ?`)
     .all(Math.min(limit, 500));
   return rows.map((row) => ({

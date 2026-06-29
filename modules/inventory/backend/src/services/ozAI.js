@@ -467,16 +467,16 @@ function coerceInventoryTotalCountSql(sql, userMessage) {
   return sql;
 }
 
-function debugLogRouterTypesInDb() {
+async function debugLogRouterTypesInDb() {
   if (!process.env.DEBUG_OZ) return;
   try {
-    const rawTypes = db
+    const rawTypes = await db
       .prepare(
         `SELECT TRIM(router_type) AS router_type, COUNT(*) AS count
          FROM equipment
          WHERE router_type IS NOT NULL AND TRIM(router_type) != ''
          GROUP BY TRIM(router_type)
-         ORDER BY count DESC`
+         ORDER BY count DESC`,
       )
       .all();
     console.log('Oz DEBUG distinct TRIM(router_type) in DB:', rawTypes);
@@ -488,11 +488,11 @@ function debugLogRouterTypesInDb() {
 /**
  * Execute a validated SQL query and return structured results.
  */
-function executeSqlQuery(sql, userMessage = '') {
+async function executeSqlQuery(sql, userMessage = '') {
   try {
     validateSqlQuery(sql);
     const trimmed = sql.trim();
-    if (process.env.DEBUG_OZ) debugLogRouterTypesInDb();
+    if (process.env.DEBUG_OZ) await debugLogRouterTypesInDb();
     const dePhantom = normalizePhantomTypeColumnToRouterType(trimmed);
     if (process.env.DEBUG_OZ && dePhantom !== trimmed) {
       console.log('Oz SQL .type → .router_type:\n  before:', trimmed, '\n  after: ', dePhantom);
@@ -508,7 +508,7 @@ function executeSqlQuery(sql, userMessage = '') {
     validateSqlQuery(coerced);
     const bounded = ensureSelectLimit(coerced, 50, 500);
     if (process.env.DEBUG_OZ) console.log('Oz SQL (final):', bounded);
-    const data = db.prepare(bounded).all();
+    const data = await db.prepare(bounded).all();
     return { success: true, rowCount: data.length, data };
   } catch (error) {
     console.error('Oz SQL error:', error?.message || error);
@@ -1194,12 +1194,12 @@ function enrichInventoryFollowUpPrompt(trimmed, prevUser) {
   return t;
 }
 
-function runIntentOrSql(userMessage) {
-  const intent = tryInventoryIntent(userMessage);
+async function runIntentOrSql(userMessage) {
+  const intent = await tryInventoryIntent(userMessage);
   if (!intent) return null;
   if (intent.type === 'direct') return intent.response;
   if (intent.type === 'sql') {
-    const results = executeSqlQuery(intent.sql, userMessage);
+    const results = await executeSqlQuery(intent.sql, userMessage);
     return formatSqlResults(results, userMessage);
   }
   return null;
@@ -1218,7 +1218,7 @@ export async function processOzQuery(userMessage, conversationHistory = []) {
     return "I'm here to help with your network inventory! What would you like to know?";
   }
 
-  const intentAnswer = runIntentOrSql(trimmed);
+  const intentAnswer = await runIntentOrSql(trimmed);
   if (intentAnswer) return intentAnswer;
 
   if (!fs.existsSync(modelPath())) {
@@ -1245,7 +1245,7 @@ export async function processOzQuery(userMessage, conversationHistory = []) {
       contextSize: 4096,
       flashAttention: false,
     });
-    const systemPromptWithContext = `${SYSTEM_PROMPT}\n\n${buildInventoryContextBlock()}`;
+    const systemPromptWithContext = `${SYSTEM_PROMPT}\n\n${await buildInventoryContextBlock()}`;
     session = new LlamaChatSession({
       contextSequence: context.getSequence(),
       systemPrompt: systemPromptWithContext,
@@ -1273,7 +1273,7 @@ export async function processOzQuery(userMessage, conversationHistory = []) {
 
       const sql = extractSqlJsonRobust(lastResponse);
       if (sql) {
-        const results = executeSqlQuery(sql, trimmed);
+        const results = await executeSqlQuery(sql, trimmed);
         if (results.success) return formatSqlResults(results, formatContext);
         lastSqlError = results.error || 'Unknown SQL error';
         if (attempt === 2) return formatSqlResults(results, formatContext);
@@ -1313,14 +1313,14 @@ export async function processOzQuery(userMessage, conversationHistory = []) {
 }
 
 /** Test helpers — golden-question suite (no LLM). */
-export function resolveOzIntent(userMessage) {
-  return tryInventoryIntent(userMessage);
+export async function resolveOzIntent(userMessage) {
+  return await tryInventoryIntent(userMessage);
 }
 
-export function runOzIntentAnswer(userMessage) {
-  return runIntentOrSql(userMessage);
+export async function runOzIntentAnswer(userMessage) {
+  return await runIntentOrSql(userMessage);
 }
 
-export function runOzSql(sql, userMessage = '') {
-  return executeSqlQuery(sql, userMessage);
+export async function runOzSql(sql, userMessage = '') {
+  return await executeSqlQuery(sql, userMessage);
 }

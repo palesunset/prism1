@@ -13,20 +13,20 @@ import { escapeCsvCell } from '../middleware/security.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultDbPath = process.env.IPAM_DB_PATH || path.join(__dirname, '..', '..', 'ipam.db');
 
-export function exportBackupBundle() {
+export async function exportBackupBundle() {
   return {
     exported_at: new Date().toISOString(),
     schema_version: SCHEMA_VERSION,
-    records: listRecords(),
-    workflows: listWorkflows(),
-    workflow_history: listAllWorkflowHistory(5000),
-    audit: listAudit(5000),
-    settings: listSettings(),
-    analytics: buildAnalytics(),
+    records: await listRecords(),
+    workflows: await listWorkflows(),
+    workflow_history: await listAllWorkflowHistory(5000),
+    audit: await listAudit(5000),
+    settings: await listSettings(),
+    analytics: await buildAnalytics(),
   };
 }
 
-export function createDatabaseBackupFile() {
+export async function createDatabaseBackupFile() {
   if (!fs.existsSync(defaultDbPath)) {
     return { error: 'Database file not found.' };
   }
@@ -35,21 +35,21 @@ export function createDatabaseBackupFile() {
   fs.mkdirSync(backupDir, { recursive: true });
   const dest = path.join(backupDir, `ipam-${stamp}.db`);
   fs.copyFileSync(defaultDbPath, dest);
-  logAudit('backup', null, dest, { type: 'sqlite_file' });
+  await logAudit('backup', null, dest, { type: 'sqlite_file' });
   return { path: dest, filename: path.basename(dest) };
 }
 
-export function restoreFromBackupBundle(bundle) {
+export async function restoreFromBackupBundle(bundle) {
   if (!bundle?.records || !Array.isArray(bundle.records)) {
     return { error: 'Invalid backup bundle: records array required.' };
   }
 
-  db.exec('BEGIN');
+  await db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM ip_workflow_log').run();
-    db.prepare('DELETE FROM ip_workflows').run();
-    db.prepare('DELETE FROM ip_audit').run();
-    db.prepare('DELETE FROM ip_records').run();
+    await db.prepare('DELETE FROM ip_workflow_log').run();
+    await db.prepare('DELETE FROM ip_workflows').run();
+    await db.prepare('DELETE FROM ip_audit').run();
+    await db.prepare('DELETE FROM ip_records').run();
 
     const insertRecord = db.prepare(`
       INSERT INTO ip_records (
@@ -61,7 +61,7 @@ export function restoreFromBackupBundle(bundle) {
     `);
 
     for (const r of bundle.records) {
-      insertRecord.run(
+      await insertRecord.run(
         r.id,
         r.address,
         r.record_type,
@@ -95,7 +95,7 @@ export function restoreFromBackupBundle(bundle) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const w of bundle.workflows) {
-        insertWf.run(
+        await insertWf.run(
           w.id,
           w.address,
           w.record_type,
@@ -121,7 +121,7 @@ export function restoreFromBackupBundle(bundle) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const e of bundle.workflow_history) {
-        insertLog.run(
+        await insertLog.run(
           e.id,
           e.workflow_id,
           e.from_state ?? null,
@@ -140,7 +140,7 @@ export function restoreFromBackupBundle(bundle) {
         VALUES (?, ?, ?, ?, ?, ?)
       `);
       for (const e of bundle.audit) {
-        insertAudit.run(
+        await insertAudit.run(
           e.id,
           e.action,
           e.record_id ?? null,
@@ -153,15 +153,15 @@ export function restoreFromBackupBundle(bundle) {
 
     if (Array.isArray(bundle.settings)) {
       for (const s of bundle.settings) {
-        db.prepare(
+        await db.prepare(
           `INSERT INTO ip_settings (key, value) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         ).run(s.key, s.value);
       }
     }
 
-    db.exec('COMMIT');
-    logAudit('restore', null, null, {
+    await db.exec('COMMIT');
+    await logAudit('restore', null, null, {
       records: bundle.records.length,
       workflows: bundle.workflows?.length ?? 0,
       workflow_history: bundle.workflow_history?.length ?? 0,
@@ -174,13 +174,13 @@ export function restoreFromBackupBundle(bundle) {
       audit: bundle.audit?.length ?? 0,
     };
   } catch (e) {
-    db.exec('ROLLBACK');
+    await db.exec('ROLLBACK');
     return { error: String(e?.message ?? e) };
   }
 }
 
-export function exportUnifiedAuditCsv() {
-  const registry = listAudit(2000).map((e) => ({
+export async function exportUnifiedAuditCsv() {
+  const registry = (await listAudit(2000)).map((e) => ({
     source: 'registry',
     at: e.created_at,
     action: e.action,
@@ -188,7 +188,7 @@ export function exportUnifiedAuditCsv() {
     address: e.address,
     details: JSON.stringify(e.details ?? {}),
   }));
-  const workflow = listAllWorkflowHistory(2000).map((e) => ({
+  const workflow = (await listAllWorkflowHistory(2000)).map((e) => ({
     source: 'workflow',
     at: e.created_at,
     action: e.action,

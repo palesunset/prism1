@@ -5,8 +5,8 @@ import {
   rowHasCompleteEquipment,
 } from './equipmentImport.js';
 
-export function processCombinedImport(rows) {
-  const existing = db.prepare('SELECT id, plaid FROM sites').all();
+export async function processCombinedImport(rows) {
+  const existing = await db.prepare('SELECT id, plaid FROM sites').all();
   const existingByPlaid = new Map(existing.map((r) => [r.plaid, r]));
   const serialsBySite = new Map();
   const batchSerialsBySite = new Map();
@@ -16,13 +16,12 @@ export function processCombinedImport(rows) {
   const errors = [];
   const batchIps = new Set();
 
-  function getSerialSets(siteId) {
+  async function getSerialSets(siteId) {
     if (!serialsBySite.has(siteId)) {
       const existingSerials = new Set(
-        db
+        (await db
           .prepare('SELECT serial_number FROM equipment WHERE site_id = ?')
-          .all(siteId)
-          .map((r) => r.serial_number)
+          .all(siteId)).map((r) => r.serial_number),
       );
       serialsBySite.set(siteId, existingSerials);
     }
@@ -53,9 +52,9 @@ export function processCombinedImport(rows) {
     if (!siteRow) {
       const id = newId();
       try {
-        db.prepare(
+        await db.prepare(
           `INSERT INTO sites (id, name, plaid, area, territory, region, address, lat, lng)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           id,
           siteNorm.name,
@@ -65,14 +64,14 @@ export function processCombinedImport(rows) {
           siteNorm.region,
           siteNorm.address ?? null,
           siteNorm.lat,
-          siteNorm.lng
+          siteNorm.lng,
         );
         siteRow = { id, plaid: siteNorm.plaid };
         existingByPlaid.set(siteNorm.plaid, siteRow);
         sitesAdded++;
       } catch (e) {
         if (isUniqueConstraintError(e)) {
-          siteRow = db.prepare('SELECT id, plaid FROM sites WHERE plaid = ?').get(siteNorm.plaid);
+          siteRow = await db.prepare('SELECT id, plaid FROM sites WHERE plaid = ?').get(siteNorm.plaid);
           if (siteRow) existingByPlaid.set(siteNorm.plaid, siteRow);
           else {
             errors.push(importRowError(line, `Duplicate PLAID: ${siteNorm.plaid}`, siteParsed));
@@ -87,8 +86,8 @@ export function processCombinedImport(rows) {
 
     if (!hasCompleteEquipment) continue;
 
-    const { existing, batch } = getSerialSets(siteRow.id);
-    const result = importEquipmentFromParsed(siteRow.id, equipParsed, existing, batch, batchIps);
+    const { existing, batch } = await getSerialSets(siteRow.id);
+    const result = await importEquipmentFromParsed(siteRow.id, equipParsed, existing, batch, batchIps);
     if (result.ok) {
       equipmentAdded++;
     } else {

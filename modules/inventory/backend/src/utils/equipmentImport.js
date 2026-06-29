@@ -183,7 +183,7 @@ export function validateEquipmentRow(parsed) {
   return null;
 }
 
-export function importEquipmentFromParsed(siteId, parsed, existingSerials, batchSerials, batchIps = new Set()) {
+export async function importEquipmentFromParsed(siteId, parsed, existingSerials, batchSerials, batchIps = new Set()) {
   const validationError = validateEquipmentRow(parsed);
   if (validationError) return { ok: false, error: validationError };
 
@@ -195,7 +195,7 @@ export function importEquipmentFromParsed(siteId, parsed, existingSerials, batch
     if (batchIps.has(parsed.ip_address)) {
       return { ok: false, error: `Duplicate IP address in import: ${parsed.ip_address}` };
     }
-    const dupes = findDuplicateIpEquipment(parsed.ip_address);
+    const dupes = await findDuplicateIpEquipment(parsed.ip_address);
     if (dupes.length > 0) {
       return {
         ok: false,
@@ -213,22 +213,22 @@ export function importEquipmentFromParsed(siteId, parsed, existingSerials, batch
 
   const insertEq = db.prepare(
     `INSERT INTO equipment (id, site_id, vendor, model, network_element, serial_number, router_type, end_of_life, status, rack_position, chassis_slot_count, ip_address, software_version, descriptor_version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertBay = db.prepare(
     `INSERT INTO equipment_bays (id, equipment_id, slot_index, label, is_utilized, created_at, updated_at)
-     VALUES (?, ?, ?, '', ?, datetime('now'), datetime('now'))`
+     VALUES (?, ?, ?, '', ?, datetime('now'), datetime('now'))`,
   );
   const insertSlot = db.prepare(
-    `INSERT INTO slots (id, equipment_id, slot_name, total_ports) VALUES (?, ?, ?, ?)`
+    `INSERT INTO slots (id, equipment_id, slot_name, total_ports) VALUES (?, ?, ?, ?)`,
   );
   const insertPort = db.prepare(
-    `INSERT INTO ports (id, slot_id, port_number, is_utilized, description) VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO ports (id, slot_id, port_number, is_utilized, description) VALUES (?, ?, ?, ?, ?)`,
   );
 
   try {
-    db.exec('BEGIN IMMEDIATE');
-    insertEq.run(
+    await db.exec('BEGIN IMMEDIATE');
+    await insertEq.run(
       id,
       siteId,
       parsed.vendor,
@@ -242,32 +242,32 @@ export function importEquipmentFromParsed(siteId, parsed, existingSerials, batch
       chassisN != null ? chassisN : null,
       parsed.ip_address ?? null,
       parsed.software_version ?? null,
-      parsed.descriptor_version ?? null
+      parsed.descriptor_version ?? null,
     );
     if (chassisN != null && chassisN > 0 && chassisRes.flags && chassisRes.flags.length === chassisN) {
       for (let idx = 1; idx <= chassisN; idx++) {
         const utilized = chassisRes.flags[idx - 1] ? 1 : 0;
-        insertBay.run(newId(), id, idx, utilized);
+        await insertBay.run(newId(), id, idx, utilized);
       }
     }
     if (portsRes.total != null && portsRes.flags && portsRes.descriptions) {
       const slotName = (parsed.port_slot_name || '').trim() || 'Main';
       const slotId = newId();
-      insertSlot.run(slotId, id, slotName, portsRes.total);
+      await insertSlot.run(slotId, id, slotName, portsRes.total);
       for (let pn = 1; pn <= portsRes.total; pn++) {
         const utilized = portsRes.flags[pn - 1] ? 1 : 0;
         const desc = portsRes.descriptions[pn - 1] != null ? String(portsRes.descriptions[pn - 1]) : '';
-        insertPort.run(newId(), slotId, pn, utilized, desc);
+        await insertPort.run(newId(), slotId, pn, utilized, desc);
       }
     }
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
     existingSerials.add(parsed.serial_number);
     batchSerials.add(parsed.serial_number);
     if (parsed.ip_address) batchIps.add(parsed.ip_address);
     return { ok: true };
   } catch (e) {
     try {
-      db.exec('ROLLBACK');
+      await db.exec('ROLLBACK');
     } catch {
       /* ignore */
     }

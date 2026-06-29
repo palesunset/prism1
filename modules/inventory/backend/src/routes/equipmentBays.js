@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { newId } from '../utils/helpers.js';
+import { promisifyRouter } from 'prism-db/expressAsync.js';
 
 const router = Router();
 
@@ -9,20 +10,19 @@ function asInt(v) {
   return Number.isInteger(n) ? n : null;
 }
 
-function getEquipment(id) {
-  return db.prepare('SELECT * FROM equipment WHERE id = ?').get(id);
+async function getEquipment(id) {
+  return await db.prepare('SELECT * FROM equipment WHERE id = ?').get(id);
 }
 
-function baysForEquipment(equipmentId) {
-  return db
+async function baysForEquipment(equipmentId) {
+  return (await db
     .prepare(
       `SELECT id, equipment_id, slot_index, label, is_utilized, created_at, updated_at
        FROM equipment_bays
        WHERE equipment_id = ?
-       ORDER BY slot_index`
+       ORDER BY slot_index`,
     )
-    .all(equipmentId)
-    .map((b) => ({ ...b, is_utilized: Boolean(b.is_utilized) }));
+    .all(equipmentId)).map((b) => ({ ...b, is_utilized: Boolean(b.is_utilized) }));
 }
 
 function baysSummary(bays) {
@@ -31,13 +31,13 @@ function baysSummary(bays) {
   return { total, utilized, free: total - utilized };
 }
 
-function initOrResizeBays(equipmentId, totalSlots) {
+async function initOrResizeBays(equipmentId, totalSlots) {
   const n = asInt(totalSlots);
   if (n == null || n < 0 || n > 10_000) {
     return { ok: false, error: 'total_slots must be an integer between 0 and 10000' };
   }
 
-  const existing = baysForEquipment(equipmentId);
+  const existing = await baysForEquipment(equipmentId);
   const current = existing.length;
 
   if (n === current) return { ok: true };
@@ -45,22 +45,22 @@ function initOrResizeBays(equipmentId, totalSlots) {
   if (n > current) {
     const insert = db.prepare(
       `INSERT INTO equipment_bays (id, equipment_id, slot_index, label, is_utilized, created_at, updated_at)
-       VALUES (?, ?, ?, '', 0, datetime('now'), datetime('now'))`
+       VALUES (?, ?, ?, '', 0, datetime('now'), datetime('now'))`,
     );
-    db.exec('BEGIN IMMEDIATE');
+    await db.exec('BEGIN IMMEDIATE');
     try {
       for (let idx = current + 1; idx <= n; idx++) {
-        insert.run(newId(), equipmentId, idx);
+        await insert.run(newId(), equipmentId, idx);
       }
-      db.prepare('UPDATE equipment SET chassis_slot_count = ?, updated_at = datetime(\'now\') WHERE id = ?').run(
+      await db.prepare('UPDATE equipment SET chassis_slot_count = ?, updated_at = datetime(\'now\') WHERE id = ?').run(
         n,
-        equipmentId
+        equipmentId,
       );
-      db.exec('COMMIT');
+      await db.exec('COMMIT');
       return { ok: true };
     } catch (e) {
       try {
-        db.exec('ROLLBACK');
+        await db.exec('ROLLBACK');
       } catch {
         /* ignore */
       }
@@ -68,7 +68,6 @@ function initOrResizeBays(equipmentId, totalSlots) {
     }
   }
 
-  // Shrinking: ensure the removed range has no utilized bays.
   const toRemove = existing.filter((b) => b.slot_index > n);
   const utilizedInRemoved = toRemove.filter((b) => b.is_utilized);
   if (utilizedInRemoved.length) {
@@ -80,18 +79,18 @@ function initOrResizeBays(equipmentId, totalSlots) {
   }
 
   const del = db.prepare('DELETE FROM equipment_bays WHERE equipment_id = ? AND slot_index > ?');
-  db.exec('BEGIN IMMEDIATE');
+  await db.exec('BEGIN IMMEDIATE');
   try {
-    del.run(equipmentId, n);
-    db.prepare('UPDATE equipment SET chassis_slot_count = ?, updated_at = datetime(\'now\') WHERE id = ?').run(
+    await del.run(equipmentId, n);
+    await db.prepare('UPDATE equipment SET chassis_slot_count = ?, updated_at = datetime(\'now\') WHERE id = ?').run(
       n,
-      equipmentId
+      equipmentId,
     );
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
     return { ok: true };
   } catch (e) {
     try {
-      db.exec('ROLLBACK');
+      await db.exec('ROLLBACK');
     } catch {
       /* ignore */
     }
@@ -99,42 +98,42 @@ function initOrResizeBays(equipmentId, totalSlots) {
   }
 }
 
-router.post('/equipment/:id/bays/init', (req, res) => {
+router.post('/equipment/:id/bays/init', async (req, res) => {
   const equipmentId = req.params.id;
-  const eq = getEquipment(equipmentId);
+  const eq = await getEquipment(equipmentId);
   if (!eq) return res.status(404).json({ error: 'Equipment not found' });
 
   const n = req.body?.total_slots ?? req.body?.chassis_slot_count ?? req.body?.slots ?? null;
-  const r = initOrResizeBays(equipmentId, n);
+  const r = await initOrResizeBays(equipmentId, n);
   if (!r.ok) return res.status(400).json({ error: r.error });
 
-  const bays = baysForEquipment(equipmentId);
+  const bays = await baysForEquipment(equipmentId);
   return res.json({ equipment_id: equipmentId, bays, summary: baysSummary(bays) });
 });
 
-router.get('/equipment/:id/bays', (req, res) => {
+router.get('/equipment/:id/bays', async (req, res) => {
   const equipmentId = req.params.id;
-  const eq = getEquipment(equipmentId);
+  const eq = await getEquipment(equipmentId);
   if (!eq) return res.status(404).json({ error: 'Equipment not found' });
-  const bays = baysForEquipment(equipmentId);
+  const bays = await baysForEquipment(equipmentId);
   return res.json({ equipment_id: equipmentId, bays, summary: baysSummary(bays) });
 });
 
-router.patch('/equipment/:id/bays/resize', (req, res) => {
+router.patch('/equipment/:id/bays/resize', async (req, res) => {
   const equipmentId = req.params.id;
-  const eq = getEquipment(equipmentId);
+  const eq = await getEquipment(equipmentId);
   if (!eq) return res.status(404).json({ error: 'Equipment not found' });
 
-  const r = initOrResizeBays(equipmentId, req.body?.total_slots);
+  const r = await initOrResizeBays(equipmentId, req.body?.total_slots);
   if (!r.ok) return res.status(400).json({ error: r.error });
 
-  const bays = baysForEquipment(equipmentId);
+  const bays = await baysForEquipment(equipmentId);
   return res.json({ equipment_id: equipmentId, bays, summary: baysSummary(bays) });
 });
 
-router.patch('/equipment-bays/:bayId', (req, res) => {
+router.patch('/equipment-bays/:bayId', async (req, res) => {
   const bayId = req.params.bayId;
-  const bay = db.prepare('SELECT * FROM equipment_bays WHERE id = ?').get(bayId);
+  const bay = await db.prepare('SELECT * FROM equipment_bays WHERE id = ?').get(bayId);
   if (!bay) return res.status(404).json({ error: 'Bay not found' });
 
   const label = req.body?.label;
@@ -155,10 +154,11 @@ router.patch('/equipment-bays/:bayId', (req, res) => {
   sets.push("updated_at = datetime('now')");
   params.push(bayId);
 
-  db.prepare(`UPDATE equipment_bays SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-  const updated = db.prepare('SELECT * FROM equipment_bays WHERE id = ?').get(bayId);
+  await db.prepare(`UPDATE equipment_bays SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  const updated = await db.prepare('SELECT * FROM equipment_bays WHERE id = ?').get(bayId);
   res.json({ ...updated, is_utilized: Boolean(updated.is_utilized) });
 });
 
-export default router;
+promisifyRouter(router);
 
+export default router;

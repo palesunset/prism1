@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import db from '../db/index.js';
+import { promisifyRouter } from 'prism-db/expressAsync.js';
 
 const router = Router();
 
@@ -33,7 +34,7 @@ function rowToNote(row) {
   };
 }
 
-function touchNote(id, fields) {
+async function touchNote(id, fields) {
   const sets = [];
   const values = [];
   for (const [key, value] of Object.entries(fields)) {
@@ -43,16 +44,16 @@ function touchNote(id, fields) {
   }
   sets.push("updated_at = datetime('now')");
   values.push(id);
-  db.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  await db.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 }
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'prism-notes' });
 });
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const archived = req.query.archived === 'true' ? 1 : req.query.archived === 'false' ? 0 : 0;
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT * FROM notes
        WHERE archived = ?
@@ -62,11 +63,11 @@ router.get('/', (req, res) => {
   res.json({ notes: rows.map(rowToNote) });
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const body = req.body ?? {};
   const id = randomUUID();
   const items = body.items != null ? JSON.stringify(body.items) : null;
-  db.prepare(
+  await db.prepare(
     `INSERT INTO notes (id, title, content, items, note_type, color, label, pinned, archived, due_date, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
   ).run(
@@ -81,12 +82,12 @@ router.post('/', (req, res) => {
     body.due_date ?? null,
     Number.isFinite(body.sort_order) ? body.sort_order : 0,
   );
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(id);
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(id);
   res.status(201).json(rowToNote(row));
 });
 
-router.get('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   if (!row) {
     res.status(404).json({ detail: 'Note not found' });
     return;
@@ -94,8 +95,8 @@ router.get('/:id', (req, res) => {
   res.json(rowToNote(row));
 });
 
-router.put('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+router.put('/:id', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   if (!row) {
     res.status(404).json({ detail: 'Note not found' });
     return;
@@ -112,13 +113,13 @@ router.put('/:id', (req, res) => {
   if (body.archived !== undefined) fields.archived = body.archived ? 1 : 0;
   if (body.due_date !== undefined) fields.due_date = body.due_date;
   if (body.sort_order !== undefined) fields.sort_order = body.sort_order;
-  touchNote(req.params.id, fields);
-  const updated = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+  await touchNote(req.params.id, fields);
+  const updated = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   res.json(rowToNote(updated));
 });
 
-router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM notes WHERE id = ?').run(req.params.id);
+router.delete('/:id', async (req, res) => {
+  const result = await db.prepare('DELETE FROM notes WHERE id = ?').run(req.params.id);
   if (result.changes === 0) {
     res.status(404).json({ detail: 'Note not found' });
     return;
@@ -126,30 +127,30 @@ router.delete('/:id', (req, res) => {
   res.status(204).send();
 });
 
-router.post('/:id/pin', (req, res) => {
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+router.post('/:id/pin', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   if (!row) {
     res.status(404).json({ detail: 'Note not found' });
     return;
   }
-  touchNote(req.params.id, { pinned: row.pinned ? 0 : 1 });
-  const updated = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+  await touchNote(req.params.id, { pinned: row.pinned ? 0 : 1 });
+  const updated = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   res.json(rowToNote(updated));
 });
 
-router.post('/:id/archive', (req, res) => {
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+router.post('/:id/archive', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   if (!row) {
     res.status(404).json({ detail: 'Note not found' });
     return;
   }
-  touchNote(req.params.id, { archived: row.archived ? 0 : 1 });
-  const updated = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+  await touchNote(req.params.id, { archived: row.archived ? 0 : 1 });
+  const updated = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   res.json(rowToNote(updated));
 });
 
-router.post('/:id/items/:index/toggle', (req, res) => {
-  const row = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+router.post('/:id/items/:index/toggle', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   if (!row) {
     res.status(404).json({ detail: 'Note not found' });
     return;
@@ -161,9 +162,11 @@ router.post('/:id/items/:index/toggle', (req, res) => {
     return;
   }
   items[index] = { ...items[index], done: !items[index]?.done };
-  touchNote(req.params.id, { items: JSON.stringify(items) });
-  const updated = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+  await touchNote(req.params.id, { items: JSON.stringify(items) });
+  const updated = await db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
   res.json(rowToNote(updated));
 });
+
+promisifyRouter(router);
 
 export default router;

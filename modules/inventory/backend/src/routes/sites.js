@@ -6,6 +6,8 @@ import { parseUploadCsvBuffer } from '../utils/csvUpload.js';
 import { getRateLimiters, escapeCsvCell } from '../middleware/security.js';
 import { csvUpload, readUploadedFileBuffer } from '../utils/csvMulter.js';
 
+import { promisifyRouter } from 'prism-db/expressAsync.js';
+
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
 const upload = csvUpload;
@@ -34,10 +36,10 @@ function statsFromAggregateRow(row = {}) {
 const EMPTY_SITE_STATS = statsFromAggregateRow({});
 
 /** One grouped query for all sites (avoids N+1 timeouts on serverless Postgres). */
-function aggregateSiteStatsBySiteId(vendor) {
+async function aggregateSiteStatsBySiteId(vendor) {
   const v = (vendor || '').toString().trim();
   const hasVendor = v.length > 0;
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT e.site_id,
@@ -65,8 +67,8 @@ function aggregateSiteStatsBySiteId(vendor) {
   return map;
 }
 
-function aggregateSiteRouterTypesBySiteId() {
-  const rows = db
+async function aggregateSiteRouterTypesBySiteId() {
+  const rows = await db
     .prepare(
       `
     SELECT site_id, GROUP_CONCAT(DISTINCT TRIM(router_type)) AS router_types_raw
@@ -90,15 +92,12 @@ function aggregateSiteRouterTypesBySiteId() {
   return map;
 }
 
-function equipmentStatsForSite(siteId, vendor) {
+async function equipmentStatsForSite(siteId, vendor) {
   const v = (vendor || '').toString().trim();
   const hasVendor = v.length > 0;
-  // Joining bays and ports in one rowset multiplies rows (each port × each bay). Use DISTINCT on
-  // port ids so totals/utilized counts stay correct; slot_count remains chassis bay rows (b.id).
-  const row =
-    db
-      .prepare(
-        `
+  const row = (await db
+    .prepare(
+      `
     SELECT
       COUNT(DISTINCT e.id) AS equipment_count,
       COUNT(DISTINCT s.id) AS line_slot_count,
@@ -113,8 +112,8 @@ function equipmentStatsForSite(siteId, vendor) {
     WHERE e.site_id = ?
       ${hasVendor ? 'AND LOWER(TRIM(e.vendor)) = LOWER(TRIM(?))' : ''}
   `,
-      )
-      .get(...(hasVendor ? [siteId, v] : [siteId])) || {};
+    )
+    .get(...(hasVendor ? [siteId, v] : [siteId]))) || {};
   return statsFromAggregateRow(row);
 }
 
@@ -124,7 +123,7 @@ function siteTerritoryValue(s) {
   return (s.area || '').toString();
 }
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const q = (req.query.q || req.query.search || '').toString().trim().toLowerCase();
   const vendor = (req.query.vendor || '').toString().trim();
   const territory = (req.query.territory || '').toString().trim();
@@ -142,7 +141,7 @@ router.get('/', (req, res) => {
   }
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  let sites = db
+  let sites = await db
     .prepare(
       `SELECT s.*,
         (SELECT COUNT(*) FROM equipment e WHERE e.site_id = s.id) AS equipment_count
@@ -164,8 +163,8 @@ router.get('/', (req, res) => {
     );
   }
 
-  const statsBySite = aggregateSiteStatsBySiteId(vendor);
-  const routerTypesBySite = aggregateSiteRouterTypesBySiteId();
+  const statsBySite = await aggregateSiteStatsBySiteId(vendor);
+  const routerTypesBySite = await aggregateSiteRouterTypesBySiteId();
 
   const withStats = sites.map((s) => {
     const stats = statsBySite.get(s.id) || EMPTY_SITE_STATS;
@@ -182,8 +181,8 @@ router.get('/', (req, res) => {
   res.json(withStats);
 });
 
-router.get('/territories', (req, res) => {
-  const rows = db
+router.get('/territories', async (req, res) => {
+  const rows = await db
     .prepare(
       `SELECT DISTINCT COALESCE(NULLIF(TRIM(territory), ''), area) AS t
        FROM sites
@@ -195,8 +194,8 @@ router.get('/territories', (req, res) => {
   res.json(rows.map((r) => r.t));
 });
 
-router.get('/regions', (req, res) => {
-  const rows = db
+router.get('/regions', async (req, res) => {
+  const rows = await db
     .prepare(
       `SELECT DISTINCT region FROM sites WHERE region IS NOT NULL AND TRIM(region) != '' ORDER BY region`
     )
@@ -204,7 +203,7 @@ router.get('/regions', (req, res) => {
   res.json(rows.map((r) => r.region));
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name, plaid, area, territory, region, address, lat, lng } = req.body || {};
   const territoryVal = (territory != null && String(territory).trim() !== '' ? String(territory).trim() : null) || area;
   const nameNorm = normalizeSiteName(name);
@@ -221,7 +220,7 @@ router.post('/', (req, res) => {
   }
   const id = newId();
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO sites (id, name, plaid, area, territory, region, address, lat, lng)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(id, nameNorm, plaid, territoryVal, territoryVal, region, address ?? null, latN, lngN);
@@ -231,7 +230,7 @@ router.post('/', (req, res) => {
     }
     throw e;
   }
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
+  const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
   res.status(201).json(site);
 });
 
@@ -241,7 +240,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
     return res.status(400).json({ error: 'CSV file is required (field name: file)' });
   }
 
-  const existing = db.prepare('SELECT id, plaid FROM sites').all();
+  const existing = await db.prepare('SELECT id, plaid FROM sites').all();
   const existingPlaids = new Set(existing.map((r) => r.plaid));
   const existingByPlaid = new Map(existing.map((r) => [r.plaid, r]));
 
@@ -274,7 +273,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
     batchPlaids.add(norm.plaid);
     const id = newId();
     try {
-      db.prepare(
+      await db.prepare(
         `INSERT INTO sites (id, name, plaid, area, territory, region, address, lat, lng)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
@@ -316,17 +315,17 @@ router.post('/import/combined', uploadLimiter, upload.single('file'), async (req
     }
 
     const rows = await parseUploadCsvBuffer(fileBuffer);
-    const result = processCombinedImport(rows);
+    const result = await processCombinedImport(rows);
     res.json(result);
   } catch (e) {
     next(e);
   }
 });
 
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   const q = (req.query.q || '').toString().trim().toLowerCase();
   const vendor = (req.query.vendor || '').toString().trim();
-  let sites = db.prepare('SELECT * FROM sites ORDER BY name').all();
+  let sites = await db.prepare('SELECT * FROM sites ORDER BY name').all();
   if (q) {
     sites = sites.filter(
       (s) =>
@@ -338,8 +337,8 @@ router.get('/summary', (req, res) => {
         (s.address && s.address.toLowerCase().includes(q))
     );
   }
-  const statsBySite = aggregateSiteStatsBySiteId(vendor);
-  const routerTypesBySite = aggregateSiteRouterTypesBySiteId();
+  const statsBySite = await aggregateSiteStatsBySiteId(vendor);
+  const routerTypesBySite = await aggregateSiteRouterTypesBySiteId();
   const rows = sites.map((s) => {
     const stats = statsBySite.get(s.id) || EMPTY_SITE_STATS;
     return {
@@ -359,14 +358,14 @@ router.get('/summary', (req, res) => {
   res.json(rows);
 });
 
-router.get('/:id/export', (req, res) => {
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+router.get('/:id/export', async (req, res) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   if (!site) return res.status(404).json({ error: 'Site not found' });
   const vendor = (req.query.vendor || '').toString().trim();
   const v = vendor;
   const hasVendor = v.length > 0;
 
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT e.*,
@@ -436,12 +435,12 @@ router.get('/:id/export', (req, res) => {
   res.send(csv);
 });
 
-router.get('/:id', (req, res) => {
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   if (!site) return res.status(404).json({ error: 'Site not found' });
   const vendor = (req.query.vendor || '').toString().trim();
 
-  const equipment = db
+  const equipment = await db
     .prepare(
       `
     SELECT e.*,
@@ -471,7 +470,7 @@ router.get('/:id', (req, res) => {
     };
   });
 
-  const siteStats = equipmentStatsForSite(site.id, vendor);
+  const siteStats = await equipmentStatsForSite(site.id, vendor);
   res.json({
     site,
     equipment: eqMapped,
@@ -479,8 +478,8 @@ router.get('/:id', (req, res) => {
   });
 });
 
-router.patch('/:id', (req, res) => {
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+router.patch('/:id', async (req, res) => {
+  const site = await db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   if (!site) return res.status(404).json({ error: 'Site not found' });
 
   const { name, plaid, area, territory, region, address, lat, lng } = req.body || {};
@@ -541,7 +540,7 @@ router.patch('/:id', (req, res) => {
   vals.push(req.params.id);
 
   try {
-    db.prepare(`UPDATE sites SET ${updates.join(', ')} WHERE id = ?`).run(...vals);
+    await db.prepare(`UPDATE sites SET ${updates.join(', ')} WHERE id = ?`).run(...vals);
   } catch (e) {
     if (isUniqueConstraintError(e)) {
       return res.status(400).json({ error: 'PLAID must be unique' });
@@ -549,14 +548,18 @@ router.patch('/:id', (req, res) => {
     throw e;
   }
 
-  const updated = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+  const updated = await db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
   res.json(updated);
 });
 
-router.delete('/:id', (req, res) => {
-  const r = runWithFtsRecovery(() => db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id));
+router.delete('/:id', async (req, res) => {
+  const r = await runWithFtsRecovery(async () =>
+    await db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id),
+  );
   if (r.changes === 0) return res.status(404).json({ error: 'Site not found' });
   res.status(204).send();
 });
+
+promisifyRouter(router);
 
 export default router;

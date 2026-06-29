@@ -7,18 +7,18 @@ function territoryExpr(alias) {
 
 /**
  * @param {string} identifier
- * @returns {object | null}
+ * @returns {Promise<object | null>}
  */
-export function fuzzySearchSite(identifier) {
+export async function fuzzySearchSite(identifier) {
   if (!identifier || !String(identifier).trim()) return null;
   const raw = String(identifier).trim();
   const low = raw.toLowerCase();
 
-  let site = db
+  let site = await db
     .prepare(
       `SELECT * FROM sites
        WHERE name = ? OR plaid = ? OR LOWER(name) = ? OR LOWER(plaid) = ?
-          OR ${territoryExpr()} = ? OR LOWER(${territoryExpr()}) = LOWER(?)`
+          OR ${territoryExpr()} = ? OR LOWER(${territoryExpr()}) = LOWER(?)`,
     )
     .get(raw, raw, low, low, raw, raw);
 
@@ -27,20 +27,20 @@ export function fuzzySearchSite(identifier) {
   try {
     const token = raw.replace(/"/g, '""').replace(/\s+/g, ' ');
     const match = token.includes(' ') ? token.split(' ').map((t) => `"${t}"*`).join(' OR ') : `"${token}"*`;
-    const rows = db.prepare(`SELECT rowid FROM sites_fts WHERE sites_fts MATCH ? LIMIT 5`).all(match);
+    const rows = await db.prepare(`SELECT rowid FROM sites_fts WHERE sites_fts MATCH ? LIMIT 5`).all(match);
     if (rows.length > 0) {
-      site = db.prepare('SELECT * FROM sites WHERE rowid = ?').get(rows[0].rowid);
+      site = await db.prepare('SELECT * FROM sites WHERE rowid = ?').get(rows[0].rowid);
       if (site) return site;
     }
   } catch {
     /* FTS not ready or bad MATCH */
   }
 
-  site = db
+  site = await db
     .prepare(
       `SELECT * FROM sites
        WHERE LOWER(name) LIKE ? OR LOWER(plaid) LIKE ? OR LOWER(${territoryExpr()}) LIKE ?
-       LIMIT 1`
+       LIMIT 1`,
     )
     .get(`%${low}%`, `%${low}%`, `%${low}%`);
 
@@ -49,19 +49,19 @@ export function fuzzySearchSite(identifier) {
 
 /**
  * @param {string} searchTerm
- * @returns {object[]}
+ * @returns {Promise<object[]>}
  */
-export function fuzzySearchEquipment(searchTerm) {
+export async function fuzzySearchEquipment(searchTerm) {
   if (!searchTerm || !String(searchTerm).trim()) return [];
   const q = `%${String(searchTerm).trim().toLowerCase()}%`;
-  return db
+  return await db
     .prepare(
       `SELECT e.*, s.name AS site_name
        FROM equipment e
        JOIN sites s ON e.site_id = s.id
        WHERE LOWER(e.vendor) LIKE ? OR LOWER(e.model) LIKE ? OR LOWER(e.serial_number) LIKE ?
           OR LOWER(COALESCE(e.router_type, '')) LIKE ?
-       LIMIT 20`
+       LIMIT 20`,
     )
     .all(q, q, q, q);
 }

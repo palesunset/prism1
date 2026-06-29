@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 
+import { promisifyRouter } from 'prism-db/expressAsync.js';
+
 const router = Router();
 
 /** @typedef {{ areas: string[], regions: string[], from: string, to: string, siteIds: string[], vendors: string[], routerTypes: string[] }} Filters */
@@ -138,7 +140,7 @@ function activityRangeSQL(alias, f) {
   return { clause: parts.length ? `AND ${parts.join(' AND ')}` : '', params };
 }
 
-router.get('/kpis', (req, res) => {
+router.get('/kpis', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vf = vendorWhereSQL(f, 'e');
@@ -155,13 +157,12 @@ router.get('/kpis', (req, res) => {
     : `SELECT COUNT(*) AS c FROM sites s WHERE 1=1 ${sf.clause}`;
 
   const sitesRow = needsEquipJoin
-    ? db.prepare(sitesSql).get(...sf.params, ...vf.params, ...rf.params)
-    : db.prepare(sitesSql).get(...sf.params);
+    ? await db.prepare(sitesSql).get(...sf.params, ...vf.params, ...rf.params)
+    : await db.prepare(sitesSql).get(...sf.params);
 
-  const row =
-    db
-      .prepare(
-        `
+  const row = (await db
+    .prepare(
+      `
     SELECT
       COUNT(DISTINCT e.id) AS total_equipment,
       COUNT(p.id) AS total_ports,
@@ -177,9 +178,9 @@ router.get('/kpis', (req, res) => {
     LEFT JOIN slots sl ON sl.equipment_id = e.id
     LEFT JOIN ports p ON p.slot_id = sl.id
     WHERE 1=1 ${sf.clause} ${vf.clause} ${rf.clause}
-  `
-      )
-      .get(...sf.params, ...vf.params, ...rf.params) || {};
+  `,
+    )
+    .get(...sf.params, ...vf.params, ...rf.params)) || {};
 
   const totalPorts = row.total_ports || 0;
   const utilized = row.utilized_ports || 0;
@@ -188,7 +189,7 @@ router.get('/kpis', (req, res) => {
   let equipmentAddedInRange = null;
   if (f.from || f.to) {
     const arOnly = activityRangeSQL('e.created_at', f);
-    const r2 = db
+    const r2 = await db
       .prepare(
         `
       SELECT COUNT(*) AS c
@@ -201,7 +202,7 @@ router.get('/kpis', (req, res) => {
     equipmentAddedInRange = r2.c || 0;
   }
 
-  const spark = db
+  const spark = await db
     .prepare(
       `
     SELECT strftime('%Y-%m', e.created_at) AS month, COUNT(*) AS equipment
@@ -215,7 +216,7 @@ router.get('/kpis', (req, res) => {
     )
     .all(...sf.params, ...vf.params, ...rf.params);
 
-  const prev = db
+  const prev = await db
     .prepare(
       `
     SELECT COUNT(*) AS c
@@ -227,7 +228,7 @@ router.get('/kpis', (req, res) => {
   `
     )
     .get(...sf.params, ...vf.params, ...rf.params);
-  const last30 = db
+  const last30 = await db
     .prepare(
       `
     SELECT COUNT(*) AS c
@@ -258,12 +259,12 @@ router.get('/kpis', (req, res) => {
   });
 });
 
-router.get('/vendor-distribution', (req, res) => {
+router.get('/vendor-distribution', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vf = vendorWhereSQL(f, 'e');
   const rf = routerTypeWhereSQL(f, 'e');
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT TRIM(e.vendor) AS name, COUNT(*) AS count
@@ -293,12 +294,12 @@ router.get('/vendor-distribution', (req, res) => {
   res.json({ vendors });
 });
 
-router.get('/status-distribution', (req, res) => {
+router.get('/status-distribution', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vf = vendorWhereSQL(f, 'e');
   const rf = routerTypeWhereSQL(f, 'e');
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT COALESCE(NULLIF(TRIM(e.status), ''), 'Active') AS status, COUNT(*) AS count
@@ -314,14 +315,14 @@ router.get('/status-distribution', (req, res) => {
   res.json({ statuses: rows.map((r) => ({ status: r.status, count: r.count || 0 })) });
 });
 
-router.get('/site-utilization', (req, res) => {
+router.get('/site-utilization', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vj = vendorJoinOnSQL(f, 'e');
   const rj = routerTypeJoinOnSQL(f, 'e');
   const sort = trimLower(req.query.sort) || 'util_desc';
 
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT
@@ -362,14 +363,14 @@ router.get('/site-utilization', (req, res) => {
   res.json({ sites: mapped });
 });
 
-router.get('/equipment-utilization', (req, res) => {
+router.get('/equipment-utilization', async (req, res) => {
   const f = parseFilters(req);
   const siteId = trimLower(req.query.site_id);
   if (!siteId) {
     return res.json({ equipment: [], siteId: null, siteName: null });
   }
 
-  const site = db.prepare('SELECT id, name FROM sites WHERE id = ?').get(siteId);
+  const site = await db.prepare('SELECT id, name FROM sites WHERE id = ?').get(siteId);
   if (!site) {
     return res.status(404).json({ error: 'Site not found' });
   }
@@ -379,7 +380,7 @@ router.get('/equipment-utilization', (req, res) => {
   const rf = routerTypeWhereSQL(f, 'e');
   const sort = trimLower(req.query.sort) || 'util_desc';
 
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT
@@ -431,12 +432,12 @@ router.get('/equipment-utilization', (req, res) => {
   res.json({ equipment: mapped, siteId: site.id, siteName: site.name });
 });
 
-router.get('/area-region-breakdown', (req, res) => {
+router.get('/area-region-breakdown', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vj = vendorJoinOnSQL(f, 'e');
   const rj = routerTypeJoinOnSQL(f, 'e');
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT s.area, s.region, COUNT(e.id) AS equipment_count
@@ -477,7 +478,7 @@ router.get('/area-region-breakdown', (req, res) => {
   });
 });
 
-router.get('/eol-timeline', (req, res) => {
+router.get('/eol-timeline', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vf = vendorWhereSQL(f, 'e');
@@ -492,8 +493,9 @@ router.get('/eol-timeline', (req, res) => {
   }
 
   let cum = 0;
-  const points = months.map((m) => {
-    const hit = db
+  const points = [];
+  for (const m of months) {
+    const hit = await db
       .prepare(
         `
       SELECT COUNT(*) AS c
@@ -502,23 +504,23 @@ router.get('/eol-timeline', (req, res) => {
       WHERE e.end_of_life IS NOT NULL AND TRIM(e.end_of_life) != ''
         AND strftime('%Y-%m', e.end_of_life) = ?
         ${sf.clause} ${vf.clause} ${rf.clause}
-    `
+    `,
       )
       .get(m.key, ...sf.params, ...vf.params, ...rf.params);
     const count = hit.c || 0;
     cum += count;
-    return { month: m.key, label: m.label, count, cumulative: cum };
-  });
+    points.push({ month: m.key, label: m.label, count, cumulative: cum });
+  }
 
   res.json({ points });
 });
 
-router.get('/top-sites', (req, res) => {
+router.get('/top-sites', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vj = vendorJoinOnSQL(f, 'e');
   const rj = routerTypeJoinOnSQL(f, 'e');
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT s.id, s.name, COUNT(e.id) AS equipment_count
@@ -535,7 +537,7 @@ router.get('/top-sites', (req, res) => {
   res.json({ sites: rows.map((r) => ({ id: r.id, name: r.name, equipmentCount: r.equipment_count || 0 })) });
 });
 
-router.get('/recent-activity', (req, res) => {
+router.get('/recent-activity', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const vf = vendorWhereSQL(f, 'e');
@@ -588,7 +590,7 @@ router.get('/recent-activity', (req, res) => {
     LIMIT 20
   `;
 
-  const rows = db
+  const rows = await db
     .prepare(sql)
     .all(
       ...sf.params,
@@ -614,12 +616,12 @@ router.get('/recent-activity', (req, res) => {
   });
 });
 
-router.get('/sites-overview', (req, res) => {
+router.get('/sites-overview', async (req, res) => {
   const f = parseFilters(req);
   const sf = siteFilterSQL('s', f);
   const q = trimLower(req.query.q).toLowerCase();
 
-  let sites = db.prepare(`SELECT * FROM sites s WHERE 1=1 ${sf.clause} ORDER BY s.name`).all(...sf.params);
+  let sites = await db.prepare(`SELECT * FROM sites s WHERE 1=1 ${sf.clause} ORDER BY s.name`).all(...sf.params);
 
   if (q) {
     sites = sites.filter(
@@ -634,8 +636,9 @@ router.get('/sites-overview', (req, res) => {
 
   const vf = vendorWhereSQL(f, 'e');
   const rf = routerTypeWhereSQL(f, 'e');
-  const rows = sites.map((s) => {
-    const stats = db
+  const rows = [];
+  for (const s of sites) {
+    const stats = await db
       .prepare(
         `
       SELECT
@@ -646,7 +649,7 @@ router.get('/sites-overview', (req, res) => {
       LEFT JOIN slots sl ON sl.equipment_id = e.id
       LEFT JOIN ports p ON p.slot_id = sl.id
       WHERE e.site_id = ? ${vf.clause} ${rf.clause}
-    `
+    `,
       )
       .get(s.id, ...vf.params, ...rf.params);
     const total = stats.total_ports || 0;
@@ -655,7 +658,7 @@ router.get('/sites-overview', (req, res) => {
     const eq = stats.equipment_count || 0;
     const operationalStatus =
       eq > 0 ? 'Active' : f.vendors?.length ? 'No match' : 'Inactive';
-    return {
+    rows.push({
       id: s.id,
       name: s.name,
       plaid: s.plaid,
@@ -667,10 +670,12 @@ router.get('/sites-overview', (req, res) => {
       utilized_ports: used,
       utilization_pct: pct,
       operational_status: operationalStatus,
-    };
-  });
+    });
+  }
 
   res.json({ sites: rows });
 });
+
+promisifyRouter(router);
 
 export default router;

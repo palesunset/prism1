@@ -5,8 +5,8 @@ import { hostInSubnet, rangesOverlapRecords, recordFamily } from '../lib/ipRange
 import { listAudit } from './ipamAudit.js';
 import { getUtilizationAlertPercent } from './ipamSettings.js';
 
-export function scanAllConflicts(recordsInput = null) {
-  const records = recordsInput ?? listRecords();
+export async function scanAllConflicts(recordsInput = null) {
+  const records = recordsInput ?? (await listRecords());
   const issues = [];
   const hostByKey = new Map();
 
@@ -81,11 +81,11 @@ function incrementV6Hex(hex) {
   return n.toString(16).padStart(32, '0');
 }
 
-export function getSubnetDetail(id) {
-  const subnet = getRecord(id);
+export async function getSubnetDetail(id) {
+  const subnet = await getRecord(id);
   if (!subnet || subnet.record_type !== 'subnet') return { error: 'Subnet not found' };
 
-  const all = listRecords();
+  const all = await listRecords();
   const hosts = all.filter((r) => r.record_type === 'host' && hostInSubnet(subnet, r));
   const childSubnets = all.filter((r) => {
     if (r.id === subnet.id || r.record_type !== 'subnet') return false;
@@ -97,7 +97,7 @@ export function getSubnetDetail(id) {
     return inside && (r.parent_subnet_id === subnet.id || !r.parent_subnet_id);
   });
   const bounds = usableBounds(subnet);
-  const freeRanges = computeFreeRanges(subnet, all);
+  const freeRanges = await computeFreeRanges(subnet, all);
 
   let usableRange = null;
   if (bounds.first != null) {
@@ -113,12 +113,12 @@ export function getSubnetDetail(id) {
     childSubnets,
     usableRange,
     freeRanges,
-    nextSuggestedIp: suggestNextIpInSubnet(subnet, all),
+    nextSuggestedIp: await suggestNextIpInSubnet(subnet, all),
   };
 }
 
-export function computeFreeRanges(subnet, allRecords = null) {
-  const records = allRecords ?? listRecords();
+export async function computeFreeRanges(subnet, allRecords = null) {
+  const records = allRecords ?? (await listRecords());
   const bounds = usableBounds(subnet);
   if (bounds.first == null) return [];
 
@@ -238,21 +238,21 @@ function suggestNextIpv6InSubnet(subnet, records) {
   return null;
 }
 
-export function suggestNextIpInSubnet(subnet, allRecords = null) {
-  const records = allRecords ?? listRecords();
+export async function suggestNextIpInSubnet(subnet, allRecords = null) {
+  const records = allRecords ?? (await listRecords());
   if (recordFamily(subnet) === 'ipv6') {
     return suggestNextIpv6InSubnet(subnet, records);
   }
 
-  const freeRanges = computeFreeRanges(subnet, records);
+  const freeRanges = await computeFreeRanges(subnet, records);
   if (freeRanges.length === 0) return null;
   return freeRanges[0].start;
 }
 
-export function buildAnalytics(options = {}) {
+export async function buildAnalytics(options = {}) {
   const includeConflictScan = Boolean(options.includeConflictScan);
-  const records = options.records ?? listRecords();
-  const subnets = options.dashboard ?? buildDashboard(records);
+  const records = options.records ?? (await listRecords());
+  const subnets = options.dashboard ?? (await buildDashboard(records));
   const hosts = records.filter((r) => r.record_type === 'host');
   const subnetRecords = records.filter((r) => r.record_type === 'subnet');
 
@@ -285,9 +285,9 @@ export function buildAnalytics(options = {}) {
       : null;
 
   const conflictScan = includeConflictScan
-    ? scanAllConflicts(records)
+    ? await scanAllConflicts(records)
     : { scannedAt: new Date().toISOString(), count: 0, issues: [] };
-  const alertPercent = getUtilizationAlertPercent();
+  const alertPercent = await getUtilizationAlertPercent();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -314,12 +314,12 @@ export function buildAnalytics(options = {}) {
     byProject: [...projectMap.values()].sort((a, b) => b.records - a.records),
     subnetSummaries: subnets,
     openConflicts: conflictScan.count,
-    recentAudit: listAudit(15),
+    recentAudit: await listAudit(15),
   };
 }
 
-export function buildUtilizationReport() {
-  const analytics = buildAnalytics({ includeConflictScan: true });
+export async function buildUtilizationReport() {
+  const analytics = await buildAnalytics({ includeConflictScan: true });
   const lines = [
     'PRISM Mini IPAM — Utilization Report',
     `Generated: ${analytics.generatedAt}`,

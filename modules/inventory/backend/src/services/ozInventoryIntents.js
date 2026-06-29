@@ -80,33 +80,30 @@ function parseRouterTypeToken(text) {
   return null;
 }
 
-function listRegions() {
-  return db
+async function listRegions() {
+  return (await db
     .prepare(
-      `SELECT DISTINCT TRIM(region) AS region FROM sites WHERE region IS NOT NULL AND TRIM(region) != '' ORDER BY region`
+      `SELECT DISTINCT TRIM(region) AS region FROM sites WHERE region IS NOT NULL AND TRIM(region) != '' ORDER BY region`,
     )
-    .all()
-    .map((r) => r.region);
+    .all()).map((r) => r.region);
 }
 
-function listTerritories() {
-  return db
+async function listTerritories() {
+  return (await db
     .prepare(
       `SELECT DISTINCT TRIM(COALESCE(NULLIF(TRIM(territory), ''), area)) AS t
        FROM sites WHERE TRIM(COALESCE(NULLIF(TRIM(territory), ''), area)) != ''
-       ORDER BY t`
+       ORDER BY t`,
     )
-    .all()
-    .map((r) => r.t);
+    .all()).map((r) => r.t);
 }
 
-function listVendors() {
-  return db
+async function listVendors() {
+  return (await db
     .prepare(
-      `SELECT DISTINCT TRIM(vendor) AS vendor FROM equipment WHERE TRIM(vendor) != '' ORDER BY LOWER(vendor)`
+      `SELECT DISTINCT TRIM(vendor) AS vendor FROM equipment WHERE TRIM(vendor) != '' ORDER BY LOWER(vendor)`,
     )
-    .all()
-    .map((r) => r.vendor);
+    .all()).map((r) => r.vendor);
 }
 
 function findInList(text, items) {
@@ -120,11 +117,11 @@ function findInList(text, items) {
   return null;
 }
 
-function findSite(text) {
+async function findSite(text) {
   const q = String(text || '').trim();
   if (!q) return null;
   const lq = q.toLowerCase();
-  const sites = db
+  const sites = await db
     .prepare(`SELECT id, name, plaid, area, region, territory FROM sites ORDER BY LENGTH(name) DESC`)
     .all();
   const plaidExact = sites.find((s) => String(s.plaid || '').trim().toLowerCase() === lq);
@@ -142,19 +139,18 @@ function sqlLit(s) {
   return `'${String(s ?? '').replace(/'/g, "''")}'`;
 }
 
-export function buildInventoryContextBlock() {
-  const siteCount = db.prepare('SELECT COUNT(*) AS c FROM sites').get()?.c ?? 0;
-  const equipCount = db.prepare('SELECT COUNT(*) AS c FROM equipment').get()?.c ?? 0;
-  const regions = listRegions().slice(0, 12);
-  const vendors = listVendors().slice(0, 12);
-  const routerTypes = db
+export async function buildInventoryContextBlock() {
+  const siteCount = (await db.prepare('SELECT COUNT(*) AS c FROM sites').get())?.c ?? 0;
+  const equipCount = (await db.prepare('SELECT COUNT(*) AS c FROM equipment').get())?.c ?? 0;
+  const regions = (await listRegions()).slice(0, 12);
+  const vendors = (await listVendors()).slice(0, 12);
+  const routerTypes = (await db
     .prepare(
       `SELECT TRIM(router_type) AS rt, COUNT(*) AS c FROM equipment
        WHERE router_type IS NOT NULL AND TRIM(router_type) != ''
-       GROUP BY TRIM(router_type) ORDER BY c DESC LIMIT 12`
+       GROUP BY TRIM(router_type) ORDER BY c DESC LIMIT 12`,
     )
-    .all()
-    .map((r) => `${r.rt} (${r.c})`);
+    .all()).map((r) => `${r.rt} (${r.c})`);
 
   return [
     '## LIVE INVENTORY SNAPSHOT (use for filters; do not invent values)',
@@ -191,9 +187,9 @@ export function formatOzHelp() {
   ].join('\n');
 }
 
-function formatOverview() {
+async function formatOverview() {
   const row =
-    db
+    (await db
       .prepare(
         `
     SELECT
@@ -206,9 +202,9 @@ function formatOverview() {
     LEFT JOIN equipment e ON e.site_id = s.id
     LEFT JOIN slots sl ON sl.equipment_id = e.id
     LEFT JOIN ports p ON p.slot_id = sl.id
-  `
+  `,
       )
-      .get() || {};
+      .get()) || {};
   const total = row.port_count || 0;
   const used = row.utilized_ports || 0;
   const pct = total > 0 ? ((used / total) * 100).toFixed(1) : '0.0';
@@ -227,7 +223,7 @@ function formatOverview() {
 /**
  * @returns {{ type: 'direct', response: string } | { type: 'sql', sql: string } | null}
  */
-export function tryInventoryIntent(userMessage) {
+export async function tryInventoryIntent(userMessage) {
   const raw = String(userMessage ?? '').trim();
   if (!raw) return null;
   const t = norm(raw);
@@ -237,13 +233,13 @@ export function tryInventoryIntent(userMessage) {
   }
 
   if (/\b(overview|summary|snapshot)\b/.test(t) && !looksLikeHowMany(t)) {
-    return { type: 'direct', response: formatOverview() };
+    return { type: 'direct', response: await formatOverview() };
   }
 
-  const region = findInList(raw, listRegions());
-  const territory = findInList(raw, listTerritories());
-  const vendor = findInList(raw, listVendors());
-  const site = findSite(raw);
+  const region = findInList(raw, await listRegions());
+  const territory = findInList(raw, await listTerritories());
+  const vendor = findInList(raw, await listVendors());
+  const site = await findSite(raw);
   const rt = parseRouterTypeToken(raw);
   const statusFilter = parseStatusFilter(raw);
   const serialHint = parseSerialHint(raw);

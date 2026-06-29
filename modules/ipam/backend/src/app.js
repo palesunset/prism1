@@ -25,7 +25,7 @@ export function createIpamApp() {
   const apiKeyAuth = createApiKeyAuth(config);
   const adminActionGuard = createAdminActionGuard(config);
 
-  app.get("/api/ipam/health", (_req, res) => {
+  app.get("/api/ipam/health", async (_req, res) => {
     const payload = {
       status: "ok",
       service: "prism-ipam",
@@ -36,7 +36,7 @@ export function createIpamApp() {
     };
     if (dbDialect === "postgres" && typeof db.ping === "function") {
       try {
-        db.ping();
+        await db.ping();
         return res.json({ ...payload, db: "ok" });
       } catch (e) {
         return res.status(503).json({

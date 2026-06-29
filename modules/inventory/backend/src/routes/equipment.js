@@ -22,12 +22,14 @@ import {
   findEquipmentByIp,
 } from '../utils/ipAddress.js';
 
+import { promisifyRouter } from 'prism-db/expressAsync.js';
+
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
 const upload = csvUpload;
 
-router.get('/vendors', (req, res) => {
-  const rows = db
+router.get('/vendors', async (req, res) => {
+  const rows = await db
     .prepare(
       `SELECT DISTINCT TRIM(vendor) AS vendor FROM equipment WHERE vendor IS NOT NULL AND TRIM(vendor) != '' ORDER BY LOWER(vendor)`
     )
@@ -35,13 +37,13 @@ router.get('/vendors', (req, res) => {
   res.json(rows.map((r) => r.vendor));
 });
 
-router.get('/by-ip', (req, res) => {
+router.get('/by-ip', async (req, res) => {
   const address = String(req.query.address ?? '').trim();
   if (!address) {
     res.status(400).json({ detail: 'address query parameter is required' });
     return;
   }
-  const result = findEquipmentByIp(address);
+  const result = await findEquipmentByIp(address);
   if (!result.ok) {
     res.status(400).json({ detail: result.error });
     return;
@@ -49,8 +51,8 @@ router.get('/by-ip', (req, res) => {
   res.json({ matches: result.matches });
 });
 
-function getEquipmentUtilization(equipmentId) {
-  const row = db
+async function getEquipmentUtilization(equipmentId) {
+  const row = await db
     .prepare(
       `
     SELECT
@@ -67,7 +69,7 @@ function getEquipmentUtilization(equipmentId) {
   return { total_ports: total, utilized_ports: used, free_ports: total - used };
 }
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const {
     site_id,
     vendor,
@@ -88,7 +90,7 @@ router.post('/', (req, res) => {
   }
   const neTrim = network_element != null ? String(network_element).trim() : '';
   const network_element_value = neTrim || String(model).trim();
-  const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(site_id);
+  const site = await db.prepare('SELECT id FROM sites WHERE id = ?').get(site_id);
   if (!site) return res.status(400).json({ error: 'Invalid site_id' });
 
   const id = newId();
@@ -106,7 +108,7 @@ router.post('/', (req, res) => {
   }
   const ip = ipParsed.value;
   if (ip) {
-    const dupes = findDuplicateIpEquipment(ip);
+    const dupes = await findDuplicateIpEquipment(ip);
     if (dupes.length > 0) {
       return res.status(409).json({
         error: `IP ${ip} is already assigned to another device (${dupes[0].serial_number})`,
@@ -131,7 +133,7 @@ router.post('/', (req, res) => {
       ? null
       : String(descriptor_version).trim();
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO equipment (id, site_id, vendor, model, network_element, serial_number, router_type, end_of_life, status, rack_position, chassis_slot_count, ip_address, software_version, descriptor_version)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
@@ -159,24 +161,24 @@ router.post('/', (req, res) => {
   if (chassisN != null) {
     const insert = db.prepare(
       `INSERT INTO equipment_bays (id, equipment_id, slot_index, label, is_utilized, created_at, updated_at)
-       VALUES (?, ?, ?, '', 0, datetime('now'), datetime('now'))`
+       VALUES (?, ?, ?, '', 0, datetime('now'), datetime('now'))`,
     );
-    db.exec('BEGIN IMMEDIATE');
+    await db.exec('BEGIN IMMEDIATE');
     try {
       for (let idx = 1; idx <= chassisN; idx++) {
-        insert.run(newId(), id, idx);
+        await insert.run(newId(), id, idx);
       }
-      db.exec('COMMIT');
+      await db.exec('COMMIT');
     } catch (e) {
       try {
-        db.exec('ROLLBACK');
+        await db.exec('ROLLBACK');
       } catch {
         /* ignore */
       }
       // If bays creation fails, still return the equipment row (data is valid); user can init later.
     }
   }
-  const row = db.prepare('SELECT * FROM equipment WHERE id = ?').get(id);
+  const row = await db.prepare('SELECT * FROM equipment WHERE id = ?').get(id);
   res.status(201).json(row);
 });
 
@@ -185,7 +187,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   if (!siteId) {
     return res.status(400).json({ error: 'site_id is required' });
   }
-  const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(siteId);
+  const site = await db.prepare('SELECT id FROM sites WHERE id = ?').get(siteId);
   if (!site) return res.status(400).json({ error: 'Invalid site_id' });
   const fileBuffer = await readUploadedFileBuffer(req.file);
   if (!fileBuffer) {
@@ -193,7 +195,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   }
 
   const existingSerials = new Set(
-    db.prepare('SELECT serial_number FROM equipment WHERE site_id = ?').all(siteId).map((r) => r.serial_number)
+    (await db.prepare('SELECT serial_number FROM equipment WHERE site_id = ?').all(siteId)).map((r) => r.serial_number),
   );
   const batchIps = new Set();
 
@@ -208,7 +210,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
     const parsed = parseCsvRow(rows[i]);
     if (!rowHasEquipment(parsed)) continue;
     if (!rowHasCompleteEquipment(parsed)) continue;
-    const result = importEquipmentFromParsed(siteId, parsed, existingSerials, batchSerials, batchIps);
+    const result = await importEquipmentFromParsed(siteId, parsed, existingSerials, batchSerials, batchIps);
     if (result.ok) {
       added++;
     } else {
@@ -224,8 +226,8 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   });
 });
 
-router.patch('/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+router.patch('/:id', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Equipment not found' });
 
   const {
@@ -282,7 +284,7 @@ router.patch('/:id', (req, res) => {
       return res.status(400).json({ error: ipParsed.error });
     }
     if (ipParsed.value) {
-      const dupes = findDuplicateIpEquipment(ipParsed.value, req.params.id);
+      const dupes = await findDuplicateIpEquipment(ipParsed.value, req.params.id);
       if (dupes.length > 0) {
         return res.status(409).json({
           error: `IP ${ipParsed.value} is already assigned to another device (${dupes[0].serial_number})`,
@@ -330,7 +332,7 @@ router.patch('/:id', (req, res) => {
   vals.push(req.params.id);
 
   try {
-    db.prepare(`UPDATE equipment SET ${updates.join(', ')} WHERE id = ?`).run(...vals);
+    await db.prepare(`UPDATE equipment SET ${updates.join(', ')} WHERE id = ?`).run(...vals);
   } catch (e) {
     if (isUniqueConstraintError(e)) {
       return res.status(400).json({ error: 'Serial number must be unique within this site' });
@@ -338,15 +340,15 @@ router.patch('/:id', (req, res) => {
     throw e;
   }
 
-  const row = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+  const row = await db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
   res.json(row);
 });
 
-router.get('/:id', (req, res) => {
-  const eq = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+router.get('/:id', async (req, res) => {
+  const eq = await db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
   if (!eq) return res.status(404).json({ error: 'Equipment not found' });
 
-  const slots = db.prepare('SELECT * FROM slots WHERE equipment_id = ?').all(eq.id);
+  const slots = await db.prepare('SELECT * FROM slots WHERE equipment_id = ?').all(eq.id);
   slots.sort((a, b) => {
     const c = compareSlotDisplayOrder(a.slot_name, b.slot_name);
     if (c !== 0) return c;
@@ -356,7 +358,7 @@ router.get('/:id', (req, res) => {
   let portsBySlot = {};
   if (slotIds.length) {
     const placeholders = slotIds.map(() => '?').join(',');
-    const ports = db
+    const ports = await db
       .prepare(`SELECT * FROM ports WHERE slot_id IN (${placeholders}) ORDER BY port_number`)
       .all(...slotIds);
     portsBySlot = ports.reduce((acc, p) => {
@@ -374,7 +376,7 @@ router.get('/:id', (req, res) => {
     ports: portsBySlot[s.id] || [],
   }));
 
-  const util = getEquipmentUtilization(eq.id);
+  const util = await getEquipmentUtilization(eq.id);
   const total = util.total_ports;
   const used = util.utilized_ports;
   const pct = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
@@ -402,10 +404,14 @@ router.get('/:id', (req, res) => {
   });
 });
 
-router.delete('/:id', (req, res) => {
-  const r = runWithFtsRecovery(() => db.prepare('DELETE FROM equipment WHERE id = ?').run(req.params.id));
+router.delete('/:id', async (req, res) => {
+  const r = await runWithFtsRecovery(async () =>
+    await db.prepare('DELETE FROM equipment WHERE id = ?').run(req.params.id),
+  );
   if (r.changes === 0) return res.status(404).json({ error: 'Equipment not found' });
   res.status(204).send();
 });
+
+promisifyRouter(router);
 
 export default router;

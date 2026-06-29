@@ -5,6 +5,7 @@ import { createPrismDb, isPostgresMode } from "prism-db";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, "..", "..", "inventory.db");
 
+/** Runs on raw node:sqlite DatabaseSync during local init only. */
 function initSqliteSchema(db) {
   db.exec("PRAGMA foreign_keys = ON");
 
@@ -115,7 +116,16 @@ CREATE TABLE IF NOT EXISTS ports (
       content='equipment', content_rowid='rowid'
     );
   `);
-    ensureFtsInSync(db);
+    const siteCount = db.prepare("SELECT COUNT(*) AS c FROM sites").get()?.c ?? 0;
+    const sitesFtsCount = db.prepare("SELECT COUNT(*) AS c FROM sites_fts").get()?.c ?? 0;
+    if (siteCount !== sitesFtsCount) {
+      db.exec(`INSERT INTO sites_fts(sites_fts) VALUES('rebuild')`);
+    }
+    const eqCount = db.prepare("SELECT COUNT(*) AS c FROM equipment").get()?.c ?? 0;
+    const eqFtsCount = db.prepare("SELECT COUNT(*) AS c FROM equipment_fts").get()?.c ?? 0;
+    if (eqCount !== eqFtsCount) {
+      db.exec(`INSERT INTO equipment_fts(equipment_fts) VALUES('rebuild')`);
+    }
   } catch (e) {
     console.warn("FTS5 init skipped:", e?.message || e);
   }
@@ -128,37 +138,37 @@ export function isFtsMaintenanceError(e) {
   return /malformed|SQLITE_CORRUPT|fts5/i.test(msg);
 }
 
-export function rebuildSitesFts() {
+export async function rebuildSitesFts() {
   if (dialect !== "sqlite") return;
-  db.exec(`INSERT INTO sites_fts(sites_fts) VALUES('rebuild')`);
+  await db.exec(`INSERT INTO sites_fts(sites_fts) VALUES('rebuild')`);
 }
 
-export function rebuildEquipmentFts() {
+export async function rebuildEquipmentFts() {
   if (dialect !== "sqlite") return;
-  db.exec(`INSERT INTO equipment_fts(equipment_fts) VALUES('rebuild')`);
+  await db.exec(`INSERT INTO equipment_fts(equipment_fts) VALUES('rebuild')`);
 }
 
-export function ensureFtsInSync(activeDb = db) {
+export async function ensureFtsInSync(activeDb = db) {
   if (dialect !== "sqlite") return;
-  const siteCount = activeDb.prepare("SELECT COUNT(*) AS c FROM sites").get()?.c ?? 0;
-  const sitesFtsCount = activeDb.prepare("SELECT COUNT(*) AS c FROM sites_fts").get()?.c ?? 0;
-  if (siteCount !== sitesFtsCount) rebuildSitesFts();
+  const siteCount = (await activeDb.prepare("SELECT COUNT(*) AS c FROM sites").get())?.c ?? 0;
+  const sitesFtsCount = (await activeDb.prepare("SELECT COUNT(*) AS c FROM sites_fts").get())?.c ?? 0;
+  if (siteCount !== sitesFtsCount) await rebuildSitesFts();
 
-  const eqCount = activeDb.prepare("SELECT COUNT(*) AS c FROM equipment").get()?.c ?? 0;
-  const eqFtsCount = activeDb.prepare("SELECT COUNT(*) AS c FROM equipment_fts").get()?.c ?? 0;
-  if (eqCount !== eqFtsCount) rebuildEquipmentFts();
+  const eqCount = (await activeDb.prepare("SELECT COUNT(*) AS c FROM equipment").get())?.c ?? 0;
+  const eqFtsCount = (await activeDb.prepare("SELECT COUNT(*) AS c FROM equipment_fts").get())?.c ?? 0;
+  if (eqCount !== eqFtsCount) await rebuildEquipmentFts();
 }
 
-export function runWithFtsRecovery(fn) {
-  if (dialect !== "sqlite") return fn();
+export async function runWithFtsRecovery(fn) {
+  if (dialect !== "sqlite") return await fn();
   try {
-    return fn();
+    return await fn();
   } catch (e) {
     if (!isFtsMaintenanceError(e)) throw e;
     console.warn("FTS maintenance: rebuilding indexes after write error:", e.message);
-    rebuildSitesFts();
-    rebuildEquipmentFts();
-    return fn();
+    await rebuildSitesFts();
+    await rebuildEquipmentFts();
+    return await fn();
   }
 }
 

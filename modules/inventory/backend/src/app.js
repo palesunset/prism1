@@ -32,11 +32,9 @@ export function createInventoryApp() {
 
   if (!normalized) {
     if (!isPostgresMode()) {
-      try {
-        normalizeExistingIpAddresses();
-      } catch (e) {
+      void normalizeExistingIpAddresses().catch((e) => {
         console.warn("[inventory] IP normalize skipped:", e?.message || e);
-      }
+      });
     }
     normalized = true;
   }
@@ -63,8 +61,8 @@ export function createInventoryApp() {
   app.use(`${INVENTORY_API}/dashboard`, dashboardRouter);
   app.use(INVENTORY_API, integrityRouter);
 
-  app.get(`${INVENTORY_API}/export/equipment`, (req, res) => {
-    const rows = db
+  app.get(`${INVENTORY_API}/export/equipment`, async (req, res) => {
+    const rows = await db
       .prepare(
         `
     SELECT

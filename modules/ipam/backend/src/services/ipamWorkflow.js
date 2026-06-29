@@ -3,18 +3,18 @@ import db from '../db/index.js';
 import { deleteRecord, getRecord, insertRecord, updateRecord } from './ipamService.js';
 import { validateBeforeSave } from './ipamIntegrity.js';
 
-function runInTransaction(fn) {
-  db.exec('BEGIN');
+async function runInTransaction(fn) {
+  await db.exec('BEGIN');
   try {
-    const result = fn();
+    const result = await fn();
     if (result?.error) {
-      db.exec('ROLLBACK');
+      await db.exec('ROLLBACK');
       return result;
     }
-    db.exec('COMMIT');
+    await db.exec('COMMIT');
     return result;
   } catch (e) {
-    db.exec('ROLLBACK');
+    await db.exec('ROLLBACK');
     return { error: String(e?.message ?? e) };
   }
 }
@@ -87,14 +87,14 @@ function rowToLog(row) {
   };
 }
 
-function appendLog(workflowId, fromState, toState, action, actor, reason) {
-  db.prepare(
+async function appendLog(workflowId, fromState, toState, action, actor, reason) {
+  await db.prepare(
     `INSERT INTO ip_workflow_log (id, workflow_id, from_state, to_state, action, actor, reason)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(randomUUID(), workflowId, fromState, toState, action, actor ?? 'user', reason ?? null);
 }
 
-function transition(workflow, toState, action, actor, reason) {
+async function transition(workflow, toState, action, actor, reason) {
   const allowed = ALLOWED_TRANSITIONS[workflow.state];
   if (!allowed?.has(toState)) {
     return {
@@ -102,12 +102,12 @@ function transition(workflow, toState, action, actor, reason) {
       allowed: [...(allowed ?? [])],
     };
   }
-  db.prepare(`UPDATE ip_workflows SET state = ?, updated_at = datetime('now') WHERE id = ?`).run(
+  await db.prepare(`UPDATE ip_workflows SET state = ?, updated_at = datetime('now') WHERE id = ?`).run(
     toState,
     workflow.id,
   );
-  appendLog(workflow.id, workflow.state, toState, action, actor, reason);
-  return { workflow: getWorkflow(workflow.id) };
+  await appendLog(workflow.id, workflow.state, toState, action, actor, reason);
+  return { workflow: await getWorkflow(workflow.id) };
 }
 
 export function netlensIsValid(result) {
@@ -145,7 +145,7 @@ function workflowIsBlocked(workflow) {
   return false;
 }
 
-function syncIpamRecord(workflow, registryStatus) {
+async function syncIpamRecord(workflow, registryStatus) {
   const payload = {
     address: workflow.address,
     record_type: workflow.record_type,
@@ -157,16 +157,16 @@ function syncIpamRecord(workflow, registryStatus) {
   };
 
   if (workflow.ipam_record_id) {
-    const existing = getRecord(workflow.ipam_record_id);
+    const existing = await getRecord(workflow.ipam_record_id);
     if (existing) {
-      return updateRecord(workflow.ipam_record_id, payload);
+      return await updateRecord(workflow.ipam_record_id, payload);
     }
   }
 
   const recordId = randomUUID();
-  const result = insertRecord(recordId, payload);
+  const result = await insertRecord(recordId, payload);
   if (result.record) {
-    db.prepare(`UPDATE ip_workflows SET ipam_record_id = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    await db.prepare(`UPDATE ip_workflows SET ipam_record_id = ?, updated_at = datetime('now') WHERE id = ?`).run(
       result.record.id,
       workflow.id,
     );
@@ -174,7 +174,7 @@ function syncIpamRecord(workflow, registryStatus) {
   return result;
 }
 
-export function listWorkflows(filters = {}) {
+export async function listWorkflows(filters = {}) {
   let sql = 'SELECT * FROM ip_workflows WHERE 1=1';
   const params = [];
   if (filters.state) {
@@ -191,31 +191,29 @@ export function listWorkflows(filters = {}) {
     sql += ' LIMIT ?';
     params.push(Number(filters.limit));
   }
-  return db.prepare(sql).all(...params).map(rowToWorkflow);
+  return await db.prepare(sql).all(...params).map(rowToWorkflow);
 }
 
-export function getWorkflow(id) {
-  return rowToWorkflow(db.prepare('SELECT * FROM ip_workflows WHERE id = ?').get(id));
+export async function getWorkflow(id) {
+  return rowToWorkflow(await db.prepare('SELECT * FROM ip_workflows WHERE id = ?').get(id));
 }
 
-export function listWorkflowHistory(workflowId, limit = 100) {
-  return db
+export async function listWorkflowHistory(workflowId, limit = 100) {
+  return (await db
     .prepare(
       `SELECT * FROM ip_workflow_log WHERE workflow_id = ? ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(workflowId, limit)
-    .map(rowToLog);
+    .all(workflowId, limit)).map(rowToLog);
 }
 
-export function listAllWorkflowHistory(limit = 200) {
-  return db
+export async function listAllWorkflowHistory(limit = 200) {
+  return (await db
     .prepare(`SELECT * FROM ip_workflow_log ORDER BY created_at DESC LIMIT ?`)
-    .all(limit)
-    .map(rowToLog);
+    .all(limit)).map(rowToLog);
 }
 
-export function buildWorkflowDashboard() {
-  const workflows = listWorkflows();
+export async function buildWorkflowDashboard() {
+  const workflows = await listWorkflows();
   const queueStates = new Set(['REQUESTED', 'VALIDATED', 'PENDING_APPROVAL']);
   const activeStates = new Set(['APPROVED', 'RESERVED', 'ACTIVE', 'MODIFIED']);
 
@@ -223,7 +221,7 @@ export function buildWorkflowDashboard() {
   const activeWorkflows = workflows.filter((w) => activeStates.has(w.state));
   const blockedRequests = workflows.filter((w) => workflowIsBlocked(w));
   const rejectedRequests = workflows.filter((w) => w.state === 'REJECTED');
-  const history = listAllWorkflowHistory(150);
+  const history = await listAllWorkflowHistory(150);
   const staleDays = 7;
   const staleCutoff = Date.now() - staleDays * 86400000;
   const staleRequests = requestsQueue.filter((w) => {
@@ -255,7 +253,7 @@ export function buildWorkflowDashboard() {
   };
 }
 
-export function createWorkflowRequest(body) {
+export async function createWorkflowRequest(body) {
   const address = String(body.address ?? '').trim();
   if (!address) return { error: 'Address is required.' };
 
@@ -265,7 +263,7 @@ export function createWorkflowRequest(body) {
   }
 
   const id = randomUUID();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO ip_workflows
      (id, address, record_type, project, location, vlan, description, requester, state)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'REQUESTED')`,
@@ -279,46 +277,46 @@ export function createWorkflowRequest(body) {
     body.description ?? null,
     String(body.requester ?? 'user'),
   );
-  appendLog(id, null, 'REQUESTED', 'create', body.requester ?? 'user', body.reason ?? 'Allocation request created');
-  const workflow = getWorkflow(id);
+  await appendLog(id, null, 'REQUESTED', 'create', body.requester ?? 'user', body.reason ?? 'Allocation request created');
+  const workflow = await getWorkflow(id);
   if (body.netlens) {
-    return attachNetLensResult(id, body.netlens, body.requester ?? 'user');
+    return await attachNetLensResult(id, body.netlens, body.requester ?? 'user');
   }
   return { workflow };
 }
 
-export function attachNetLensResult(id, netlensResult, actor = 'user') {
-  const workflow = getWorkflow(id);
+export async function attachNetLensResult(id, netlensResult, actor = 'user') {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (!['REQUESTED', 'VALIDATED'].includes(workflow.state)) {
     return { error: `NetLens results can only be attached while REQUESTED or VALIDATED (current: ${workflow.state}).` };
   }
 
   const normalized = netlensResult ?? {};
-  db.prepare(
+  await db.prepare(
     `UPDATE ip_workflows SET netlens_result = ?, updated_at = datetime('now') WHERE id = ?`,
   ).run(JSON.stringify(normalized), id);
 
-  const updated = getWorkflow(id);
+  const updated = await getWorkflow(id);
   if (workflow.state === 'REQUESTED') {
-    return transition(updated, 'VALIDATED', 'attach_netlens', actor, 'NetLens validation attached');
+    return await transition(updated, 'VALIDATED', 'attach_netlens', actor, 'NetLens validation attached');
   }
 
-  appendLog(id, workflow.state, workflow.state, 'attach_netlens', actor, 'NetLens validation updated');
-  return { workflow: getWorkflow(id) };
+  await appendLog(id, workflow.state, workflow.state, 'attach_netlens', actor, 'NetLens validation updated');
+  return { workflow: await getWorkflow(id) };
 }
 
-export function submitForApproval(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function submitForApproval(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (!workflow.netlens_result) {
     return { error: 'Attach a NetLens validation result before submitting for approval.' };
   }
-  return transition(workflow, 'PENDING_APPROVAL', 'submit_approval', actor, reason ?? 'Submitted for approval');
+  return await transition(workflow, 'PENDING_APPROVAL', 'submit_approval', actor, reason ?? 'Submitted for approval');
 }
 
-export function approveWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function approveWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
 
   const nl = workflow.netlens_result;
@@ -333,25 +331,25 @@ export function approveWorkflow(id, actor = 'user', reason) {
     };
   }
 
-  const result = transition(workflow, 'APPROVED', 'approve', actor, reason ?? 'Approved for allocation');
+  const result = await transition(workflow, 'APPROVED', 'approve', actor, reason ?? 'Approved for allocation');
   if (result.error) return result;
-  return { ...result, workflow: getWorkflow(id) };
+  return { ...result, workflow: await getWorkflow(id) };
 }
 
-export function rejectWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function rejectWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (!['VALIDATED', 'PENDING_APPROVAL'].includes(workflow.state)) {
     return { error: `Reject is only allowed from VALIDATED or PENDING_APPROVAL (current: ${workflow.state}).` };
   }
-  db.prepare(
+  await db.prepare(
     `UPDATE ip_workflows SET rejected_reason = ?, override_reason = NULL, updated_at = datetime('now') WHERE id = ?`,
   ).run(reason ?? 'Request rejected', id);
-  return transition(workflow, 'REJECTED', 'reject', actor, reason ?? 'Request rejected');
+  return await transition(workflow, 'REJECTED', 'reject', actor, reason ?? 'Request rejected');
 }
 
-export function overrideWorkflow(id, actor = 'admin', reason) {
-  const workflow = getWorkflow(id);
+export async function overrideWorkflow(id, actor = 'admin', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (workflow.state !== 'PENDING_APPROVAL') {
     return { error: 'Override is only allowed while PENDING_APPROVAL.' };
@@ -360,23 +358,23 @@ export function overrideWorkflow(id, actor = 'admin', reason) {
     return { error: 'Override requires an admin reason.' };
   }
 
-  db.prepare(
+  await db.prepare(
     `UPDATE ip_workflows SET override_reason = ?, updated_at = datetime('now') WHERE id = ?`,
   ).run(reason.trim(), id);
-  appendLog(id, workflow.state, workflow.state, 'override', actor, reason.trim());
-  return { workflow: getWorkflow(id) };
+  await appendLog(id, workflow.state, workflow.state, 'override', actor, reason.trim());
+  return { workflow: await getWorkflow(id) };
 }
 
-export function applyNetLensSuggestion(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function applyNetLensSuggestion(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   const suggestion = netlensSuggestion(workflow.netlens_result);
   if (!suggestion) return { error: 'No NetLens suggestion available for this workflow.' };
 
-  db.prepare(
+  await db.prepare(
     `UPDATE ip_workflows SET address = ?, netlens_result = NULL, override_reason = NULL, state = 'REQUESTED', updated_at = datetime('now') WHERE id = ?`,
   ).run(suggestion, id);
-  appendLog(
+  await appendLog(
     id,
     workflow.state,
     'REQUESTED',
@@ -384,11 +382,11 @@ export function applyNetLensSuggestion(id, actor = 'user', reason) {
     actor,
     reason ?? `Applied NetLens suggestion: ${suggestion}`,
   );
-  return { workflow: getWorkflow(id), appliedAddress: suggestion };
+  return { workflow: await getWorkflow(id), appliedAddress: suggestion };
 }
 
-export function modifyWorkflow(id, body, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function modifyWorkflow(id, body, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
 
   const fields = [];
@@ -418,11 +416,11 @@ export function modifyWorkflow(id, body, actor = 'user', reason) {
   const nextDescription = body.description !== undefined ? body.description : workflow.description;
 
   if (fromActive) {
-    const check = validateBeforeSave(
+    const check = await validateBeforeSave(
       {
         address: nextAddress,
         record_type: workflow.record_type,
-        status: getRecord(workflow.ipam_record_id)?.status ?? 'used',
+        status: (await getRecord(workflow.ipam_record_id))?.status ?? 'used',
         project: nextProject,
         vlan: nextVlan,
         location: nextLocation,
@@ -435,94 +433,94 @@ export function modifyWorkflow(id, body, actor = 'user', reason) {
     }
   }
 
-  return runInTransaction(() => {
+  return await runInTransaction(async () => {
     if (fromActive) {
-      db.prepare(`UPDATE ip_workflows SET state = 'MODIFIED', updated_at = datetime('now') WHERE id = ?`).run(id);
-      appendLog(id, 'ACTIVE', 'MODIFIED', 'modify', actor, reason ?? 'Metadata modified');
+      await db.prepare(`UPDATE ip_workflows SET state = 'MODIFIED', updated_at = datetime('now') WHERE id = ?`).run(id);
+      await appendLog(id, 'ACTIVE', 'MODIFIED', 'modify', actor, reason ?? 'Metadata modified');
     }
 
     params.push(id);
-    db.prepare(`UPDATE ip_workflows SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
+    await db.prepare(`UPDATE ip_workflows SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
 
-    let current = getWorkflow(id);
+    let current = await getWorkflow(id);
     if (fromActive) {
-      const toActive = transition(current, 'ACTIVE', 'modify_complete', actor, reason ?? 'Modification applied');
+      const toActive = await transition(current, 'ACTIVE', 'modify_complete', actor, reason ?? 'Modification applied');
       if (toActive.error) return toActive;
       current = toActive.workflow ?? current;
 
       if (current.ipam_record_id) {
-        const ipam = syncIpamRecord(current, getRecord(current.ipam_record_id)?.status ?? 'used');
+        const ipam = await syncIpamRecord(current, (await getRecord(current.ipam_record_id))?.status ?? 'used');
         if (ipam.error) {
           return { error: ipam.error, conflicts: ipam.conflicts ?? [] };
         }
       }
     } else {
-      appendLog(id, workflow.state, workflow.state, 'modify', actor, reason ?? 'Request metadata updated');
-      current = getWorkflow(id);
+      await appendLog(id, workflow.state, workflow.state, 'modify', actor, reason ?? 'Request metadata updated');
+      current = await getWorkflow(id);
     }
 
     return { workflow: current };
   });
 }
 
-export function reserveWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function reserveWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
 
-  return runInTransaction(() => {
-    const result = transition(workflow, 'RESERVED', 'reserve', actor, reason ?? 'Reserved in registry');
+  return await runInTransaction(async () => {
+    const result = await transition(workflow, 'RESERVED', 'reserve', actor, reason ?? 'Reserved in registry');
     if (result.error) return result;
 
-    const ipam = syncIpamRecord(result.workflow, 'reserved');
+    const ipam = await syncIpamRecord(result.workflow, 'reserved');
     if (ipam.error) {
       return { error: ipam.error, conflicts: ipam.conflicts ?? [] };
     }
     return {
-      workflow: getWorkflow(id),
-      ipamRecord: ipam.record ?? getRecord(getWorkflow(id).ipam_record_id),
+      workflow: await getWorkflow(id),
+      ipamRecord: ipam.record ?? (await getRecord((await getWorkflow(id)).ipam_record_id)),
     };
   });
 }
 
-export function activateWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function activateWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (!['APPROVED', 'RESERVED', 'MODIFIED'].includes(workflow.state)) {
     return { error: 'Only APPROVED, RESERVED, or MODIFIED workflows can be activated.' };
   }
 
-  return runInTransaction(() => {
+  return await runInTransaction(async () => {
     let current = workflow;
     if (current.state === 'APPROVED' && !current.ipam_record_id) {
-      const ipam = syncIpamRecord(current, 'reserved');
+      const ipam = await syncIpamRecord(current, 'reserved');
       if (ipam.error) return { error: ipam.error, conflicts: ipam.conflicts ?? [] };
-      current = getWorkflow(id);
+      current = await getWorkflow(id);
     }
 
-    const result = transition(current, 'ACTIVE', 'activate', actor, reason ?? 'Allocation activated');
+    const result = await transition(current, 'ACTIVE', 'activate', actor, reason ?? 'Allocation activated');
     if (result.error) return result;
 
-    const ipam = syncIpamRecord(result.workflow, 'used');
+    const ipam = await syncIpamRecord(result.workflow, 'used');
     if (ipam.error) {
       return { error: ipam.error, conflicts: ipam.conflicts ?? [] };
     }
     return {
-      workflow: getWorkflow(id),
-      ipamRecord: ipam.record ?? getRecord(getWorkflow(id).ipam_record_id),
+      workflow: await getWorkflow(id),
+      ipamRecord: ipam.record ?? (await getRecord((await getWorkflow(id)).ipam_record_id)),
     };
   });
 }
 
-export function decommissionWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function decommissionWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
 
-  return runInTransaction(() => {
-    const result = transition(workflow, 'DECOMMISSIONED', 'decommission', actor, reason ?? 'Decommissioned');
+  return await runInTransaction(async () => {
+    const result = await transition(workflow, 'DECOMMISSIONED', 'decommission', actor, reason ?? 'Decommissioned');
     if (result.error) return result;
 
     if (workflow.ipam_record_id) {
-      const del = deleteRecord(workflow.ipam_record_id, { cascade: false });
+      const del = await deleteRecord(workflow.ipam_record_id, { cascade: false });
       if (!del.deleted) {
         return {
           error: del.error ?? 'Could not remove registry record.',
@@ -530,26 +528,26 @@ export function decommissionWorkflow(id, actor = 'user', reason) {
           childSubnets: del.childSubnets,
         };
       }
-      db.prepare(`UPDATE ip_workflows SET ipam_record_id = NULL, updated_at = datetime('now') WHERE id = ?`).run(id);
+      await db.prepare(`UPDATE ip_workflows SET ipam_record_id = NULL, updated_at = datetime('now') WHERE id = ?`).run(id);
     }
 
-    return { workflow: getWorkflow(id) };
+    return { workflow: await getWorkflow(id) };
   });
 }
 
-export function reopenWorkflow(id, actor = 'user', reason) {
-  const workflow = getWorkflow(id);
+export async function reopenWorkflow(id, actor = 'user', reason) {
+  const workflow = await getWorkflow(id);
   if (!workflow) return { error: 'Workflow not found' };
   if (workflow.state !== 'REJECTED') {
     return { error: 'Only REJECTED workflows can be reopened.' };
   }
-  db.prepare(
+  await db.prepare(
     `UPDATE ip_workflows SET rejected_reason = NULL, netlens_result = NULL, override_reason = NULL, updated_at = datetime('now') WHERE id = ?`,
   ).run(id);
-  return transition(getWorkflow(id), 'REQUESTED', 'reopen', actor, reason ?? 'Request reopened');
+  return await transition(await getWorkflow(id), 'REQUESTED', 'reopen', actor, reason ?? 'Request reopened');
 }
 
-export function performWorkflowAction(id, body) {
+export async function performWorkflowAction(id, body) {
   const action = body.action;
   const actor = body.actor ?? 'user';
   const reason = body.reason;
@@ -557,25 +555,25 @@ export function performWorkflowAction(id, body) {
 
   switch (action) {
     case 'submit_approval':
-      return submitForApproval(id, actor, reason);
+      return await submitForApproval(id, actor, reason);
     case 'approve':
-      return approveWorkflow(id, actor, reason);
+      return await approveWorkflow(id, actor, reason);
     case 'reject':
-      return rejectWorkflow(id, actor, reason);
+      return await rejectWorkflow(id, actor, reason);
     case 'override':
-      return overrideWorkflow(id, actor, reason);
+      return await overrideWorkflow(id, actor, reason);
     case 'apply_suggestion':
-      return applyNetLensSuggestion(id, actor, reason);
+      return await applyNetLensSuggestion(id, actor, reason);
     case 'modify':
-      return modifyWorkflow(id, payload, actor, reason);
+      return await modifyWorkflow(id, payload, actor, reason);
     case 'reserve':
-      return reserveWorkflow(id, actor, reason);
+      return await reserveWorkflow(id, actor, reason);
     case 'activate':
-      return activateWorkflow(id, actor, reason);
+      return await activateWorkflow(id, actor, reason);
     case 'decommission':
-      return decommissionWorkflow(id, actor, reason);
+      return await decommissionWorkflow(id, actor, reason);
     case 'reopen':
-      return reopenWorkflow(id, actor, reason);
+      return await reopenWorkflow(id, actor, reason);
     default:
       return { error: `Unknown workflow action: ${action}` };
   }

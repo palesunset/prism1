@@ -39,10 +39,10 @@ function addRecordIssue(map, recordId, severity, type, message) {
   else if (severity === 'warning' && entry.status !== 'conflict') entry.status = 'warning';
 }
 
-export function checkHostAssignment(parsed, records = null) {
+export async function checkHostAssignment(parsed, records = null) {
   if (parsed.family === 'ipv6') return null;
   if (parsed.recordType !== 'host' && parsed.role !== 'host') return null;
-  const all = records ?? listRecords();
+  const all = records ?? (await listRecords());
   const subnets = all.filter((r) => r.record_type === 'subnet');
   const parent = findContainingSubnet(parsed, subnets);
 
@@ -66,7 +66,7 @@ export function checkHostAssignment(parsed, records = null) {
   return null;
 }
 
-export function validateBeforeSave(body, excludeId = null) {
+export async function validateBeforeSave(body, excludeId = null) {
   const recordType = body.record_type === 'host' ? 'host' : 'subnet';
   if (recordType === 'subnet' && !String(body.address ?? '').includes('/')) {
     return {
@@ -89,10 +89,10 @@ export function validateBeforeSave(body, excludeId = null) {
     };
   }
 
-  const conflicts = detectConflicts(parsed, excludeId, { record_type: recordType, status: body.status });
+  const conflicts = await detectConflicts(parsed, excludeId, { record_type: recordType, status: body.status });
   const blocking = conflicts.filter((c) => BLOCKING_TYPES.has(c.type));
 
-  const hostRole = recordType === 'host' ? checkHostAssignment(parsed) : null;
+  const hostRole = recordType === 'host' ? await checkHostAssignment(parsed) : null;
   if (hostRole) {
     blocking.push(hostRole);
   }
@@ -113,7 +113,7 @@ export function validateBeforeSave(body, excludeId = null) {
     });
   }
 
-  const all = listRecords().filter((r) => r.id !== excludeId);
+  const all = (await listRecords()).filter((r) => r.id !== excludeId);
   if (recordType === 'host') {
     const subnets = all.filter((r) => r.record_type === 'subnet');
     const parent = findContainingSubnet(parsed, subnets);
@@ -184,11 +184,11 @@ function simulateAgainstBatch(parsed, recordType, batchEntries) {
   return issues;
 }
 
-export function simulateRecord(body, excludeId = null) {
-  return validateBeforeSave(body, excludeId);
+export async function simulateRecord(body, excludeId = null) {
+  return await validateBeforeSave(body, excludeId);
 }
 
-export function simulateVlsmImport(plan, projectName = '') {
+export async function simulateVlsmImport(plan, projectName = '') {
   if (!plan?.subnets?.length) {
     return { error: 'No subnets found in VLSM plan.' };
   }
@@ -205,7 +205,7 @@ export function simulateVlsmImport(plan, projectName = '') {
       skipped.push({ address, reasons: [parsed.error] });
       continue;
     }
-    const check = validateBeforeSave({
+    const check = await validateBeforeSave({
       address,
       record_type: 'subnet',
       status: 'reserved',
@@ -245,8 +245,8 @@ export function simulateVlsmImport(plan, projectName = '') {
   };
 }
 
-export function buildIntegrityAudit() {
-  const records = listRecords();
+export async function buildIntegrityAudit() {
+  const records = await listRecords();
   const subnets = records.filter((r) => r.record_type === 'subnet');
   const hosts = records.filter((r) => r.record_type === 'host');
   const dashboard = buildDashboard(records);
@@ -369,8 +369,8 @@ export function buildIntegrityAudit() {
   };
 }
 
-export function buildIntegrityReport() {
-  const audit = buildIntegrityAudit();
+export async function buildIntegrityReport() {
+  const audit = await buildIntegrityAudit();
   const lines = [
     'PRISM Mini IPAM — Integrity Audit Report',
     `Generated: ${audit.generatedAt}`,
@@ -397,13 +397,13 @@ export function buildIntegrityReport() {
   return { text: lines.join('\n'), audit };
 }
 
-export function runPostSaveIntegrityScan(action, recordId, address) {
+export async function runPostSaveIntegrityScan(action, recordId, address) {
   if (process.env.IPAM_FULL_INTEGRITY_SCAN !== '1') {
-    logAudit('integrity_scan', recordId, address, { action, deferred: true });
+    await logAudit('integrity_scan', recordId, address, { action, deferred: true });
     return { deferred: true };
   }
-  const audit = buildIntegrityAudit();
-  logAudit('integrity_scan', recordId, address, {
+  const audit = await buildIntegrityAudit();
+  await logAudit('integrity_scan', recordId, address, {
     action,
     healthScore: audit.summary.healthScore,
     conflicts: audit.summary.conflicts,

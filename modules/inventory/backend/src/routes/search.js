@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 
+import { promisifyRouter } from 'prism-db/expressAsync.js';
+
 const router = Router();
 
 const OLLAMA_BASE = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
@@ -212,11 +214,11 @@ export function parseCountEquipmentEolByYearQuery(raw) {
 }
 
 /** Rows for equipment with non-null EOL on or before YYYY-12-31. */
-export function equipmentWithEolOnOrBeforeYear(year) {
+export async function equipmentWithEolOnOrBeforeYear(year) {
   const y = Number(year);
   if (Number.isNaN(y) || y < 1970 || y > 2100) return [];
   const end = `${y}-12-31`;
-  return db
+  return await db
     .prepare(
       `${baseEquipmentQuery()} HAVING e.end_of_life IS NOT NULL AND e.end_of_life <= ? ORDER BY e.end_of_life, e.vendor, e.model`
     )
@@ -265,33 +267,33 @@ export function parseListEquipmentEolInYearQuery(raw) {
 }
 
 /** Rows for equipment with non-null EOL in the calendar year YYYY. */
-export function equipmentWithEolInYear(year) {
+export async function equipmentWithEolInYear(year) {
   const y = Number(year);
   if (Number.isNaN(y) || y < 1970 || y > 2100) return [];
   const start = `${y}-01-01`;
   const end = `${y}-12-31`;
-  return db
+  return await db
     .prepare(
       `${baseEquipmentQuery()} HAVING e.end_of_life IS NOT NULL AND e.end_of_life >= ? AND e.end_of_life <= ? ORDER BY e.end_of_life, e.vendor, e.model`
     )
     .all(start, end);
 }
 
-export function basicTextSearch(query) {
+export async function basicTextSearch(query) {
   const raw = (query || '').toString().trim();
   if (!raw) {
-    return db.prepare(`${baseEquipmentQuery()} ORDER BY e.vendor`).all();
+    return await db.prepare(`${baseEquipmentQuery()} ORDER BY e.vendor`).all();
   }
   const tokens = searchTokens(raw);
   if (tokens.length === 0) {
-    return db.prepare(`${baseEquipmentQuery()} ORDER BY e.vendor`).all();
+    return await db.prepare(`${baseEquipmentQuery()} ORDER BY e.vendor`).all();
   }
   const having = tokens.map(() => ROW_MATCHES_TOKEN).join(' OR ');
   const params = tokens.flatMap((t) => {
     const like = `%${t}%`;
     return [like, like, like, like, like, like, like, like, like];
   });
-  return db.prepare(`${baseEquipmentQuery()} HAVING ${having} ORDER BY e.vendor`).all(...params);
+  return await db.prepare(`${baseEquipmentQuery()} HAVING ${having} ORDER BY e.vendor`).all(...params);
 }
 
 function filterHasAnyCriteria(filter) {
@@ -305,9 +307,9 @@ function filterHasAnyCriteria(filter) {
   });
 }
 
-export function applyFilter(filter) {
+export async function applyFilter(filter) {
   if (!filter || typeof filter !== 'object') {
-    return basicTextSearch('');
+    return await basicTextSearch('');
   }
 
   let sql = baseEquipmentQuery();
@@ -368,7 +370,7 @@ export function applyFilter(filter) {
 
   sql += ' ORDER BY e.vendor';
 
-  let rows = db.prepare(sql).all(...params);
+  let rows = await db.prepare(sql).all(...params);
 
   if (minFree != null && !Number.isNaN(minFree)) {
     rows = rows.filter((r) => r.total_ports - r.utilized_ports >= minFree);
@@ -380,7 +382,7 @@ export function applyFilter(filter) {
   return rows;
 }
 
-router.post('/equipment-count', (req, res) => {
+router.post('/equipment-count', async (req, res) => {
   const query = (req.body?.query || '').toString().trim();
   if (!query) {
     return res.status(400).json({ error: 'query is required' });
@@ -394,8 +396,8 @@ router.post('/equipment-count', (req, res) => {
 
   const eolYear = parseCountEquipmentEolByYearQuery(query);
   const rows = eolYear
-    ? equipmentWithEolOnOrBeforeYear(eolYear.year)
-    : basicTextSearch(query);
+    ? await equipmentWithEolOnOrBeforeYear(eolYear.year)
+    : await basicTextSearch(query);
   const bySite = new Map();
   for (const r of rows) {
     const sid = r.site_id;
@@ -427,7 +429,7 @@ router.post('/ai-search', async (req, res) => {
   const { query } = req.body || {};
   const q = (query || '').toString().trim();
   if (!q) {
-    return res.json({ success: true, fallback: false, results: basicTextSearch('') });
+    return res.json({ success: true, fallback: false, results: await basicTextSearch('') });
   }
 
   try {
@@ -475,7 +477,7 @@ JSON object:`,
         fallback: true,
         fallbackReason:
           'The model did not return valid JSON. Try setting OLLAMA_MODEL=gemma2:2b in backend/.env (better at JSON than tiny models).',
-        results: basicTextSearch(q),
+        results: await basicTextSearch(q),
       });
     }
     if (!filterHasAnyCriteria(filter)) {
@@ -483,10 +485,10 @@ JSON object:`,
         success: false,
         fallback: true,
         fallbackReason: 'The model returned an empty filter; using keyword search instead.',
-        results: basicTextSearch(q),
+        results: await basicTextSearch(q),
       });
     }
-    const results = applyFilter(filter);
+    const results = await applyFilter(filter);
     return res.json({ success: true, fallback: false, results });
   } catch (e) {
     const msg = e?.name === 'AbortError' ? 'Ollama request timed out (120s).' : String(e?.message || e);
@@ -498,9 +500,11 @@ JSON object:`,
       success: false,
       fallback: true,
       fallbackReason: `${msg}.${conn}`.trim(),
-      results: basicTextSearch(q),
+      results: await basicTextSearch(q),
     });
   }
 });
+
+promisifyRouter(router);
 
 export default router;

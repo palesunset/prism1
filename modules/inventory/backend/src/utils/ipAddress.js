@@ -29,13 +29,13 @@ export function isValidIpAddress(raw) {
 
 /**
  * Equipment rows sharing the same normalized IP (optionally excluding one id).
- * @returns {Array<{ id: string, site_id: string, serial_number: string, network_element: string|null, ip_address: string|null }>}
+ * @returns {Promise<Array<{ id: string, site_id: string, serial_number: string, network_element: string|null, ip_address: string|null }>>}
  */
-export function findDuplicateIpEquipment(ip, excludeEquipmentId = null) {
+export async function findDuplicateIpEquipment(ip, excludeEquipmentId = null) {
   const parsed = parseIpForStorage(ip);
   if (!parsed.ok || !parsed.value) return [];
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT id, site_id, serial_number, network_element, ip_address
        FROM equipment
@@ -50,9 +50,9 @@ export function findDuplicateIpEquipment(ip, excludeEquipmentId = null) {
   });
 }
 
-/** @returns {Array<{ ip: string, equipment: Array<{ id: string, serial_number: string, network_element: string|null, site_id: string }> }>} */
-export function findDuplicateIpGroups() {
-  const rows = db
+/** @returns {Promise<Array<{ ip: string, equipment: Array<{ id: string, serial_number: string, network_element: string|null, site_id: string }> }>>} */
+export async function findDuplicateIpGroups() {
+  const rows = await db
     .prepare(
       `SELECT e.id, e.site_id, e.serial_number, e.network_element, e.ip_address, s.name AS site_name
        FROM equipment e
@@ -81,29 +81,29 @@ export function findDuplicateIpGroups() {
 }
 
 /** Normalize legacy ip_address values already in the database. */
-export function normalizeExistingIpAddresses() {
-  const rows = db
+export async function normalizeExistingIpAddresses() {
+  const rows = await db
     .prepare(`SELECT id, ip_address FROM equipment WHERE ip_address IS NOT NULL AND TRIM(ip_address) != ''`)
     .all();
   const update = db.prepare('UPDATE equipment SET ip_address = ? WHERE id = ?');
   for (const row of rows) {
     const parsed = parseIpForStorage(row.ip_address);
     if (parsed.ok && parsed.value && parsed.value !== row.ip_address) {
-      update.run(parsed.value, row.id);
+      await update.run(parsed.value, row.id);
     }
   }
 }
 
 /**
  * Find equipment by normalized management IP.
- * @returns {{ ok: true, matches: object[] } | { ok: false, error: string, matches: [] }}
+ * @returns {Promise<{ ok: true, matches: object[] } | { ok: false, error: string, matches: [] }>}
  */
-export function findEquipmentByIp(rawAddress) {
+export async function findEquipmentByIp(rawAddress) {
   const parsed = parseIpForStorage(rawAddress);
   if (!parsed.ok) return { ok: false, error: parsed.error, matches: [] };
   if (!parsed.value) return { ok: false, error: 'address query parameter is required', matches: [] };
 
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT e.id, e.network_element, e.vendor, e.model, e.serial_number, e.ip_address, e.status,
               s.name AS site_name, s.plaid AS site_plaid

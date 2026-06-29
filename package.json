@@ -32,7 +32,6 @@
     "create-admin": "node scripts/create-prism-admin.mjs"
   },
   "dependencies": {
-    "deasync": "^0.1.30",
     "express": "^4.22.2",
     "pg": "^8.16.0",
     "serverless-http": "^3.2.0"

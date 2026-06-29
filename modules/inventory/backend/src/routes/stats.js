@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
+import { promisifyRouter } from 'prism-db/expressAsync.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ function parseSiteIds(raw) {
     .filter(Boolean);
 }
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   const siteIds = parseSiteIds(req.query.site_ids);
   if (!siteIds.length) {
     return res.json({
@@ -26,7 +27,7 @@ router.get('/stats', (req, res) => {
   }
 
   const ph = siteIds.map(() => '?').join(',');
-  const row = db
+  const row = await db
     .prepare(
       `
     SELECT
@@ -45,7 +46,7 @@ router.get('/stats', (req, res) => {
       GROUP BY p.slot_id
     ) sp ON sp.slot_id = sl.id
     WHERE s.id IN (${ph})
-  `
+  `,
     )
     .get(...siteIds);
 
@@ -64,5 +65,6 @@ router.get('/stats', (req, res) => {
   });
 });
 
-export default router;
+promisifyRouter(router);
 
+export default router;

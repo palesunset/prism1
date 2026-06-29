@@ -1,5 +1,6 @@
 import { createRequire } from "module";
-import { createPgDb, formatPgError } from "./pgSync.js";
+import { createPgDb, formatPgError } from "./pgAsync.js";
+import { wrapSqliteDb } from "./sqliteAdapter.js";
 
 const require = createRequire(import.meta.url);
 
@@ -53,7 +54,7 @@ export function createPrismDb({ sqlitePath, sqliteInit }) {
     return { db: sharedPgDb, dialect: "postgres" };
   }
 
-  const db = openSqliteDatabase(sqlitePath, sqliteInit);
+  const db = wrapSqliteDb(openSqliteDatabase(sqlitePath, sqliteInit));
   console.log(`[prism-db] SQLite dev (${sqlitePath})`);
   return { db, dialect: "sqlite" };
 }

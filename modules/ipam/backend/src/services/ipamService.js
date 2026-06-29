@@ -92,16 +92,16 @@ function buildListSql(filters = {}) {
   return { sql, params };
 }
 
-export function listRecords(filters = {}, options = {}) {
+export async function listRecords(filters = {}, options = {}) {
   const { sql, params } = buildListSql(filters);
   const page = options.page ? Math.max(1, Number(options.page)) : null;
   const pageSize = options.pageSize ? Math.min(500, Math.max(1, Number(options.pageSize))) : null;
 
   if (page && pageSize) {
-    const countRow = db.prepare(sql.replace('SELECT *', 'SELECT COUNT(*) AS c')).get(...params);
+    const countRow = await db.prepare(sql.replace('SELECT *', 'SELECT COUNT(*) AS c')).get(...params);
     const total = countRow?.c ?? 0;
     const offset = (page - 1) * pageSize;
-    const rows = db.prepare(`${sql} LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
+    const rows = await db.prepare(`${sql} LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
     return {
       records: rows.map(rowToRecord),
       total,
@@ -110,40 +110,37 @@ export function listRecords(filters = {}, options = {}) {
     };
   }
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = await db.prepare(sql).all(...params);
   return rows.map(rowToRecord);
 }
 
-export function getRecord(id) {
-  return rowToRecord(db.prepare('SELECT * FROM ip_records WHERE id = ?').get(id));
+export async function getRecord(id) {
+  return rowToRecord(await db.prepare('SELECT * FROM ip_records WHERE id = ?').get(id));
 }
 
-export function listPicklists() {
-  const projects = db
+export async function listPicklists() {
+  const projects = (await db
     .prepare(`SELECT DISTINCT TRIM(project) AS v FROM ip_records WHERE TRIM(COALESCE(project, '')) != '' ORDER BY v`)
-    .all()
-    .map((r) => r.v);
-  const vlans = db
+    .all()).map((r) => r.v);
+  const vlans = (await db
     .prepare(`SELECT DISTINCT TRIM(vlan) AS v FROM ip_records WHERE TRIM(COALESCE(vlan, '')) != '' ORDER BY v`)
-    .all()
-    .map((r) => r.v);
-  const locations = db
+    .all()).map((r) => r.v);
+  const locations = (await db
     .prepare(`SELECT DISTINCT TRIM(location) AS v FROM ip_records WHERE TRIM(COALESCE(location, '')) != '' ORDER BY v`)
-    .all()
-    .map((r) => r.v);
+    .all()).map((r) => r.v);
   return { projects, vlans, locations };
 }
 
-function hostsInSubnet(subnetId, subnet = null) {
-  const s = subnet ?? getRecord(subnetId);
+async function hostsInSubnet(subnetId, subnet = null) {
+  const s = subnet ?? (await getRecord(subnetId));
   if (!s || s.record_type !== 'subnet') return [];
-  return listRecords().filter((r) => r.record_type === 'host' && hostInSubnet(s, r));
+  return (await listRecords()).filter((r) => r.record_type === 'host' && hostInSubnet(s, r));
 }
 
-function childSubnetsOf(subnetId, subnet = null) {
-  const s = subnet ?? getRecord(subnetId);
+async function childSubnetsOf(subnetId, subnet = null) {
+  const s = subnet ?? (await getRecord(subnetId));
   if (!s || s.record_type !== 'subnet') return [];
-  return listRecords({ record_type: 'subnet' }).filter(
+  return (await listRecords({ record_type: 'subnet' })).filter(
     (r) =>
       r.id !== s.id &&
       recordFamily(r) === recordFamily(s) &&
@@ -227,16 +224,16 @@ function describeConflict(existing, parsed, incomingMeta) {
   return null;
 }
 
-export function detectConflicts(parsed, excludeId = null, incomingMeta = {}) {
+export async function detectConflicts(parsed, excludeId = null, incomingMeta = {}) {
   const isV6 = parsedFamily(parsed) === 'ipv6';
   const rows = isV6
-    ? db
+    ? await db
         .prepare(
           `SELECT * FROM ip_records
          WHERE address_family = 'ipv6' AND v6_range_start <= ? AND v6_range_end >= ?`,
         )
         .all(parsed.v6RangeEnd, parsed.v6RangeStart)
-    : db
+    : await db
         .prepare(
           `SELECT * FROM ip_records
          WHERE address_family = 'ipv4' AND range_start <= ? AND range_end >= ?`,
@@ -256,17 +253,17 @@ export function detectConflicts(parsed, excludeId = null, incomingMeta = {}) {
   return conflicts;
 }
 
-function resolveParentSubnetId(body, parsed, recordType) {
+async function resolveParentSubnetId(body, parsed, recordType) {
   if (body.parent_subnet_id) return body.parent_subnet_id;
   if (recordType !== 'host') return null;
-  const subnets = listRecords({ record_type: 'subnet' }).filter((s) => recordFamily(s) === parsedFamily(parsed));
+  const subnets = (await listRecords({ record_type: 'subnet' })).filter((s) => recordFamily(s) === parsedFamily(parsed));
   const parent = subnets.find((s) => pointInRecord(s, parsed));
   return parent?.id ?? null;
 }
 
-function validateParentSubnetId(parentId, parsed) {
+async function validateParentSubnetId(parentId, parsed) {
   if (!parentId) return null;
-  const parent = getRecord(parentId);
+  const parent = await getRecord(parentId);
   if (!parent) return 'Parent subnet not found.';
   if (parent.record_type !== 'subnet') return 'Parent must be a subnet record.';
   if (recordFamily(parent) !== parsedFamily(parsed)) {
@@ -288,7 +285,7 @@ function pickExtendedFields(body) {
   return out;
 }
 
-export function insertRecord(id, body) {
+export async function insertRecord(id, body) {
   const recordType = body.record_type === 'host' ? 'host' : 'subnet';
   if (recordType === 'subnet' && !String(body.address ?? '').includes('/')) {
     return { error: 'Subnet records must use CIDR notation (e.g. 10.1.1.0/24).' };
@@ -297,11 +294,11 @@ export function insertRecord(id, body) {
   if (parsed.error) return { error: parsed.error };
 
   if (recordType === 'host') {
-    const hostRole = parsed.family === 'ipv6' ? null : checkHostAssignment(parsed);
+    const hostRole = parsed.family === 'ipv6' ? null : await checkHostAssignment(parsed);
     if (hostRole) return { error: hostRole.message, conflicts: [hostRole] };
   }
 
-  const conflicts = detectConflicts(parsed, null, { record_type: recordType, status: body.status });
+  const conflicts = await detectConflicts(parsed, null, { record_type: recordType, status: body.status });
   const blocking = conflicts.filter((c) =>
     ['duplicate_host', 'duplicate_subnet', 'subnet_overlap', 'range_overlap'].includes(c.type),
   );
@@ -314,12 +311,12 @@ export function insertRecord(id, body) {
 
   const status = ['free', 'used', 'reserved'].includes(body.status) ? body.status : 'used';
   const extended = pickExtendedFields(body);
-  const parentSubnetId = extended.parent_subnet_id ?? resolveParentSubnetId(body, parsed, recordType);
-  const parentErr = validateParentSubnetId(parentSubnetId, parsed);
+  const parentSubnetId = extended.parent_subnet_id ?? (await resolveParentSubnetId(body, parsed, recordType));
+  const parentErr = await validateParentSubnetId(parentSubnetId, parsed);
   if (parentErr) return { error: parentErr };
 
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO ip_records (
         id, address, record_type, status, project, vlan, location, description,
         cidr_prefix, range_start, range_end, hostname, mac_address, gateway,
@@ -360,13 +357,13 @@ export function insertRecord(id, body) {
     }
     throw e;
   }
-  logAudit('create', id, parsed.normalized, { record_type: recordType, status, project: body.project ?? '' });
-  const integrity = runPostSaveIntegrityScan('create', id, parsed.normalized);
-  return { record: getRecord(id), conflicts: conflicts.filter((c) => !blocking.includes(c)), integrity };
+  await logAudit('create', id, parsed.normalized, { record_type: recordType, status, project: body.project ?? '' });
+  const integrity = await runPostSaveIntegrityScan('create', id, parsed.normalized);
+  return { record: await getRecord(id), conflicts: conflicts.filter((c) => !blocking.includes(c)), integrity };
 }
 
-export function updateRecord(id, body) {
-  const existing = getRecord(id);
+export async function updateRecord(id, body) {
+  const existing = await getRecord(id);
   if (!existing) return { error: 'Record not found' };
 
   const address = body.address !== undefined ? body.address : existing.address;
@@ -375,11 +372,11 @@ export function updateRecord(id, body) {
   if (parsed.error) return { error: parsed.error };
 
   if (recordType === 'host') {
-    const hostRole = parsed.family === 'ipv6' ? null : checkHostAssignment(parsed);
+    const hostRole = parsed.family === 'ipv6' ? null : await checkHostAssignment(parsed);
     if (hostRole) return { error: hostRole.message, conflicts: [hostRole] };
   }
 
-  const conflicts = detectConflicts(parsed, id, { record_type: recordType, status: body.status ?? existing.status });
+  const conflicts = await detectConflicts(parsed, id, { record_type: recordType, status: body.status ?? existing.status });
   const blocking = conflicts.filter((c) =>
     ['duplicate_host', 'duplicate_subnet', 'subnet_overlap', 'range_overlap'].includes(c.type),
   );
@@ -412,11 +409,11 @@ export function updateRecord(id, body) {
     fields.parent_subnet_id =
       body.parent_subnet_id !== undefined
         ? body.parent_subnet_id || null
-        : resolveParentSubnetId(body, parsed, recordType);
+        : await resolveParentSubnetId(body, parsed, recordType);
   }
   const finalParentId =
     fields.parent_subnet_id !== undefined ? fields.parent_subnet_id : existing.parent_subnet_id;
-  const parentErr = validateParentSubnetId(finalParentId, parsed);
+  const parentErr = await validateParentSubnetId(finalParentId, parsed);
   if (parentErr) return { error: parentErr };
 
   const sets = [];
@@ -427,19 +424,19 @@ export function updateRecord(id, body) {
   }
   sets.push("updated_at = datetime('now')");
   values.push(id);
-  db.prepare(`UPDATE ip_records SET ${sets.join(', ')} WHERE id = ?`).run(...values);
-  logAudit('update', id, parsed.normalized, { record_type: recordType, status: fields.status ?? existing.status });
-  const integrity = runPostSaveIntegrityScan('update', id, parsed.normalized);
-  return { record: getRecord(id), conflicts: conflicts.filter((c) => !blocking.includes(c)), integrity };
+  await db.prepare(`UPDATE ip_records SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  await logAudit('update', id, parsed.normalized, { record_type: recordType, status: fields.status ?? existing.status });
+  const integrity = await runPostSaveIntegrityScan('update', id, parsed.normalized);
+  return { record: await getRecord(id), conflicts: conflicts.filter((c) => !blocking.includes(c)), integrity };
 }
 
-export function deleteRecord(id, options = {}) {
-  const existing = getRecord(id);
+export async function deleteRecord(id, options = {}) {
+  const existing = await getRecord(id);
   if (!existing) return { deleted: false, error: 'Record not found' };
 
   if (existing.record_type === 'subnet') {
-    const hosts = hostsInSubnet(existing.id, existing);
-    const children = childSubnetsOf(existing.id, existing);
+    const hosts = await hostsInSubnet(existing.id, existing);
+    const children = await childSubnetsOf(existing.id, existing);
     const dependents = hosts.length + children.length;
 
     if (dependents > 0 && !options.cascade) {
@@ -453,26 +450,26 @@ export function deleteRecord(id, options = {}) {
 
     if (options.cascade) {
       for (const h of hosts) {
-        db.prepare('DELETE FROM ip_records WHERE id = ?').run(h.id);
-        logAudit('delete', h.id, h.address, { record_type: 'host', cascade_from: id });
+        await db.prepare('DELETE FROM ip_records WHERE id = ?').run(h.id);
+        await logAudit('delete', h.id, h.address, { record_type: 'host', cascade_from: id });
       }
       for (const c of children) {
-        deleteRecord(c.id, { cascade: true });
+        await deleteRecord(c.id, { cascade: true });
       }
     }
   }
 
-  db.prepare(`UPDATE ip_workflows SET ipam_record_id = NULL WHERE ipam_record_id = ?`).run(id);
-  const result = db.prepare('DELETE FROM ip_records WHERE id = ?').run(id);
+  await db.prepare(`UPDATE ip_workflows SET ipam_record_id = NULL WHERE ipam_record_id = ?`).run(id);
+  const result = await db.prepare('DELETE FROM ip_records WHERE id = ?').run(id);
   if (result.changes > 0) {
-    logAudit('delete', id, existing.address, { record_type: existing.record_type, cascade: Boolean(options.cascade) });
-    runPostSaveIntegrityScan('delete', id, existing.address);
+    await logAudit('delete', id, existing.address, { record_type: existing.record_type, cascade: Boolean(options.cascade) });
+    await runPostSaveIntegrityScan('delete', id, existing.address);
     return { deleted: true };
   }
   return { deleted: false, error: 'Record not found' };
 }
 
-export function bulkUpdateStatus(ids, status) {
+export async function bulkUpdateStatus(ids, status) {
   if (!['free', 'used', 'reserved'].includes(status)) {
     return { error: 'Invalid status.' };
   }
@@ -482,19 +479,19 @@ export function bulkUpdateStatus(ids, status) {
   const updated = [];
   const missing = [];
   for (const id of ids) {
-    const existing = getRecord(id);
+    const existing = await getRecord(id);
     if (!existing) {
       missing.push(id);
       continue;
     }
-    db.prepare(`UPDATE ip_records SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
-    logAudit('bulk_status', id, existing.address, { status });
-    updated.push(getRecord(id));
+    await db.prepare(`UPDATE ip_records SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+    await logAudit('bulk_status', id, existing.address, { status });
+    updated.push(await getRecord(id));
   }
   return { updated, count: updated.length, missing, missingCount: missing.length };
 }
 
-export function searchQuery(query) {
+export async function searchQuery(query) {
   const trimmed = String(query ?? '').trim();
   if (!trimmed) return { error: 'Enter an IP address or subnet to search.' };
 
@@ -502,7 +499,7 @@ export function searchQuery(query) {
   const parsed = parseAddressInput(trimmed, hasSlash ? 'subnet' : 'host');
   if (parsed.error) return { error: parsed.error };
 
-  const all = listRecords();
+  const all = await listRecords();
   const exact = all.filter(
     (r) =>
       r.address === parsed.normalized ||
@@ -525,7 +522,7 @@ export function searchQuery(query) {
       parsed.recordType === 'subnet' &&
       hostInSubnet(searchSubnet, r),
   );
-  const conflicts = detectConflicts(parsed, null, {
+  const conflicts = await detectConflicts(parsed, null, {
     record_type: hasSlash ? 'subnet' : 'host',
   });
 
@@ -553,15 +550,15 @@ export function searchQuery(query) {
   };
 }
 
-export function buildDashboard(recordsInput = null) {
+export async function buildDashboard(recordsInput = null) {
   let subnets;
   let hosts;
   if (recordsInput) {
     subnets = recordsInput.filter((r) => r.record_type === 'subnet');
     hosts = recordsInput.filter((r) => r.record_type === 'host');
   } else {
-    subnets = listRecords({ record_type: 'subnet' });
-    hosts = listRecords({ record_type: 'host' });
+    subnets = await listRecords({ record_type: 'subnet' });
+    hosts = await listRecords({ record_type: 'host' });
   }
 
   return subnets.map((subnet) => {
@@ -633,7 +630,7 @@ export function buildDashboard(recordsInput = null) {
   });
 }
 
-export function importVlsmPlan(plan, projectName = '', parentSubnetId = null) {
+export async function importVlsmPlan(plan, projectName = '', parentSubnetId = null) {
   if (!plan?.subnets?.length) return { error: 'No subnets found in VLSM plan.' };
   const project = projectName || plan.baseNetwork || 'VLSM Import';
   const created = [];
@@ -641,7 +638,7 @@ export function importVlsmPlan(plan, projectName = '', parentSubnetId = null) {
   for (const s of plan.subnets) {
     const cidr = s.cidr ?? `${s.network}/${s.prefix}`;
     const address = cidr.includes('/') ? cidr : `${s.network}/${s.prefix}`;
-    const result = insertRecord(randomUUID(), {
+    const result = await insertRecord(randomUUID(), {
       address,
       record_type: 'subnet',
       status: 'reserved',
@@ -658,11 +655,11 @@ export function importVlsmPlan(plan, projectName = '', parentSubnetId = null) {
     }
   }
 
-  logAudit('vlsm_import', null, project, { created: created.length, errors: errors.length });
+  await logAudit('vlsm_import', null, project, { created: created.length, errors: errors.length });
   return { created, errors, project };
 }
 
-export function bulkImportCsv(csvText) {
+export async function bulkImportCsv(csvText) {
   const lines = String(csvText ?? '')
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -692,7 +689,7 @@ export function bulkImportCsv(csvText) {
     const cells = parseCsvLine(lines[i]);
     const address = cells[addrIdx]?.trim();
     if (!address) continue;
-    const result = insertRecord(randomUUID(), {
+    const result = await insertRecord(randomUUID(), {
       address,
       record_type: typeIdx >= 0 ? cells[typeIdx]?.trim().toLowerCase() : 'host',
       status: statusIdx >= 0 ? cells[statusIdx]?.trim().toLowerCase() : 'used',
@@ -709,7 +706,7 @@ export function bulkImportCsv(csvText) {
     if (result.error) errors.push({ row: i + 1, address, error: result.error });
     else if (result.record) created.push(result.record);
   }
-  logAudit('bulk_import', null, null, { created: created.length, errors: errors.length });
+  await logAudit('bulk_import', null, null, { created: created.length, errors: errors.length });
   return { created, errors };
 }
 

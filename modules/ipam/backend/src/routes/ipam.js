@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import { promisifyRouter } from 'prism-db/expressAsync.js';
 import { createAdminRouteGuard, createRateLimiters, getSecurityConfig } from '../middleware/security.js';
 import { listAudit } from '../services/ipamAudit.js';
 import {
@@ -59,28 +60,27 @@ const router = Router();
 const adminRouteGuard = createAdminRouteGuard(getSecurityConfig());
 const uploadLimiter = createRateLimiters(getSecurityConfig()).upload;
 
-router.get('/capabilities', (_req, res) => {
+router.get('/capabilities', async (_req, res) => {
   res.json(getCapabilities());
 });
 
-router.get('/picklists', (_req, res) => {
-  res.json(listPicklists());
+router.get('/picklists', async (_req, res) => {
+  res.json(await listPicklists());
 });
 
-/** Fast first paint: dashboard + picklists in one DB pass (serverless-friendly). */
-router.get('/bootstrap', (_req, res) => {
-  const records = listRecords();
+router.get('/bootstrap', async (_req, res) => {
+  const records = await listRecords();
   res.json({
-    subnets: buildDashboard(records),
-    picklists: listPicklists(),
+    subnets: await buildDashboard(records),
+    picklists: await listPicklists(),
   });
 });
 
-router.get('/settings', (_req, res) => {
-  res.json({ settings: listSettings(), utilizationAlertPercent: getUtilizationAlertPercent() });
+router.get('/settings', async (_req, res) => {
+  res.json({ settings: await listSettings(), utilizationAlertPercent: await getUtilizationAlertPercent() });
 });
 
-router.put('/settings', adminRouteGuard, (req, res) => {
+router.put('/settings', adminRouteGuard, async (req, res) => {
   const body = req.body ?? {};
   if (body.utilization_alert_percent !== undefined) {
     const pct = Number(body.utilization_alert_percent);
@@ -88,17 +88,17 @@ router.put('/settings', adminRouteGuard, (req, res) => {
       res.status(400).json({ detail: 'utilization_alert_percent must be between 1 and 100.' });
       return;
     }
-    setSetting('utilization_alert_percent', String(Math.round(pct)));
+    await setSetting('utilization_alert_percent', String(Math.round(pct)));
   }
-  res.json({ settings: listSettings(), utilizationAlertPercent: getUtilizationAlertPercent() });
+  res.json({ settings: await listSettings(), utilizationAlertPercent: await getUtilizationAlertPercent() });
 });
 
-router.get('/backup', adminRouteGuard, (_req, res) => {
-  res.json(exportBackupBundle());
+router.get('/backup', adminRouteGuard, async (_req, res) => {
+  res.json(await exportBackupBundle());
 });
 
-router.post('/backup/db', adminRouteGuard, (_req, res) => {
-  const result = createDatabaseBackupFile();
+router.post('/backup/db', adminRouteGuard, async (_req, res) => {
+  const result = await createDatabaseBackupFile();
   if (result.error) {
     res.status(500).json({ detail: result.error });
     return;
@@ -106,8 +106,8 @@ router.post('/backup/db', adminRouteGuard, (_req, res) => {
   res.status(201).json(result);
 });
 
-router.post('/restore', adminRouteGuard, uploadLimiter, (req, res) => {
-  const result = restoreFromBackupBundle(req.body ?? {});
+router.post('/restore', adminRouteGuard, uploadLimiter, async (req, res) => {
+  const result = await restoreFromBackupBundle(req.body ?? {});
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -115,24 +115,24 @@ router.post('/restore', adminRouteGuard, uploadLimiter, (req, res) => {
   res.json(result);
 });
 
-router.get('/audit/export.csv', (_req, res) => {
+router.get('/audit/export.csv', async (_req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="ipam-unified-audit.csv"');
-  res.send(exportUnifiedAuditCsv());
+  res.send(await exportUnifiedAuditCsv());
 });
 
-router.get('/import/csv/template', (_req, res) => {
+router.get('/import/csv/template', async (_req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="ipam-import-template.csv"');
   res.send(csvImportTemplate());
 });
 
-router.get('/workflow/dashboard', (_req, res) => {
-  res.json(buildWorkflowDashboard());
+router.get('/workflow/dashboard', async (_req, res) => {
+  res.json(await buildWorkflowDashboard());
 });
 
-router.get('/workflow', (req, res) => {
-  const workflows = listWorkflows({
+router.get('/workflow', async (req, res) => {
+  const workflows = await listWorkflows({
     state: req.query.state,
     q: req.query.q,
     limit: req.query.limit,
@@ -140,8 +140,8 @@ router.get('/workflow', (req, res) => {
   res.json({ workflows });
 });
 
-router.post('/workflow', (req, res) => {
-  const result = createWorkflowRequest(req.body ?? {});
+router.post('/workflow', async (req, res) => {
+  const result = await createWorkflowRequest(req.body ?? {});
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -149,22 +149,22 @@ router.post('/workflow', (req, res) => {
   res.status(201).json(result);
 });
 
-router.get('/workflow/history', (req, res) => {
+router.get('/workflow/history', async (req, res) => {
   const limit = Number(req.query.limit) || 200;
-  res.json({ entries: listAllWorkflowHistory(limit) });
+  res.json({ entries: await listAllWorkflowHistory(limit) });
 });
 
-router.get('/workflow/:id', (req, res) => {
-  const workflow = getWorkflow(req.params.id);
+router.get('/workflow/:id', async (req, res) => {
+  const workflow = await getWorkflow(req.params.id);
   if (!workflow) {
     res.status(404).json({ detail: 'Workflow not found' });
     return;
   }
-  res.json({ workflow, history: listWorkflowHistory(req.params.id) });
+  res.json({ workflow, history: await listWorkflowHistory(req.params.id) });
 });
 
-router.post('/workflow/:id/netlens', (req, res) => {
-  const result = attachNetLensResult(req.params.id, req.body?.netlens ?? req.body ?? {}, req.body?.actor);
+router.post('/workflow/:id/netlens', async (req, res) => {
+  const result = await attachNetLensResult(req.params.id, req.body?.netlens ?? req.body ?? {}, req.body?.actor);
   if (result.error === 'Workflow not found') {
     res.status(404).json({ detail: result.error });
     return;
@@ -176,8 +176,8 @@ router.post('/workflow/:id/netlens', (req, res) => {
   res.json(result);
 });
 
-router.post('/workflow/:id/action', (req, res) => {
-  const result = performWorkflowAction(req.params.id, req.body ?? {});
+router.post('/workflow/:id/action', async (req, res) => {
+  const result = await performWorkflowAction(req.params.id, req.body ?? {});
   if (result.error === 'Workflow not found') {
     res.status(404).json({ detail: result.error });
     return;
@@ -204,7 +204,7 @@ router.post('/workflow/:id/action', (req, res) => {
   res.json(result);
 });
 
-router.get('/records', (req, res) => {
+router.get('/records', async (req, res) => {
   const filters = {
     status: req.query.status,
     record_type: req.query.type,
@@ -213,7 +213,7 @@ router.get('/records', (req, res) => {
   };
   const page = req.query.page;
   const pageSize = req.query.pageSize ?? req.query.limit;
-  const result = listRecords(filters, page ? { page, pageSize: pageSize ?? 100 } : {});
+  const result = await listRecords(filters, page ? { page, pageSize: pageSize ?? 100 } : {});
   if (Array.isArray(result)) {
     res.json({ records: result, total: result.length });
     return;
@@ -221,8 +221,8 @@ router.get('/records', (req, res) => {
   res.json(result);
 });
 
-router.post('/records/bulk-status', (req, res) => {
-  const result = bulkUpdateStatus(req.body?.ids ?? [], req.body?.status);
+router.post('/records/bulk-status', async (req, res) => {
+  const result = await bulkUpdateStatus(req.body?.ids ?? [], req.body?.status);
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -230,9 +230,9 @@ router.post('/records/bulk-status', (req, res) => {
   res.json(result);
 });
 
-router.post('/records', (req, res) => {
+router.post('/records', async (req, res) => {
   try {
-    const result = insertRecord(randomUUID(), req.body ?? {});
+    const result = await insertRecord(randomUUID(), req.body ?? {});
     if (result.error) {
       res.status(409).json({ detail: result.error, conflicts: result.conflicts ?? [] });
       return;
@@ -246,7 +246,7 @@ router.post('/records', (req, res) => {
 
 router.post('/validate', async (req, res) => {
   const body = req.body ?? {};
-  const result = validateBeforeSave(body, body.exclude_id ?? null);
+  const result = await validateBeforeSave(body, body.exclude_id ?? null);
   if (result.error && !result.allowed) {
     res.status(result.outcome === 'block' ? 409 : 400).json(result);
     return;
@@ -278,28 +278,28 @@ router.get('/crosscheck/inventory', async (req, res) => {
   res.json(await crossCheckInventory(address, hostname));
 });
 
-router.get('/integrity/audit', (_req, res) => {
-  res.json(buildIntegrityAudit());
+router.get('/integrity/audit', async (_req, res) => {
+  res.json(await buildIntegrityAudit());
 });
 
-router.get('/integrity/report', (_req, res) => {
-  res.json(buildIntegrityReport());
+router.get('/integrity/report', async (_req, res) => {
+  res.json(await buildIntegrityReport());
 });
 
-router.get('/integrity/report.txt', (_req, res) => {
-  const report = buildIntegrityReport();
+router.get('/integrity/report.txt', async (_req, res) => {
+  const report = await buildIntegrityReport();
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Content-Disposition', 'attachment; filename="ipam-integrity-report.txt"');
   res.send(report.text);
 });
 
-router.post('/integrity/simulate', (req, res) => {
-  res.json(simulateRecord(req.body ?? {}, req.body?.exclude_id ?? null));
+router.post('/integrity/simulate', async (req, res) => {
+  res.json(await simulateRecord(req.body ?? {}, req.body?.exclude_id ?? null));
 });
 
-router.post('/integrity/simulate/vlsm', (req, res) => {
+router.post('/integrity/simulate/vlsm', async (req, res) => {
   const body = req.body ?? {};
-  const result = simulateVlsmImport(body.plan ?? body, body.project ?? '');
+  const result = await simulateVlsmImport(body.plan ?? body, body.project ?? '');
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -307,8 +307,8 @@ router.post('/integrity/simulate/vlsm', (req, res) => {
   res.json(result);
 });
 
-router.get('/records/:id', (req, res) => {
-  const record = getRecord(req.params.id);
+router.get('/records/:id', async (req, res) => {
+  const record = await getRecord(req.params.id);
   if (!record) {
     res.status(404).json({ detail: 'Record not found' });
     return;
@@ -316,8 +316,8 @@ router.get('/records/:id', (req, res) => {
   res.json(record);
 });
 
-router.put('/records/:id', (req, res) => {
-  const result = updateRecord(req.params.id, req.body ?? {});
+router.put('/records/:id', async (req, res) => {
+  const result = await updateRecord(req.params.id, req.body ?? {});
   if (result.error === 'Record not found') {
     res.status(404).json({ detail: result.error });
     return;
@@ -329,9 +329,9 @@ router.put('/records/:id', (req, res) => {
   res.json(result);
 });
 
-router.delete('/records/:id', (req, res) => {
+router.delete('/records/:id', async (req, res) => {
   const cascade = req.query.cascade === '1' || req.query.cascade === 'true';
-  const result = deleteRecord(req.params.id, { cascade });
+  const result = await deleteRecord(req.params.id, { cascade });
   if (!result.deleted) {
     const status = result.hosts || result.childSubnets ? 409 : 404;
     res.status(status).json({
@@ -344,8 +344,8 @@ router.delete('/records/:id', (req, res) => {
   res.status(204).end();
 });
 
-router.post('/search', (req, res) => {
-  const result = searchQuery(req.body?.query ?? req.body?.q ?? '');
+router.post('/search', async (req, res) => {
+  const result = await searchQuery(req.body?.query ?? req.body?.q ?? '');
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -353,40 +353,40 @@ router.post('/search', (req, res) => {
   res.json(result);
 });
 
-router.get('/dashboard', (_req, res) => {
-  res.json({ subnets: buildDashboard() });
+router.get('/dashboard', async (_req, res) => {
+  res.json({ subnets: await buildDashboard() });
 });
 
-router.get('/analytics', (req, res) => {
+router.get('/analytics', async (req, res) => {
   const includeConflictScan = req.query.scan === '1' || req.query.conflicts === '1';
-  const records = listRecords();
+  const records = await listRecords();
   res.json(
-    buildAnalytics({
+    await buildAnalytics({
       records,
-      dashboard: buildDashboard(records),
+      dashboard: await buildDashboard(records),
       includeConflictScan,
     }),
   );
 });
 
-router.get('/conflicts/scan', (_req, res) => {
-  res.json(scanAllConflicts());
+router.get('/conflicts/scan', async (_req, res) => {
+  res.json(await scanAllConflicts());
 });
 
-router.get('/reports/utilization', (_req, res) => {
-  const report = buildUtilizationReport();
+router.get('/reports/utilization', async (_req, res) => {
+  const report = await buildUtilizationReport();
   res.json(report);
 });
 
-router.get('/reports/utilization.txt', (_req, res) => {
-  const report = buildUtilizationReport();
+router.get('/reports/utilization.txt', async (_req, res) => {
+  const report = await buildUtilizationReport();
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Content-Disposition', 'attachment; filename="ipam-utilization-report.txt"');
   res.send(report.text);
 });
 
-router.get('/subnets/:id', (req, res) => {
-  const detail = getSubnetDetail(req.params.id);
+router.get('/subnets/:id', async (req, res) => {
+  const detail = await getSubnetDetail(req.params.id);
   if (detail.error) {
     res.status(404).json({ detail: detail.error });
     return;
@@ -394,18 +394,18 @@ router.get('/subnets/:id', (req, res) => {
   res.json(detail);
 });
 
-router.get('/subnets/:id/next-ip', (req, res) => {
-  const subnet = getRecord(req.params.id);
+router.get('/subnets/:id/next-ip', async (req, res) => {
+  const subnet = await getRecord(req.params.id);
   if (!subnet || subnet.record_type !== 'subnet') {
     res.status(404).json({ detail: 'Subnet not found' });
     return;
   }
-  res.json({ subnet: subnet.address, nextIp: suggestNextIpInSubnet(subnet) });
+  res.json({ subnet: subnet.address, nextIp: await suggestNextIpInSubnet(subnet) });
 });
 
-router.post('/import/vlsm', uploadLimiter, (req, res) => {
+router.post('/import/vlsm', uploadLimiter, async (req, res) => {
   const body = req.body ?? {};
-  const result = importVlsmPlan(body.plan ?? body, body.project ?? '', body.parent_subnet_id ?? null);
+  const result = await importVlsmPlan(body.plan ?? body, body.project ?? '', body.parent_subnet_id ?? null);
   if (result.error && !result.created?.length) {
     res.status(400).json({ detail: result.error, errors: result.errors ?? [] });
     return;
@@ -413,9 +413,9 @@ router.post('/import/vlsm', uploadLimiter, (req, res) => {
   res.status(201).json(result);
 });
 
-router.post('/import/csv', uploadLimiter, (req, res) => {
+router.post('/import/csv', uploadLimiter, async (req, res) => {
   const csv = req.body?.csv ?? req.body?.content ?? '';
-  const result = bulkImportCsv(csv);
+  const result = await bulkImportCsv(csv);
   if (result.error) {
     res.status(400).json({ detail: result.error });
     return;
@@ -423,10 +423,10 @@ router.post('/import/csv', uploadLimiter, (req, res) => {
   res.status(201).json(result);
 });
 
-router.get('/audit', (req, res) => {
+router.get('/audit', async (req, res) => {
   const limit = Number(req.query.limit) || 100;
-  const registry = listAudit(limit);
-  const workflow = listAllWorkflowHistory(limit);
+  const registry = await listAudit(limit);
+  const workflow = await listAllWorkflowHistory(limit);
   res.json({
     entries: registry,
     workflowEntries: workflow,
@@ -434,15 +434,17 @@ router.get('/audit', (req, res) => {
   });
 });
 
-router.get('/export/json', (_req, res) => {
-  res.json(exportBackupBundle());
+router.get('/export/json', async (_req, res) => {
+  res.json(await exportBackupBundle());
 });
 
-router.get('/export/csv', (_req, res) => {
-  const records = listRecords();
+router.get('/export/csv', async (_req, res) => {
+  const records = await listRecords();
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="ipam-export.csv"');
   res.send(recordsToCsv(records));
 });
+
+promisifyRouter(router);
 
 export default router;

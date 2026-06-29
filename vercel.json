@@ -4,8 +4,21 @@
   "buildCommand": "npm run build:platform",
   "outputDirectory": "platform/frontend/dist",
   "functions": {
+    "api/inventory.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/ipam.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/notes.js": {
+      "maxDuration": 60,
+      "memory": 512
+    },
     "api/index.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "memory": 1024
     },
     "api/lsp.py": {
       "maxDuration": 60
@@ -15,6 +28,18 @@
     {
       "source": "/api/lsp/:path*",
       "destination": "/api/lsp"
+    },
+    {
+      "source": "/api/inventory/:path*",
+      "destination": "/api/inventory"
+    },
+    {
+      "source": "/api/ipam/:path*",
+      "destination": "/api/ipam"
+    },
+    {
+      "source": "/api/notes/:path*",
+      "destination": "/api/notes"
     },
     {
       "source": "/api/:path*",
