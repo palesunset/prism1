@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "npm install --prefix ../../../shared/prism-db",
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "test": "node scripts/test-ipam-api.js && node scripts/test-ipam-ipmath.js",

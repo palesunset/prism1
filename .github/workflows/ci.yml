@@ -54,8 +54,12 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: |
+            shared/prism-db/package-lock.json
             modules/inventory/backend/package-lock.json
             modules/inventory/frontend/package-lock.json
+      - name: Install prism-db
+        working-directory: shared/prism-db
+        run: npm ci
       - name: Install backend
         working-directory: modules/inventory/backend
         run: npm ci
@@ -102,8 +106,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: modules/notes/backend/package-lock.json
+          cache-dependency-path: |
+            shared/prism-db/package-lock.json
+            modules/notes/backend/package-lock.json
+      - name: Install prism-db
+        working-directory: shared/prism-db
+        run: npm ci
       - name: Install
+        working-directory: modules/notes/backend
         run: npm ci
       - name: Start API
         run: node src/index.js &
@@ -123,8 +133,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: modules/ipam/backend/package-lock.json
+          cache-dependency-path: |
+            shared/prism-db/package-lock.json
+            modules/ipam/backend/package-lock.json
+      - name: Install prism-db
+        working-directory: shared/prism-db
+        run: npm ci
       - name: Install
+        working-directory: modules/ipam/backend
         run: npm ci
       - name: Start API
         run: node src/index.js &
