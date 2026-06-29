@@ -37,7 +37,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
     client.auth.getSession().then(({ data }) => {
       if (cancelled) return;
-      const user = data.session?.user;
+      const user = data?.session?.user;
       if (user && isAllowedAdminEmail(user.email)) {
         setSession({ username: ADMIN_USERNAME });
       } else {
@@ -47,8 +47,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
     });
 
-    const { data: sub } = client.auth.onAuthStateChange((_event, next) => {
-      const user = next.session?.user;
+    const { data: sub } = client.auth.onAuthStateChange((_event, nextSession) => {
+      const user = nextSession?.user;
       if (user && isAllowedAdminEmail(user.email)) {
         setSession({ username: ADMIN_USERNAME });
       } else {
@@ -67,11 +67,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     if (!email) return "Invalid username.";
     const client = requireSupabase();
     const { data, error } = await client.auth.signInWithPassword({ email, password });
-    if (error) return error.message;
+    if (error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+        return `Wrong username or password. Ensure Supabase has a confirmed user: ${ADMIN_EMAIL}`;
+      }
+      return error.message;
+    }
     if (!isAllowedAdminEmail(data.user?.email)) {
       await client.auth.signOut();
       return "Access denied.";
     }
+    setSession({ username: ADMIN_USERNAME });
     return null;
   }, []);
 
