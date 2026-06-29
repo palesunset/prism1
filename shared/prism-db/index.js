@@ -1,11 +1,13 @@
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "module";
 import { createPgDb, formatPgError } from "./pgSync.js";
+
+const require = createRequire(import.meta.url);
 
 function requireDatabaseUrl() {
   const url = process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim();
   if (!url) {
     throw new Error(
-      "DATABASE_URL is required for cloud hosting. Set it in Vercel Environment Variables (Supabase connection string).",
+      "DATABASE_URL is required for cloud hosting. Set it in Vercel Environment Variables (Supabase Session pooler URI).",
     );
   }
   return url;
@@ -15,9 +17,23 @@ function isCloudHost() {
   return Boolean(process.env.VERCEL || process.env.PRISM_CLOUD === "1");
 }
 
+function openSqliteDatabase(sqlitePath, sqliteInit) {
+  let DatabaseSync;
+  try {
+    ({ DatabaseSync } = require("node:sqlite"));
+  } catch {
+    throw new Error(
+      "Local SQLite requires Node.js 22.5+ (node:sqlite). On Vercel, set DATABASE_URL for Supabase Postgres.",
+    );
+  }
+  const db = new DatabaseSync(sqlitePath);
+  if (sqliteInit) sqliteInit(db);
+  return db;
+}
+
 /**
  * Cloud (Vercel): Supabase Postgres via DATABASE_URL.
- * Local dev only when PRISM_CLOUD is unset — uses SQLite.
+ * Local dev only when PRISM_CLOUD is unset — uses SQLite (Node 22.5+).
  */
 export function createPrismDb({ sqlitePath, sqliteInit }) {
   const cloud = isCloudHost();
@@ -29,8 +45,7 @@ export function createPrismDb({ sqlitePath, sqliteInit }) {
     return { db, dialect: "postgres" };
   }
 
-  const db = new DatabaseSync(sqlitePath);
-  if (sqliteInit) sqliteInit(db);
+  const db = openSqliteDatabase(sqlitePath, sqliteInit);
   console.log(`[prism-db] SQLite dev (${sqlitePath})`);
   return { db, dialect: "sqlite" };
 }
