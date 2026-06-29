@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import db from '../db/index.js';
+import db, { isPostgresMode } from '../db/index.js';
 
-db.exec(`
+if (!isPostgresMode()) {
+  db.exec(`
 CREATE TABLE IF NOT EXISTS ip_audit (
   id TEXT PRIMARY KEY,
   action TEXT NOT NULL,
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS ip_audit (
 
 CREATE INDEX IF NOT EXISTS idx_ip_audit_created ON ip_audit(created_at DESC);
 `);
+}
 
 export function logAudit(action, recordId, address, details = {}) {
   db.prepare(

@@ -2,6 +2,7 @@
   "name": "prism-platform",
   "private": true,
   "version": "0.2.0",
+  "type": "module",
   "description": "PRISM platform — unified inventory, LSP design, and IPAM",
   "scripts": {
     "dev": "concurrently -n lsp-api,inv-api,notes-api,ipam-api,web -c cyan,magenta,yellow,blue,green \"npm run dev:lsp-api\" \"npm run dev:inv-api\" \"npm run dev:notes-api\" \"npm run dev:ipam-api\" \"npm run dev:platform\"",
@@ -17,7 +18,8 @@
     "build": "npm run build:platform",
     "build:platform": "cd platform/frontend && npm run build",
     "build:lsp": "cd modules/lsp/frontend && npm run build",
-    "install:all": "npm install && cd platform/frontend && npm install && cd ../../modules/lsp/frontend && npm install && cd ../inventory/frontend && npm install && cd ../backend && npm install && cd ../../notes/backend && npm install && cd ../../modules/ipam/backend && npm install",
+    "install:all": "npm run install:vercel",
+    "install:vercel": "npm install && cd shared/prism-db && npm install && cd ../../modules/notes/backend && npm install && cd ../../ipam/backend && npm install && cd ../../inventory/backend && npm install && cd ../../../platform/frontend && npm install && cd ../../modules/lsp/frontend && npm install",
     "test": "npm run test:lsp && npm run test:inventory && npm run test:notes && npm run test:ipam && npm run test:platform",
     "test:lsp": "cd modules/lsp/backend && python -m pytest && cd ../frontend && npm run lint && npm run test",
     "test:inventory": "cd modules/inventory/backend && node scripts/test-all.js && cd ../frontend && npm run build && npm test",
@@ -25,7 +27,11 @@
     "test:ipam": "cd modules/ipam/backend && npm run test",
     "test:platform": "cd platform/frontend && npm run build && npm test",
     "smoke": "node scripts/smoke-test.mjs",
+    "preflight": "npm run build:platform && cd modules/lsp/backend && python -m pytest -q && cd ../frontend && npm run lint && npm test",
     "lint": "cd modules/lsp/frontend && npm run lint"
+  },
+  "dependencies": {
+    "serverless-http": "^3.2.0"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

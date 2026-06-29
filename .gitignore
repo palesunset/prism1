@@ -1,4 +1,8 @@
 .cursor/
+.vercel/
+.env
+.env.local
+.env.*.local
 
 # Python
 **/__pycache__/

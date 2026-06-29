@@ -1,19 +1,19 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from "path";
+import { fileURLToPath } from "url";
+import { createPrismDb, isPostgresMode } from "prism-db";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '..', '..', 'inventory.db');
+const dbPath = path.join(__dirname, "..", "..", "inventory.db");
 
-const db = new DatabaseSync(dbPath);
-db.exec('PRAGMA foreign_keys = ON');
+function initSqliteSchema(db) {
+  db.exec("PRAGMA foreign_keys = ON");
 
-function ensureColumn(table, column) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name);
-  return cols.includes(column);
-}
+  function ensureColumn(table, column) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name);
+    return cols.includes(column);
+  }
 
-db.exec(`
+  db.exec(`
 CREATE TABLE IF NOT EXISTS sites (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS sites (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS equipment (
   id TEXT PRIMARY KEY,
   site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -39,9 +38,7 @@ CREATE TABLE IF NOT EXISTS equipment (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_equipment_site_serial ON equipment(site_id, serial_number);
-
 CREATE TABLE IF NOT EXISTS equipment_bays (
   id TEXT PRIMARY KEY,
   equipment_id TEXT NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
@@ -52,7 +49,6 @@ CREATE TABLE IF NOT EXISTS equipment_bays (
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(equipment_id, slot_index)
 );
-
 CREATE TABLE IF NOT EXISTS slots (
   id TEXT PRIMARY KEY,
   equipment_id TEXT NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
@@ -60,7 +56,6 @@ CREATE TABLE IF NOT EXISTS slots (
   total_ports INTEGER NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE TABLE IF NOT EXISTS ports (
   id TEXT PRIMARY KEY,
   slot_id TEXT NOT NULL REFERENCES slots(id) ON DELETE CASCADE,
@@ -73,65 +68,44 @@ CREATE TABLE IF NOT EXISTS ports (
 );
 `);
 
-if (!ensureColumn('equipment', 'chassis_slot_count')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN chassis_slot_count INTEGER`);
-}
+  for (const [table, col, ddl] of [
+    ["equipment", "chassis_slot_count", "INTEGER"],
+    ["equipment", "ip_address", "TEXT"],
+    ["equipment", "router_type", "TEXT"],
+    ["equipment", "network_element", "TEXT"],
+    ["equipment", "software_version", "TEXT"],
+    ["equipment", "descriptor_version", "TEXT"],
+    ["sites", "router_type", "TEXT"],
+    ["sites", "router_types", "TEXT"],
+    ["sites", "territory", "TEXT"],
+  ]) {
+    if (!ensureColumn(table, col)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl}`);
+    }
+  }
 
-if (!ensureColumn('equipment', 'ip_address')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN ip_address TEXT`);
-}
-
-if (!ensureColumn('equipment', 'router_type')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN router_type TEXT`);
-}
-
-if (!ensureColumn('equipment', 'network_element')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN network_element TEXT`);
   try {
     db.exec(
-      `UPDATE equipment SET network_element = model WHERE network_element IS NULL OR TRIM(COALESCE(network_element, '')) = ''`
+      `UPDATE equipment SET network_element = model WHERE network_element IS NULL OR TRIM(COALESCE(network_element, '')) = ''`,
     );
   } catch {
     /* ignore */
   }
-}
-
-if (!ensureColumn('equipment', 'software_version')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN software_version TEXT`);
-}
-
-if (!ensureColumn('equipment', 'descriptor_version')) {
-  db.exec(`ALTER TABLE equipment ADD COLUMN descriptor_version TEXT`);
-}
-
-if (!ensureColumn('sites', 'router_type')) {
-  db.exec(`ALTER TABLE sites ADD COLUMN router_type TEXT`);
-}
-
-if (!ensureColumn('sites', 'router_types')) {
-  db.exec(`ALTER TABLE sites ADD COLUMN router_types TEXT`);
-}
-
-if (!ensureColumn('sites', 'territory')) {
-  db.exec(`ALTER TABLE sites ADD COLUMN territory TEXT`);
   try {
     db.exec(
-      `UPDATE sites SET territory = area WHERE territory IS NULL OR TRIM(COALESCE(territory, '')) = ''`
+      `UPDATE sites SET territory = area WHERE territory IS NULL OR TRIM(COALESCE(territory, '')) = ''`,
     );
   } catch {
     /* ignore */
   }
-}
+  try {
+    db.exec(`UPDATE sites SET name = UPPER(name) WHERE name IS NOT NULL AND name != UPPER(name)`);
+  } catch {
+    /* ignore */
+  }
 
-try {
-  db.exec(`UPDATE sites SET name = UPPER(name) WHERE name IS NOT NULL AND name != UPPER(name)`);
-} catch {
-  /* ignore */
-}
-
-/** Oz / FTS5: typo-tolerant search (external content + triggers). */
-try {
-  db.exec(`
+  try {
+    db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS sites_fts USING fts5(
       name, plaid, territory, region, address,
       content='sites', content_rowid='rowid'
@@ -141,88 +115,47 @@ try {
       content='equipment', content_rowid='rowid'
     );
   `);
-  db.exec(`
-    CREATE TRIGGER IF NOT EXISTS sites_ai AFTER INSERT ON sites BEGIN
-      INSERT INTO sites_fts(rowid, name, plaid, territory, region, address)
-      VALUES (
-        new.rowid, new.name, new.plaid,
-        COALESCE(NULLIF(TRIM(new.territory), ''), new.area),
-        new.region, COALESCE(new.address, '')
-      );
-    END;
-    CREATE TRIGGER IF NOT EXISTS sites_ad AFTER DELETE ON sites BEGIN
-      INSERT INTO sites_fts(sites_fts, rowid, name, plaid, territory, region, address)
-      VALUES ('delete', old.rowid, old.name, old.plaid,
-        COALESCE(NULLIF(TRIM(old.territory), ''), old.area),
-        old.region, COALESCE(old.address, ''));
-    END;
-    CREATE TRIGGER IF NOT EXISTS sites_au AFTER UPDATE ON sites BEGIN
-      INSERT INTO sites_fts(sites_fts, rowid, name, plaid, territory, region, address)
-      VALUES ('delete', old.rowid, old.name, old.plaid,
-        COALESCE(NULLIF(TRIM(old.territory), ''), old.area),
-        old.region, COALESCE(old.address, ''));
-      INSERT INTO sites_fts(rowid, name, plaid, territory, region, address)
-      VALUES (
-        new.rowid, new.name, new.plaid,
-        COALESCE(NULLIF(TRIM(new.territory), ''), new.area),
-        new.region, COALESCE(new.address, '')
-      );
-    END;
-    CREATE TRIGGER IF NOT EXISTS equipment_ai AFTER INSERT ON equipment BEGIN
-      INSERT INTO equipment_fts(rowid, vendor, model, serial_number, router_type)
-      VALUES (new.rowid, new.vendor, new.model, new.serial_number, COALESCE(new.router_type, ''));
-    END;
-    CREATE TRIGGER IF NOT EXISTS equipment_ad AFTER DELETE ON equipment BEGIN
-      INSERT INTO equipment_fts(equipment_fts, rowid, vendor, model, serial_number, router_type)
-      VALUES ('delete', old.rowid, old.vendor, old.model, old.serial_number, COALESCE(old.router_type, ''));
-    END;
-    CREATE TRIGGER IF NOT EXISTS equipment_au AFTER UPDATE ON equipment BEGIN
-      INSERT INTO equipment_fts(equipment_fts, rowid, vendor, model, serial_number, router_type)
-      VALUES ('delete', old.rowid, old.vendor, old.model, old.serial_number, COALESCE(old.router_type, ''));
-      INSERT INTO equipment_fts(rowid, vendor, model, serial_number, router_type)
-      VALUES (new.rowid, new.vendor, new.model, new.serial_number, COALESCE(new.router_type, ''));
-    END;
-  `);
-  ensureFtsInSync();
-} catch (e) {
-  console.warn('FTS5 init skipped:', e?.message || e);
+    ensureFtsInSync(db);
+  } catch (e) {
+    console.warn("FTS5 init skipped:", e?.message || e);
+  }
 }
 
-/** FTS5 external-content indexes can drift after bulk imports or interrupted writes. */
+const { db, dialect } = createPrismDb({ sqlitePath: dbPath, sqliteInit: initSqliteSchema });
+
 export function isFtsMaintenanceError(e) {
-  const msg = String(e?.message || '');
+  const msg = String(e?.message || "");
   return /malformed|SQLITE_CORRUPT|fts5/i.test(msg);
 }
 
 export function rebuildSitesFts() {
+  if (dialect !== "sqlite") return;
   db.exec(`INSERT INTO sites_fts(sites_fts) VALUES('rebuild')`);
 }
 
 export function rebuildEquipmentFts() {
+  if (dialect !== "sqlite") return;
   db.exec(`INSERT INTO equipment_fts(equipment_fts) VALUES('rebuild')`);
 }
 
-export function ensureFtsInSync() {
-  const siteCount = db.prepare('SELECT COUNT(*) AS c FROM sites').get()?.c ?? 0;
-  const sitesFtsCount = db.prepare('SELECT COUNT(*) AS c FROM sites_fts').get()?.c ?? 0;
-  if (siteCount !== sitesFtsCount) {
-    rebuildSitesFts();
-  }
+export function ensureFtsInSync(activeDb = db) {
+  if (dialect !== "sqlite") return;
+  const siteCount = activeDb.prepare("SELECT COUNT(*) AS c FROM sites").get()?.c ?? 0;
+  const sitesFtsCount = activeDb.prepare("SELECT COUNT(*) AS c FROM sites_fts").get()?.c ?? 0;
+  if (siteCount !== sitesFtsCount) rebuildSitesFts();
 
-  const eqCount = db.prepare('SELECT COUNT(*) AS c FROM equipment').get()?.c ?? 0;
-  const eqFtsCount = db.prepare('SELECT COUNT(*) AS c FROM equipment_fts').get()?.c ?? 0;
-  if (eqCount !== eqFtsCount) {
-    rebuildEquipmentFts();
-  }
+  const eqCount = activeDb.prepare("SELECT COUNT(*) AS c FROM equipment").get()?.c ?? 0;
+  const eqFtsCount = activeDb.prepare("SELECT COUNT(*) AS c FROM equipment_fts").get()?.c ?? 0;
+  if (eqCount !== eqFtsCount) rebuildEquipmentFts();
 }
 
-/** Retry a write once after rebuilding FTS indexes (handles stale/malformed FTS state). */
 export function runWithFtsRecovery(fn) {
+  if (dialect !== "sqlite") return fn();
   try {
     return fn();
   } catch (e) {
     if (!isFtsMaintenanceError(e)) throw e;
-    console.warn('FTS maintenance: rebuilding indexes after write error:', e.message);
+    console.warn("FTS maintenance: rebuilding indexes after write error:", e.message);
     rebuildSitesFts();
     rebuildEquipmentFts();
     return fn();
@@ -230,3 +163,4 @@ export function runWithFtsRecovery(fn) {
 }
 
 export default db;
+export { dialect as dbDialect, isPostgresMode };

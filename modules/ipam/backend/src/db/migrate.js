@@ -164,6 +164,9 @@ function relaxWorkflowStateConstraint(db) {
 }
 
 export function runMigrations(db) {
+  if (process.env.VERCEL || process.env.DATABASE_URL?.trim() || process.env.SUPABASE_DB_URL?.trim()) {
+    return;
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_meta (
       key TEXT PRIMARY KEY,

@@ -15,6 +15,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.22.2",
+    "prism-db": "file:../../../shared/prism-db",
     "uuid": "^11.1.0"
   }
 }

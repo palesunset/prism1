@@ -1,0 +1,17 @@
+# Shrink upload — Vercel only builds platform/frontend (modules/*/src are still required)
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.db
+**/*.db-wal
+**/*.db-shm
+modules/inventory/backend/models
+platform/frontend/dist
+modules/lsp/frontend/dist
+modules/inventory/frontend/dist
+packaging
+.cursor

@@ -16,7 +16,7 @@
 | **VLSM Planner** | Variable-length subnet planning with **Save to IPAM** (PRISM menu) |
 | **NetLens** | Floating IP validation engine — IP/CIDR/VLSM analysis, IPAM cross-check, **Submit to Workflow** (PRISM menu) |
 
-**Repository:** [github.com/palesunset/PrismPlatform](https://github.com/palesunset/PrismPlatform)
+**Repository:** [github.com/palesunset/prism1](https://github.com/palesunset/prism1)
 
 ---
 
@@ -456,8 +456,8 @@ npm --version
 
 ```powershell
 # Example: clone (or unzip your download and cd into the folder)
-git clone https://github.com/palesunset/PrismPlatform.git
-cd PrismPlatform
+git clone https://github.com/palesunset/prism1.git
+cd prism1
 
 npm run install:all
 pip install -r modules/lsp/backend/requirements.txt

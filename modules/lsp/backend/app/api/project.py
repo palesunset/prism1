@@ -32,6 +32,9 @@ async def open_project(req: ProjectImportRequest) -> ImportSummary:
     topology.nes = nes
     topology.multigraph = mg
     topology.links = links
+    from app.services.topology_store import save_topology
+
+    save_topology(nes, links)
 
     sites = sorted({n.site for n in nes.values()})
     log.info("Opened project topology: %d NEs, %d links", len(nes), len(links))

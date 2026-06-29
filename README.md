@@ -1,10 +1,10 @@
 # PRISM Platform
 
-**PRISM** (Platform for Routing, Inventory, IPAM & Simulation) is an **offline-first** desktop toolkit for network engineering teams. It runs entirely on your PC or a server on your LAN — no cloud account required.
+**PRISM** (Platform for Routing, Inventory, IPAM & Simulation) is a network engineering toolkit: **LSP design**, **equipment inventory**, **Mini IPAM**, and floating tools — hosted on **Vercel** with **Supabase**.
 
-Use one unified web UI to manage **equipment inventory**, design **MPLS/SRv6 LSP paths**, operate a full **Mini IPAM** (IPv4 + IPv6), and access floating engineering tools (IP Calculator, VLSM Planner, NetLens, Quick Notes).
+**Production hosting:** see **[docs/VERCEL.md](docs/VERCEL.md)** (Vercel + Supabase — no local servers required).
 
-**Repository:** [github.com/palesunset/PrismPlatform](https://github.com/palesunset/PrismPlatform)
+**Repository:** [github.com/palesunset/prism1](https://github.com/palesunset/prism1)
 
 ---
 
@@ -13,7 +13,7 @@ Use one unified web UI to manage **equipment inventory**, design **MPLS/SRv6 LSP
 | Area | Features |
 | --- | --- |
 | **LSP Design** | CSV topology import, CSPF primary/backup paths, role-based routing rules, failure simulation, utilization heatmap, multi-vendor config export (Nokia, Huawei, Cisco IOS XR, Juniper), project save/load |
-| **Equipment Inventory** | Sites, equipment, slots/ports, dashboard analytics, geographic map, CSV import/export, duplicate-IP protection, integrity checks, **Oz** local AI assistant (optional) |
+| **Equipment Inventory** | Sites, equipment, slots/ports, dashboard analytics, geographic map, CSV import/export, duplicate-IP protection, integrity checks |
 | **Mini IPAM (v1.3)** | IPv4/IPv6 registry, subnet detail & host allocation, search, VLSM import, utilization analytics, integrity audit, backup/restore, API keys, **IP Workflow** (approval lifecycle) |
 | **Floating tools** (purple **PRISM** menu) | Quick Notes, IP Calculator (browser-only), VLSM Planner (Save to IPAM), NetLens (validate + Submit to Workflow) |
 
@@ -44,7 +44,7 @@ Use one unified web UI to manage **equipment inventory**, design **MPLS/SRv6 LSP
 ## Repository layout
 
 ```
-PrismPlatform/
+prism1/
 ├── platform/frontend/       # Unified shell (home, routing, IPAM UI, floating tools)
 ├── modules/
 │   ├── lsp/                 # LSP API + embedded UI (@lsp)
@@ -53,7 +53,7 @@ PrismPlatform/
 │   └── notes/backend/       # Notes API (UI in platform)
 ├── scripts/                 # Dev helpers (run-lsp-api, kill-dev-ports, smoke-test)
 ├── packaging/               # PyInstaller spec
-├── docs/                    # USER_MANUAL.md, PROJECT_STRUCTURE.md
+├── docs/                    # GUIDE.md, USER_MANUAL.md, PROJECT_STRUCTURE.md
 └── package.json             # npm run dev — starts all services
 ```
 
@@ -84,13 +84,15 @@ npm --version
 
 ## Run locally (step-by-step)
 
+> **New laptop or hit the PowerShell npm error?** Use **`docs/GUIDE.md`** for a full Windows walkthrough (cmd vs PowerShell, ZIP download, troubleshooting).
+
 Follow these steps **in order** from the repository root.
 
 ### Step 1 — Get the code
 
 ```powershell
-git clone https://github.com/palesunset/PrismPlatform.git
-cd PrismPlatform
+git clone https://github.com/palesunset/prism1.git
+cd prism1
 ```
 
 *(Or unzip a release archive and `cd` into the folder.)*
@@ -103,10 +105,6 @@ pip install -r modules/lsp/backend/requirements.txt
 ```
 
 This installs Node packages for the platform shell, LSP, Inventory, Notes, and IPAM. The first run can take several minutes.
-
-> **Oz AI (optional):** Inventory can download a ~2 GB Llama model on first backend install. To skip:  
-> `$env:SKIP_OZ_MODEL_DOWNLOAD = "1"; npm run install:all`  
-> Inventory works fully without Oz; only the chat assistant stays disabled.
 
 ### Step 3 — Start everything
 
@@ -530,6 +528,132 @@ npm run smoke     # Live API smoke tests — run npm run dev first in another te
 
 ---
 
+## Before going online (checklist)
+
+Complete this **on your PC** before deploying to Vercel. Local mode uses **SQLite** for Inventory, IPAM, and Notes; **LSP** optionally persists topology to Supabase when `DATABASE_URL` is set.
+
+### 1 — Install and run locally
+
+```powershell
+npm run install:all
+pip install -r modules/lsp/backend/requirements.txt
+npm run dev
+```
+
+Open **http://localhost:5173** and verify:
+
+| Check | How |
+| --- | --- |
+| LSP | Import sample CSV from `modules/lsp/sample_data/`, run CSPF |
+| Inventory | Open a site, view equipment |
+| IPAM | Open registry, add a test subnet |
+| Notes | Open PRISM menu → Quick Notes |
+
+### 2 — Automated preflight
+
+With `npm run dev` running in another terminal:
+
+```powershell
+npm run preflight
+npm run smoke
+```
+
+### 3 — Supabase (optional now, required for cloud LSP)
+
+1. Run **`supabase/migrations/001_prism_schema.sql`** in the [Supabase SQL Editor](https://supabase.com/dashboard).
+2. Copy **Database → Connection string (URI)** into repo-root `.env` as `DATABASE_URL=...`
+3. Restart `npm run dev` — LSP saves/restores topology from `lsp_projects` (check `/api/lsp/health` → `"storage": "postgres"`).
+4. For admin login when hosted: set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` and create one user under **Authentication → Users**.
+
+### 4 — Deploy to Vercel only after steps 1–2 pass
+
+Vercel hosts the **UI**. APIs still need a host (Railway/Render) or future serverless wiring — see below.
+
+---
+
+## Deploy to Vercel (web UI)
+
+The repo includes **`vercel.json`** at the root. Vercel builds **`platform/frontend`** only (the unified PRISM shell). Local `npm run dev` is unchanged.
+
+### What works on Vercel today
+
+| Works | Not yet (needs hosted APIs) |
+| --- | --- |
+| Home screen, routing, static UI | LSP import / CSPF |
+| Module shells (LSP, Inventory, IPAM) | Inventory / IPAM / Notes data |
+
+API calls use relative paths (`/api/lsp`, `/api/inventory`, etc.). Until backends are hosted, those requests return 404 on Vercel — expected for a **UI-only** first deploy.
+
+### Step 1 — Push to GitHub
+
+```powershell
+git remote set-url origin https://github.com/palesunset/prism1.git
+git add .
+git commit -m "Prepare PRISM for Vercel deployment"
+git push -u origin main
+```
+
+If the remote repo is empty, use `main` as the default branch (GitHub → Settings → General → Default branch).
+
+### Step 2 — Import on Vercel
+
+1. Sign in at [vercel.com](https://vercel.com).
+2. **Add New → Project** → import **[palesunset/prism1](https://github.com/palesunset/prism1)**.
+3. Leave **Root Directory** as **`.`** (repository root).
+4. Confirm settings (auto-detected from `vercel.json`):
+   - **Install:** `npm ci --prefix platform/frontend`
+   - **Build:** `npm run build --prefix platform/frontend`
+   - **Output:** `platform/frontend/dist`
+5. **Deploy**.
+
+### Supabase database
+
+Project URL: **https://acrxdkqqvcfnedljixyg.supabase.co**
+
+1. Open [Supabase Dashboard](https://supabase.com/dashboard) → your project → **SQL Editor**.
+2. Paste and run **`supabase/migrations/001_prism_schema.sql`** (creates Notes, IPAM, Inventory, and LSP tables + admin RLS).
+3. **Authentication → Users → Add user** — create your single admin (email + password).
+4. **Project Settings → API** — copy the **anon public** key (frontend) and **service_role** key (server only, never in the browser).
+
+Add these **Environment Variables** on Vercel (Project → Settings → Environment Variables):
+
+| Variable | Where to use |
+| --- | --- |
+| `VITE_SUPABASE_URL` | `https://acrxdkqqvcfnedljixyg.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Anon key from Supabase API settings |
+
+Copy `platform/frontend/.env.example` to `platform/frontend/.env.local` for local cloud testing:
+
+```powershell
+copy platform\frontend\.env.example platform\frontend\.env.local
+# Edit .env.local and paste your anon key
+```
+
+> **Note:** The SQL schema prepares Postgres for a future cloud cutover. **Inventory, IPAM, and Notes still use local SQLite** in `npm run dev`. Only **LSP** reads `DATABASE_URL` today for topology persistence.
+
+### Step 3 — CLI alternative
+
+```powershell
+cd C:\Users\rich1\OneDrive\Desktop\LSP
+npx vercel login
+npx vercel --prod
+```
+
+### Step 4 — Wire APIs later (full functionality)
+
+When LSP / Inventory / IPAM / Notes run on Railway, Render, or similar, add **rewrites** to `vercel.json` *before* the SPA fallback:
+
+```json
+{
+  "source": "/api/lsp/:path*",
+  "destination": "https://YOUR_LSP_HOST/api/lsp/:path*"
+}
+```
+
+Repeat for `/api/inventory`, `/api/notes`, and `/api/ipam`. The frontend code does not need to change.
+
+---
+
 ## Packaging (Windows desktop)
 
 Build the platform frontend, then PyInstaller:
@@ -547,6 +671,8 @@ Output: `dist/prism.exe` (single-file). First launch may take a few seconds whil
 
 | Document | Contents |
 | --- | --- |
+| **`docs/GUIDE.md`** | **New laptop / Windows setup** — prerequisites, PowerShell npm fix, install, run, troubleshooting |
+| **`docs/VERCEL.md`** | **Production deploy** — Vercel + Supabase (cloud-only) |
 | **`docs/USER_MANUAL.md`** | Full walkthrough, CSV schemas, vendor notes, extended LAN / nginx guide |
 | **`docs/PROJECT_STRUCTURE.md`** | Repo layout, dev wiring, feature summary |
 | **`modules/inventory/README.md`** | Inventory API routes |

@@ -22,6 +22,10 @@ from app.api.traffic_simulate import router as traffic_sim_router
 from app.core.config import get_settings
 from app.core.exceptions import LspSimulatorError
 from app.core.models import ErrorResponse
+from contextlib import asynccontextmanager
+
+from app.state import topology
+from app.services import topology_store
 
 
 def _configure_logging() -> None:
@@ -113,7 +117,14 @@ def create_app() -> FastAPI:
     _configure_logging()
     log = logging.getLogger(__name__)
     settings = get_settings()
-    app = FastAPI(title="PRISM", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if topology_store.try_load_topology(topology):
+            log.info("Restored LSP topology from database")
+        yield
+
+    app = FastAPI(title="PRISM", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -144,7 +155,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/lsp/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        mode = "postgres" if topology_store.is_enabled() else "memory"
+        return {"status": "ok", "storage": mode}
 
     _register_spa_routes(app, log)
 

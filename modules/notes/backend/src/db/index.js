@@ -1,13 +1,12 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from "path";
+import { fileURLToPath } from "url";
+import { createPrismDb } from "prism-db";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '..', '..', 'notes.db');
+const dbPath = path.join(__dirname, "..", "..", "notes.db");
 
-const db = new DatabaseSync(dbPath);
-
-db.exec(`
+function initSqliteSchema(db) {
+  db.exec(`
 CREATE TABLE IF NOT EXISTS notes (
   id TEXT PRIMARY KEY,
   owner TEXT DEFAULT 'local',
@@ -24,8 +23,11 @@ CREATE TABLE IF NOT EXISTS notes (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE INDEX IF NOT EXISTS idx_notes_active ON notes(archived, pinned, sort_order);
 `);
+}
+
+const { db, dialect } = createPrismDb({ sqlitePath: dbPath, sqliteInit: initSqliteSchema });
 
 export default db;
+export { dialect as dbDialect };

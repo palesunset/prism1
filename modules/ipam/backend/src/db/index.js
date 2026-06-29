@@ -1,17 +1,17 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { runMigrations } from './migrate.js';
+import path from "path";
+import { fileURLToPath } from "url";
+import { createPrismDb, isPostgresMode } from "prism-db";
+import { runMigrations } from "./migrate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.IPAM_DB_PATH || path.join(__dirname, '..', '..', 'ipam.db');
+const dbPath = process.env.IPAM_DB_PATH || path.join(__dirname, "..", "..", "ipam.db");
 
-const db = new DatabaseSync(dbPath);
-db.exec('PRAGMA foreign_keys = ON');
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA busy_timeout = 5000');
+function initSqliteSchema(db) {
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA busy_timeout = 5000");
 
-db.exec(`
+  db.exec(`
 CREATE TABLE IF NOT EXISTS ip_records (
   id TEXT PRIMARY KEY,
   address TEXT NOT NULL,
@@ -27,12 +27,10 @@ CREATE TABLE IF NOT EXISTS ip_records (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE INDEX IF NOT EXISTS idx_ip_records_range ON ip_records(range_start, range_end);
 CREATE INDEX IF NOT EXISTS idx_ip_records_status ON ip_records(status);
 CREATE INDEX IF NOT EXISTS idx_ip_records_type ON ip_records(record_type);
 CREATE INDEX IF NOT EXISTS idx_ip_records_project ON ip_records(project);
-
 CREATE TABLE IF NOT EXISTS ip_workflows (
   id TEXT PRIMARY KEY,
   address TEXT NOT NULL,
@@ -49,10 +47,8 @@ CREATE TABLE IF NOT EXISTS ip_workflows (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE INDEX IF NOT EXISTS idx_ip_workflows_state ON ip_workflows(state);
 CREATE INDEX IF NOT EXISTS idx_ip_workflows_updated ON ip_workflows(updated_at);
-
 CREATE TABLE IF NOT EXISTS ip_workflow_log (
   id TEXT PRIMARY KEY,
   workflow_id TEXT NOT NULL,
@@ -63,19 +59,22 @@ CREATE TABLE IF NOT EXISTS ip_workflow_log (
   reason TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
-
 CREATE INDEX IF NOT EXISTS idx_ip_workflow_log_workflow ON ip_workflow_log(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_ip_workflow_log_created ON ip_workflow_log(created_at);
 `);
 
-try {
-  db.exec(`
+  try {
+    db.exec(`
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_records_unique_v4_host ON ip_records(range_start) WHERE record_type = 'host' AND address_family = 'ipv4';
 `);
-} catch {
-  /* index may fail if duplicates already exist */
+  } catch {
+    /* ignore */
+  }
+
+  runMigrations(db);
 }
 
-runMigrations(db);
+const { db, dialect } = createPrismDb({ sqlitePath: dbPath, sqliteInit: initSqliteSchema });
 
 export default db;
+export { dialect as dbDialect, isPostgresMode };

@@ -56,6 +56,9 @@ async def import_topology(
     topology.nes = nes
     topology.links = links
     topology.multigraph = mg
+    from app.services.topology_store import save_topology
+
+    save_topology(nes, links)
     sites = sorted({n.site for n in nes.values()})
     log.info("Imported topology: %d NEs, %d links, %d issues", len(nes), len(links), len(invalid_rows))
     return ImportSummary(

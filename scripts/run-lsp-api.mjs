@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-/** Cross-platform LSP API launcher with PYTHONPATH set. */
+/** Cross-platform LSP API launcher with PYTHONPATH and repo-root `.env`. */
 import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import { loadRootEnv } from "./load-root-env.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const backend = path.join(__dirname, "..", "modules", "lsp", "backend");
+const root = path.join(__dirname, "..");
+const backend = path.join(root, "modules", "lsp", "backend");
 const py = process.platform === "win32" ? "python" : "python3";
+
+loadRootEnv(backend);
 
 const child = spawn(
   py,
