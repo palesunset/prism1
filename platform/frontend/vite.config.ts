@@ -6,8 +6,9 @@ import { fileURLToPath } from "url";
 
 const platformDir = path.dirname(fileURLToPath(import.meta.url));
 const platformEntry = path.resolve(platformDir, "src/main.tsx");
+const platformPublic = path.resolve(platformDir, "public");
+const inventoryPublic = path.resolve(platformDir, "../../modules/inventory/frontend/public");
 const inventorySrc = path.resolve(platformDir, "../../modules/inventory/frontend/src");
-const inventoryFonts = path.resolve(platformDir, "../../modules/inventory/frontend/public/fonts");
 const lspSrc = path.resolve(platformDir, "../../modules/lsp/frontend/src");
 
 /** Bare imports from aliased workspace src must resolve via platform/node_modules on CI. */
@@ -32,31 +33,34 @@ function resolveWorkspaceDepsPlugin(workspaceRoots: string[]): Plugin {
   };
 }
 
-function inventoryFontsPlugin(): Plugin {
+function platformPublicAssetsPlugin(): Plugin {
   return {
-    name: "inventory-fonts",
+    name: "platform-public-assets",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (!req.url?.startsWith("/fonts/")) return next();
-        const file = path.join(inventoryFonts, path.basename(req.url));
+        if (req.url !== "/prism-favicon.svg") return next();
+        const file = path.join(platformPublic, "prism-favicon.svg");
         if (!fs.existsSync(file)) return next();
-        res.setHeader("Content-Type", "font/woff2");
+        res.setHeader("Content-Type", "image/svg+xml");
         fs.createReadStream(file).pipe(res);
       });
     },
-    writeBundle() {
-      const outFonts = path.resolve(platformDir, "dist/fonts");
-      fs.mkdirSync(outFonts, { recursive: true });
-      for (const name of fs.readdirSync(inventoryFonts)) {
-        fs.copyFileSync(path.join(inventoryFonts, name), path.join(outFonts, name));
-      }
+    generateBundle() {
+      const favicon = path.join(platformPublic, "prism-favicon.svg");
+      if (!fs.existsSync(favicon)) return;
+      this.emitFile({
+        type: "asset",
+        fileName: "prism-favicon.svg",
+        source: fs.readFileSync(favicon),
+      });
     },
   };
 }
 
 export default defineConfig({
   appType: "spa",
-  plugins: [react(), resolveWorkspaceDepsPlugin([lspSrc, inventorySrc]), inventoryFontsPlugin()],
+  publicDir: inventoryPublic,
+  plugins: [react(), resolveWorkspaceDepsPlugin([lspSrc, inventorySrc]), platformPublicAssetsPlugin()],
   resolve: {
     dedupe: [
       "react",

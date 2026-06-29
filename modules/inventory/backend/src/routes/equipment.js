@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import multer from 'multer';
 import db, { runWithFtsRecovery } from '../db/index.js';
 import {
   newId,
@@ -15,7 +14,8 @@ import {
   rowHasCompleteEquipment,
 } from '../utils/equipmentImport.js';
 import { parseUploadCsvBuffer } from '../utils/csvUpload.js';
-import { csvUploadFileFilter, getRateLimiters } from '../middleware/security.js';
+import { getRateLimiters } from '../middleware/security.js';
+import { csvUpload, readUploadedFileBuffer } from '../utils/csvMulter.js';
 import {
   parseIpForStorage,
   findDuplicateIpEquipment,
@@ -24,11 +24,7 @@ import {
 
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: csvUploadFileFilter,
-});
+const upload = csvUpload;
 
 router.get('/vendors', (req, res) => {
   const rows = db
@@ -191,7 +187,8 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   }
   const site = db.prepare('SELECT id FROM sites WHERE id = ?').get(siteId);
   if (!site) return res.status(400).json({ error: 'Invalid site_id' });
-  if (!req.file?.buffer) {
+  const fileBuffer = await readUploadedFileBuffer(req.file);
+  if (!fileBuffer) {
     return res.status(400).json({ error: 'CSV file is required (field name: file)' });
   }
 
@@ -200,7 +197,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   );
   const batchIps = new Set();
 
-  const rows = await parseUploadCsvBuffer(req.file.buffer);
+  const rows = await parseUploadCsvBuffer(fileBuffer);
 
   let added = 0;
   const errors = [];

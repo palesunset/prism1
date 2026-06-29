@@ -1,18 +1,14 @@
 import { Router } from 'express';
-import multer from 'multer';
 import db, { runWithFtsRecovery } from '../db/index.js';
 import { newId, isUniqueConstraintError, parseSiteCsvRow, normalizeSiteRowForInsert, normalizeSiteName } from '../utils/helpers.js';
 import { processCombinedImport } from '../utils/combinedImport.js';
 import { parseUploadCsvBuffer } from '../utils/csvUpload.js';
-import { csvUploadFileFilter, getRateLimiters, escapeCsvCell } from '../middleware/security.js';
+import { getRateLimiters, escapeCsvCell } from '../middleware/security.js';
+import { csvUpload, readUploadedFileBuffer } from '../utils/csvMulter.js';
 
 const router = Router();
 const uploadLimiter = getRateLimiters().upload;
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: csvUploadFileFilter,
-});
+const upload = csvUpload;
 function siteEquipmentRouterTypes(siteId) {
   const rows = db
     .prepare(
@@ -188,7 +184,8 @@ router.post('/', (req, res) => {
 });
 
 router.post('/import', uploadLimiter, upload.single('file'), async (req, res) => {
-  if (!req.file?.buffer) {
+  const fileBuffer = await readUploadedFileBuffer(req.file);
+  if (!fileBuffer) {
     return res.status(400).json({ error: 'CSV file is required (field name: file)' });
   }
 
@@ -196,7 +193,7 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
   const existingPlaids = new Set(existing.map((r) => r.plaid));
   const existingByPlaid = new Map(existing.map((r) => [r.plaid, r]));
 
-  const rows = await parseUploadCsvBuffer(req.file.buffer);
+  const rows = await parseUploadCsvBuffer(fileBuffer);
 
   let added = 0;
   const errors = [];
@@ -260,11 +257,12 @@ router.post('/import', uploadLimiter, upload.single('file'), async (req, res) =>
 });
 
 router.post('/import/combined', uploadLimiter, upload.single('file'), async (req, res) => {
-  if (!req.file?.buffer) {
+  const fileBuffer = await readUploadedFileBuffer(req.file);
+  if (!fileBuffer) {
     return res.status(400).json({ error: 'CSV file is required (field name: file)' });
   }
 
-  const rows = await parseUploadCsvBuffer(req.file.buffer);
+  const rows = await parseUploadCsvBuffer(fileBuffer);
 
   const result = processCombinedImport(rows);
   res.json(result);
